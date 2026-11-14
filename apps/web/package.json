@@ -1,0 +1,33 @@
+{
+  "name": "@rota/web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@rota/trip": "*",
+    "next": "16.4.5",
+    "next-intl": "^4.14.9",
+    "postgres": "^4.1.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.2.1",
+    "jsdom": "^31.0.0",
+    "tailwindcss": "^4"
+  }
+}

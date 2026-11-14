@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# testing
+coverage/
+test-results/
+playwright-report/
+
+# env files
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+npm-debug.log*
+.vercel
+
+# controller workspace (never commit)
+.superpowers/
