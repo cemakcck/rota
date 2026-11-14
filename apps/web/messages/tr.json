@@ -185,7 +185,7 @@
     "emailInvalid": "Geçerli bir e-posta adresi girin.",
     "added": "{email} zaten hesap sahibi ve geziye eklendi.",
     "alreadyMember": "{email} zaten bu gezide.",
-    "pending": "{email} adresine davet gönderildi. Kayıt olunca katılır.",
+    "pending": "{email} adresine davet gönderildi. E-postadaki bağlantıyla katılır.",
     "pendingTitle": "Bekleyen davetler",
     "none": "Bekleyen davet yok.",
     "cancel": "Daveti iptal et",

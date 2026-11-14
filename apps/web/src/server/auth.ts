@@ -9,7 +9,6 @@ import * as schema from "./db/schema";
 import { sendEmail } from "./email";
 import { clientIp, hashIp, toHeaders } from "./ipHash";
 import { hit } from "./rateLimit";
-import { acceptEmailInvites } from "./trips/invites";
 
 const SIGN_UPS_PER_IP_PER_DAY = 20;
 const DAY_SEC = 86_400;
@@ -63,9 +62,6 @@ export const auth = betterAuth({
       // Store the trimmed name.
       return name === undefined ? undefined : { context: { body: { ...body, name } } };
     }),
-  },
-  databaseHooks: {
-    user: { create: { after: async (user) => acceptEmailInvites(user) } },
   },
   plugins: [bearer()],
 });

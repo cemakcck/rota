@@ -59,7 +59,7 @@ Audience: recruiters and prospective freelance clients, usually alone, giving it
 - **Roles:** **owner** (creator) and **member**. Every member edits content, including the trip's name and dates (Claude's call: groups share the work). Only the owner removes members, manages invites, hands over ownership and deletes the trip. A member can leave.
 - **Invites (Claude's call, both):**
   - **Invite link:** the owner creates it; anyone signed in who opens it joins. The owner can turn it off or regenerate it. Shown with a QR code.
-  - **Invite by email:** the owner enters an email. If that person has an account, they're added and emailed; if not, they're emailed a sign-up link and join automatically when they sign up with that email. Pending invites are listed and cancellable.
+  - **Invite by email:** the owner enters an email. If that person has an account, they're added and emailed; if not, they're emailed a sign-up link carrying a single-use invite token (only its hash is stored) and join when they sign up, or sign in, through that link; a plain sign-up with the same address does not join (addresses are not verified). Pending invites are listed and cancellable.
 - **Delete trip:** owner only, with confirmation. Members' devices then show "This trip was deleted by its owner" and offer to remove the local copy. **Removed member:** their device shows "You were removed from this trip" and drops the local copy after confirmation. In both cases edits made offline after the removal are discarded **with that message shown**, never silently.
 - **Access control:** the database's `trip_members` is the source of truth. Pages, API routes and the sync server all check membership. The shared trip document mirrors member names and colours for display only.
 

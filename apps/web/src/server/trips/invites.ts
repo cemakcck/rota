@@ -53,19 +53,44 @@ export async function revokeInvite(tripId: string, inviteId: string): Promise<bo
   return rows.length > 0;
 }
 
-/** Joins the user to the trip behind an active link. Joining twice is fine. */
+/**
+ * Joins the user to the trip behind a token: an active join link (reusable), or the single-use token
+ * of an email invite, which is used up here. Joining twice is fine; a used email token keeps working
+ * for the member it brought in (a reload, a repeated request) and for no one else.
+ */
 export async function acceptLink(token: string, userId: string): Promise<{ tripId: string }> {
   const [invite] = await db
-    .select({ tripId: tripInvites.tripId })
+    .select({ id: tripInvites.id, tripId: tripInvites.tripId, kind: tripInvites.kind, revokedAt: tripInvites.revokedAt })
     .from(tripInvites)
-    .where(and(eq(tripInvites.tokenHash, hashToken(token)), eq(tripInvites.kind, "link"), isNull(tripInvites.revokedAt)));
+    .where(eq(tripInvites.tokenHash, hashToken(token)));
   if (!invite) throw new HttpError(404, "not_found");
   // A link never brings back someone the owner removed; only an explicit owner action does.
-  const [removed] = await db
-    .select({ at: tripMembers.removedAt })
+  const [membership] = await db
+    .select({ removedAt: tripMembers.removedAt })
     .from(tripMembers)
     .where(and(eq(tripMembers.tripId, invite.tripId), eq(tripMembers.userId, userId)));
-  if (removed?.at) throw new HttpError(404, "not_found");
+  if (membership?.removedAt) throw new HttpError(404, "not_found");
+  if (invite.revokedAt) {
+    if (invite.kind === "email" && membership) return { tripId: invite.tripId };
+    throw new HttpError(404, "not_found");
+  }
+  if (invite.kind === "email") {
+    // Use the token up first, so two people racing with one forwarded email cannot both join.
+    const used = await db
+      .update(tripInvites)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(tripInvites.id, invite.id), isNull(tripInvites.revokedAt)))
+      .returning({ id: tripInvites.id });
+    if (used.length === 0) throw new HttpError(404, "not_found");
+    try {
+      await addMember(invite.tripId, userId, "member");
+    } catch (err) {
+      // A full trip: the invite stays usable for when there is room.
+      await db.update(tripInvites).set({ revokedAt: null }).where(eq(tripInvites.id, invite.id));
+      throw err;
+    }
+    return { tripId: invite.tripId };
+  }
   await addMember(invite.tripId, userId, "member");
   return { tripId: invite.tripId };
 }
@@ -147,34 +172,18 @@ export async function inviteEmail(tripId: string, rawEmail: string, byUserId: st
     .where(and(eq(tripInvites.tripId, tripId), eq(tripInvites.kind, "email"), eq(tripInvites.email, email), isNull(tripInvites.revokedAt)));
   // Already invited: no second email, so repeating the invite cannot be used to flood an inbox.
   if (pending) return { status: "pending" };
-  await db.insert(tripInvites).values({ tripId, kind: "email", email, createdBy: byUserId });
+  // The address is not verified at sign-up, so the address alone must not join: the email carries a
+  // single-use token (only its hash is stored), and the sign-up page sends the new account on to
+  // /invite/<token>, which joins. With an account already, "Sign in" on that page keeps the same `next`.
+  const token = newToken();
+  await db.insert(tripInvites).values({ tripId, kind: "email", email, tokenHash: hashToken(token), createdBy: byUserId });
+  const next = encodeURIComponent(`/invite/${token}`);
   await sendInviteEmail({
     to: email,
     tripName: trip.name,
     inviter: inviterName,
-    url: `${baseUrl()}/${locale}/sign-up?email=${encodeURIComponent(email)}`,
+    url: `${baseUrl()}/${locale}/sign-up?email=${encodeURIComponent(email)}&next=${next}`,
     newUser: true,
   });
   return { status: "pending" };
-}
-
-/** Run after sign-up: joins every pending email invite for the address and marks them used. */
-export async function acceptEmailInvites(newUser: { id: string; email: string }): Promise<void> {
-  try {
-    const pending = await db
-      .select({ id: tripInvites.id, tripId: tripInvites.tripId })
-      .from(tripInvites)
-      .where(and(eq(tripInvites.kind, "email"), eq(tripInvites.email, newUser.email.toLowerCase()), isNull(tripInvites.revokedAt)));
-    for (const invite of pending) {
-      try {
-        await addMember(invite.tripId, newUser.id, "member");
-        await db.update(tripInvites).set({ revokedAt: new Date() }).where(eq(tripInvites.id, invite.id));
-      } catch (err) {
-        // A full or vanished trip must not block the rest, nor the sign-up itself.
-        console.error("[invite] could not join pending trip", invite.tripId, err);
-      }
-    }
-  } catch (err) {
-    console.error("[invite] pending invites failed", err);
-  }
 }

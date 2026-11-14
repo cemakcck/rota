@@ -185,7 +185,7 @@
     "emailInvalid": "Enter a valid email address.",
     "added": "{email} already has an account and was added to the trip.",
     "alreadyMember": "{email} is already on this trip.",
-    "pending": "Invite sent to {email}. They join when they sign up.",
+    "pending": "Invite sent to {email}. They join through the link in that email.",
     "pendingTitle": "Pending invites",
     "none": "No pending invites.",
     "cancel": "Cancel invite",

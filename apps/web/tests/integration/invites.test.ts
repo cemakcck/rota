@@ -79,7 +79,7 @@ describe("invites", () => {
     expect((await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: "not-an-email" } })).status).toBe(400);
   });
 
-  it("an email invite to a new address joins them when they sign up with it", async () => {
+  it("an email invite to a new address joins only whoever presents the emailed token, once", async () => {
     const ann = await signUpUser({ name: "Ann" });
     const id = await newTrip(ann);
     const address = `New.Person.${Date.now()}@Test.Rota`;
@@ -87,13 +87,34 @@ describe("invites", () => {
     expect(res.status).toBe(201);
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe(address.toLowerCase());
-    expect(sent[0].text).toContain(`/en/sign-up?email=${encodeURIComponent(address.toLowerCase())}`);
+    expect(sent[0].text).toContain(`/en/sign-up?email=${encodeURIComponent(address.toLowerCase())}&next=%2Finvite%2F`);
+    const token = /next=%2Finvite%2F([0-9A-Za-z]{43})/.exec(sent[0].text)![1];
+    const [stored] = await db.select().from(tripInvites).where(eq(tripInvites.tripId, id));
+    expect(stored.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored.tokenHash).not.toBe(token);
+
+    // Signing up with the address alone is not enough: no verification proves the address is theirs.
+    const joiner = await signUpUser({ email: address.toUpperCase() });
     expect(await members(id)).toEqual([ann.id]);
 
-    const joiner = await signUpUser({ email: address.toUpperCase() });
+    // The emailed link is what joins (sign-up, then the link's /invite page accepts it).
+    expect((await call(accept, "POST", joiner, { params: { token } })).status).toBe(200);
     expect(await members(id)).toEqual([ann.id, joiner.id].sort());
+    const [used] = await db.select().from(tripInvites).where(eq(tripInvites.tripId, id));
+    expect(used.revokedAt).toBeInstanceOf(Date);
+    // Asking again (a double-run effect, a reload) still works for the one who used it; nobody else can.
+    expect((await call(accept, "POST", joiner, { params: { token } })).status).toBe(200);
+    expect((await call(accept, "POST", await signUpUser(), { params: { token } })).status).toBe(404);
+  });
+
+  it("a cancelled email invite's token no longer joins", async () => {
+    const ann = await signUpUser({ name: "Ann" });
+    const id = await newTrip(ann);
+    await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: `gone-${randomBytes(6).toString("hex")}@test.rota` } });
+    const token = /next=%2Finvite%2F([0-9A-Za-z]{43})/.exec(sent[0].text)![1];
     const [invite] = await db.select().from(tripInvites).where(eq(tripInvites.tripId, id));
-    expect(invite.revokedAt).toBeInstanceOf(Date);
+    expect((await call(deleteInvite, "DELETE", ann, { params: { id, inviteId: invite.id } })).status).toBe(204);
+    expect((await call(accept, "POST", await signUpUser(), { params: { token } })).status).toBe(404);
   });
 
   it("a retried link creation (same token) still returns a working token", async () => {
