@@ -1,9 +1,9 @@
-# Rota: Design — a group trip planner you edit together, even offline
+# Rota: Design — a group trip planner, web and mobile, edited together live and offline
 
-**Status:** draft for owner review, 2026-11-14. Once the owner approves it, the whole document is approved, Claude's calls included.
+**Status:** draft for owner review, 2026-11-14 (revision 2, after the owner described the product in their own words). Once the owner approves it, the whole document is approved, Claude's calls included.
 **Repo:** `~/Personal/rota` (new, from scratch). GitHub `cemakcck/rota` once the owner asks for a push.
 
-The owner picked Rota from three pitches (Shortlist, Sarsıntı, Rota) and asked for concrete pitches instead of questions. Almost everything below the pitch is therefore **Claude's call**; the owner-decided parts are marked **(owner)**. Read the calls with that in mind.
+Owner-decided parts are marked **(owner)**; everything else is **Claude's call** and is marked where it matters.
 
 ---
 
@@ -12,147 +12,164 @@ The owner picked Rota from three pitches (Shortlist, Sarsıntı, Rota) and asked
 The portfolio shows three sides of the owner's skills, one per app **(owner)**:
 
 - **Lodos**: a management system (full backend, staff and guest sides).
-- **Clinic (Lindenya)**: booking that stays correct under concurrency (Postgres exclusion constraint, holds, exactly-once reminders).
-- **Rota**: **real-time collaboration and offline-first sync**, with a polished, product-grade interface.
+- **Clinic (Lindenya)**: booking that stays correct under concurrency.
+- **Rota**: **a real product on web and mobile**: accounts, shared trips, maps and routes, real-time collaboration and offline sync.
 
-The pitch the owner accepted **(owner)**: a trip planner a group of friends edits together live, like Google Docs for a trip. Two windows show each other's cursors and edits instantly; a phone with no signal keeps editing, and on reconnect nothing is lost and nobody overwrites anybody. That is the Figma/Notion/Linear class of problem, and the demo must make it visible in seconds.
+In the owner's words **(owner)**: everyone has an account; people create trips, name them, and invite others. Inside a trip the map opens on that trip; everyone can add places and categorise them (drinks, food, museum, gym, …); places come from the map (search a restaurant, pick it). Trips have days with an order ("first we go there, then there"); the map pins the places and shows the routes. Every place can be opened in Google Maps. There is a web app **and a mobile app**. The owner is open to more features and accepted Claude's five ideas (§8) **(owner)**.
 
-Audience: recruiters and prospective freelance clients, usually alone, usually on a laptop, giving it under two minutes. The owner prefers full-stack/frontend work, so this app is where the interface craft shows.
+Audience: recruiters and prospective freelance clients, usually alone, giving it two minutes; and the owner's own friends, who should find it genuinely useful.
 
-**Deadline:** deployable by about **2026-12-13** **(owner)**, alongside the other apps.
+**Deadline (owner):** both the web app and the mobile app done by about **2026-12-13**. The web app comes first; the mobile app second **(owner)**.
 
 ## 2. Scope
 
-**In (the pitch, owner-accepted):**
+**Web app (phase 1):**
+1. Accounts, sign-in, profiles (§3).
+2. Trips: create, name, invite, members, leave/remove/delete (§4).
+3. Places: add from map search, map tap, or by hand; categories and tags (§5).
+4. Days and order, map pins, routes and travel times (§6).
+5. Google Maps links: per place and per day (§7).
+6. Extras **(owner accepted)**: day timeline, opening-hours warnings, whole day in Google Maps, weather per day, shared checklist (§8).
+7. Editing together live, presence, offline (§9, §10).
+8. Demo mode (§11).
 
-1. **Plan together** (§4): a trip has days; days hold places in order; places and days have notes. Live presence: who is here, their cursors, edits appearing as they type.
-2. **Map and itinerary** (§5): places on a map; drag a place into a day or reorder within a day; travel times between consecutive stops update.
-3. **Votes** (§6): anyone suggests a place; everyone votes it up or down.
-4. **Works offline** (§7): installable on a phone (PWA); editing with no signal; sync on return; a visible "synced / N changes waiting" indicator.
-5. **Demo mode** (§8): "Try it with a friend" opens a second window already in the trip.
+**Mobile app (phase 2, same deadline):** §13.
 
-**Cut order if time runs short:** votes go first **(owner-accepted)**. After that (Claude's call), in this order: the scripted friend (§8), offline map tiles, the landing-page animation, the QR code in the share dialog, live cursors on the map (presence avatars and the editing outline stay). Never cut: editing together, offline editing and the sync indicator, the map with travel times, merge tests, English + Turkish, accessibility. The build order follows the same priority: the shared document, merge tests and sync first, then offline, then the map, then everything else, so scope can be dropped at any checkpoint without losing the core.
+**Cut order if time runs short (Claude's call):** scripted friend (§11) → offline map tiles → weather → opening-hours warnings → landing animation → QR code → live map cursors → Google sign-in. **Never cut:** accounts and invites, map search, categories, days/order/routes, Google Maps links, the day timeline, live editing, offline editing with the sync indicator, merge tests, English + Turkish, accessibility, the mobile app's core (§13.2).
 
-**Non-goals (Claude's call):**
-- Accounts, passwords, email sign-up. Identity is a display name and colour per device.
-- Bookings, prices, budgets, expense splitting (Lodos already shows money).
-- Chat or comments threads (notes cover it).
-- Native mobile apps (the PWA is the mobile story).
-- Public trip listings, search across trips, sharing to social media.
-- Real-time voice/video, AI suggestions.
-- Turn-by-turn directions; travel time is an estimate between consecutive stops only.
+**Non-goals:** bookings and prices, expense splitting (Lodos shows money), chat threads, public trip listings or social feeds, AI suggestions, turn-by-turn navigation (Google Maps does that), photos/uploads, App Store or Google Play listings (§13.3).
 
 **Anti-goals:**
-- **Lost or duplicated work.** Two people moving the same place at the same time must never produce two copies of it or lose it. An offline edit must never silently vanish.
-- **A demo that needs a second person.** A lone visitor must see collaboration without inviting anyone.
-- **A demo that a stranger can vandalise.** One visitor's trip is never visible to another unless they share the link.
-- **Sync that only works on localhost.** It must work through Railway's proxy, on a phone, on flaky connections.
+- **Lost or duplicated work.** Two people moving the same place at once never produce two copies or lose it; an offline edit never silently vanishes.
+- **A demo that needs signing up or a second person.** One click puts a visitor in a lived-in trip; one more shows collaboration.
+- **One visitor seeing another's trips.** Access is by membership, checked on the server for pages, API and sync.
+- **Sync that only works on localhost.** It must work through Railway's proxy, on phones, on flaky connections.
 
-## 3. How it gets made (Claude's call)
+## 3. Accounts
 
-- **Next.js 16** (App Router) + **TypeScript** + **Tailwind CSS 4**, matching the clinic. Radix primitives only for tricky widgets (dialogs, menus).
-- **Yjs** for the shared trip document (a CRDT: concurrent edits merge without a server deciding). **y-indexeddb** keeps a full local copy in the browser, which is what makes offline editing work.
-- **Hocuspocus** (MIT, the Yjs WebSocket server from the Tiptap team) relays edits and awareness (presence), and persists documents to **PostgreSQL 17** through its database extension. Drizzle ORM for the small amount of relational data (§9).
-- **One Node process, one port:** a custom server hosts the Next.js request handler and Hocuspocus on the WebSocket upgrade path `/sync`. One Docker container on **Railway** next to Lodos. The database is **Neon's free Postgres tier** **(owner: keep the total hosting bill at about $5/month)**; it sleeps when idle, so the first request after a quiet spell can take a second or two, and the app must tolerate that (connection retry on cold start, sync clients keep working locally meanwhile). No paid APIs.
-- **Map:** **MapLibre GL JS** with **OpenFreeMap** tiles (free, no key). **Place search:** **Photon** (komoot's public geocoder, OpenStreetMap data), called through our own server route with caching and a per-IP limit. **Travel times:** the public **OSRM** demo server (walking and driving), called through our server with caching and a hard per-IP and global rate limit; when OSRM is unavailable or over the limit, show a straight-line estimate labelled "≈". Both are free services with fair-use policies; the server route is what keeps us inside them.
-- **Languages:** English and Turkish (next-intl), like the clinic, with a test that both message files have identical keys.
-- **Quality bar** (same as the other apps): Vitest unit and integration tests, Playwright end-to-end with **two browser contexts** and **offline simulation**, axe accessibility scans (WCAG 2.2 AA), GitHub Actions CI, a recruiter-ready README with screenshots and an "engineering decisions" section.
+- **Better Auth** (as in the clinic): **email + password** sign-up and sign-in; email verification **not** required (Claude's call: friction kills demos; invites by email still work); password reset by email. **Google sign-in** if time allows (in the cut list).
+- Profile: display name (1–30 chars) and avatar colour (one of 8 member colours); shown everywhere instead of the email.
+- Sessions: cookies on the web; bearer tokens for the mobile app and for "friend" windows (§11).
+- Email via **Resend** free tier (as in the clinic); without an API key, emails are written to the server log so local development needs nothing.
 
-## 4. Plan together
+## 4. Trips and members
 
-### 4.1 The trip document
-One Yjs document per trip. Shape (Claude's call):
+- **Create:** name (required, 1–60 chars), start date, number of days (1–30), optional destination (a geocoded place that centres the map and drives weather).
+- **My trips** page: trips I'm in, upcoming first then past, with name, dates, members' avatars, and an "offline copy" badge when stored on this device.
+- **Roles:** **owner** (creator) and **member**. Every member edits content, including the trip's name and dates (Claude's call: groups share the work). Only the owner removes members, manages invites, hands over ownership and deletes the trip. A member can leave.
+- **Invites (Claude's call, both):**
+  - **Invite link:** the owner creates it; anyone signed in who opens it joins. The owner can turn it off or regenerate it. Shown with a QR code.
+  - **Invite by email:** the owner enters an email. If that person has an account, they're added and emailed; if not, they're emailed a sign-up link and join automatically when they sign up with that email. Pending invites are listed and cancellable.
+- **Delete trip:** owner only, with confirmation. Members' devices then show "This trip was deleted by its owner" and offer to remove the local copy. **Removed member:** their device shows "You were removed from this trip" and drops the local copy after confirmation. In both cases edits made offline after the removal are discarded **with that message shown**, never silently.
+- **Access control:** the database's `trip_members` is the source of truth. Pages, API routes and the sync server all check membership. The shared trip document mirrors member names and colours for display only.
 
-- `meta` (Y.Map): `title`, `startDate`, `days` count, `createdAt`.
-- `places` (Y.Map of placeId → Y.Map): `name`, `lat`, `lng`, `osmId` (if from search), `category` (food, sight, stay, other), `dayId` (or `null` = unplanned/"Ideas"), `order` (fractional index string), `note` (Y.Text), `addedBy` (member id), `status` (`planned` | `suggested` | `dismissed`), `votes` (Y.Map of memberId → +1/−1).
-- `days` (Y.Map of dayId → Y.Map): `index`, `note` (Y.Text), `travelMode` (walk | drive).
-- `members` (Y.Map of memberId → Y.Map): `name`, `colour`, `joinedAt`.
+## 5. Places, categories and tags
 
-**Ordering uses fractional indexes, not Y.Array moves (Claude's call; this is the README's headline decision).** Yjs arrays have no "move", so a move is delete + insert, and two people moving the same place concurrently produce two copies. Storing each place's `dayId` + `order` as fields on the place makes a move a single field write: concurrent moves resolve to one winner (last writer wins on that place), never a duplicate. Two places landing on the same order key are tie-broken by placeId. Write this up in the README the way the clinic explains its exclusion constraint, with tests that reproduce the duplicate with the naive approach and show it cannot happen here.
+- **Add a place** three ways:
+  1. **Search** (Photon, OpenStreetMap data): "restaurants Karaköy", a name, or an address; results biased to the map's current view; pick one to add it with name, coordinates, address and OSM id.
+  2. **Tap the map** (long-press on touch, right-click on desktop): name prefilled from reverse geocoding.
+  3. **By hand:** a name without coordinates (listed, not pinned).
+- Added to a chosen day or to **Ideas** (unscheduled), or as a **suggestion** for votes (§5.1).
+- **Category** **(owner: categories such as drinks, food, museum, gym)**, one per place, fixed list with icons (Claude's call): **food, drinks, café, museum, sight, nightlife, shopping, nature, gym, stay, other**. Search results get a suggested category from OSM tags; the user can change it.
+- **Tags:** up to 5 free-text tags per place (max 24 chars), e.g. "rooftop", "must-see". Filter the map and list by category and tag.
+- Each place also has a note (collaborative text), a stay duration (§8.1), and votes.
 
-### 4.2 Editing
-- Add a place (from search, from a map long-press/right-click, or a free-text "custom place" without coordinates, which shows in the list but not on the map).
-- Rename, recategorise, delete (with an "Undo" toast), move between days and Ideas, reorder within a day (drag with mouse/touch, plus keyboard: a "Move to…" menu and up/down buttons, as in the clinic's keyboard reschedule dialog).
-- Notes per place and per day are collaborative text (Y.Text) with remote carets in the other person's colour.
-- Trip title and dates editable; adding/removing days (removing a day moves its places to Ideas, never deletes them).
-- **Undo/redo per person** (Yjs UndoManager scoped to the local member's changes): your undo never reverts a friend's edit.
+### 5.1 Suggestions and votes
+A place added as a suggestion goes to **Suggestions**; members vote up or down once (changeable); sorted by score then newest. Anyone can accept it (into a day or Ideas) or dismiss it (restorable). No automatic thresholds.
 
-### 4.3 Presence
-- Avatars of who is in the trip now (Yjs awareness), with their colour and "editing <place>" when focused.
-- **Live cursors on the map**, positioned by latitude/longitude so they line up across different window sizes and zoom levels; hidden when the other person's cursor is off the map.
-- The place someone is editing gets an outline in their colour in the itinerary.
-- Members who left show as "last seen" in a trip members list.
+## 6. Days, order, map and routes
 
-### 4.4 Identity (Claude's call)
-On first open of a trip on a device, a small "What should friends call you?" prompt with a suggested colour. Stored in localStorage as a random member id + name + colour, and registered in the trip's `members` map. No accounts. Anyone with the trip link can edit; the link is the key (§9).
+- A trip has **days** (dated from the start date); each day holds places **in order** **(owner)**. Drag to reorder or move between days and Ideas, with a keyboard/button alternative ("Move to…", up/down). Removing a day moves its places to Ideas, never deletes them.
+- **Map** **(owner)**: opens on the trip (fit to its places, else the destination, else Istanbul). Pins numbered per day in the day's colour; the selected day's **route** drawn along roads/paths between consecutive stops; Ideas pins grey; tapping a pin selects the place in the list and vice versa.
+- **Travel times** between consecutive stops ("12 min walk") and a day total; each day is **walk** or **drive**. From the FOSSGIS OSRM servers through our cached, rate-limited proxy; when unavailable or offline, a straight-line estimate marked "≈" and a straight route line.
+- Layout: desktop = list left, map right. Phone web = full-screen map with a draggable bottom sheet holding the list, plus a list-only toggle.
 
-## 5. Map and itinerary
+## 7. Google Maps links (owner)
 
-- **Layout:** desktop is itinerary panel on the left (days as sections, Ideas at the bottom) and the map on the right. Phone is a full-screen map with a draggable bottom sheet holding the itinerary, with a toggle to a list-only view.
-- Pins are numbered per day in the day's colour; the selected day's route is drawn as a line between consecutive stops.
-- **Travel times** between consecutive stops in a day ("12 min walk"), per the day's walk/drive mode; a day total. Computed in the browser of whoever is viewing (never stored in the doc), via our cached server route (§3). Offline: straight-line "≈" estimate.
-- Clicking a pin selects the place in the list and vice versa.
-- Map tiles viewed while online are cached by the service worker for offline viewing (best-effort; the app says "map may be incomplete offline").
+- **Every place:** "Open in Google Maps" (external, new tab) → `https://www.google.com/maps/search/?api=1&query=<lat>,<lng>`; places without coordinates use `query=<name>`.
+- **Every day** (idea 3, owner accepted): "Open day in Google Maps" → `https://www.google.com/maps/dir/?api=1&origin=…&destination=…&waypoints=…&travelmode=walking|driving` with the day's stops in order. A day with more than **9** waypoints is split into consecutive links ("Part 1 of 2", sharing the boundary stop).
 
-## 6. Votes
+## 8. Extras (owner accepted all five)
 
-- A place added with "Suggest" (instead of "Add to day") goes to a **Suggestions** list with status `suggested`.
-- Each member votes up or down once (changeable); the list sorts by score, ties by newest.
-- Anyone can **accept** (moves it to a day or Ideas, status `planned`) or **dismiss** (hidden under "Dismissed", restorable). No automatic acceptance thresholds (Claude's call: groups argue; the app shouldn't decide for them).
-- Votes are per member id, so one device can't vote twice.
+### 8.1 Day timeline
+Each day has a **start time** (default 09:00). Each place has a **stay duration**, defaulting by category (food 75 min, drinks 60, café 45, museum 120, sight 45, nightlife 120, shopping 60, nature 90, gym 60, stay 0, other 60) and editable. The list shows estimated arrival times ("around 11:20") = start + stays + travel legs. Times are local wall-clock strings, never instants.
 
-## 7. Works offline
+### 8.2 Opening-hours warnings
+For places with an OSM id, fetch OpenStreetMap's `opening_hours` tag (Overpass API, through our cached proxy) and evaluate it at the estimated arrival on that date. Warnings: "Closed on Mondays", "Opens at 10:00 — you arrive around 09:30", "Closes at 17:00 — you arrive around 16:50". No data → no warning (never "might be closed"). Holidays beyond what the tag says are out of scope.
 
-- **PWA:** web app manifest, icons, installable on Android and iOS; a service worker caches the app shell and the trip page so it opens with no signal.
-- **Local first:** every trip opened on the device is kept in IndexedDB (y-indexeddb). Edits apply locally at once and sync when the connection returns; Hocuspocus reconnects with backoff.
-- **Sync indicator** in the header: "Synced", "Offline — 3 changes waiting", "Syncing…". It counts local updates not yet acknowledged by the server.
-- **Opening a trip link for the first time while offline** shows a clear "Connect once to download this trip" message.
-- A "My trips" home page lists trips stored on this device (title, dates, last opened), with "Remove from this device".
-- **Demo toggle:** a "Simulate offline" switch in the demo banner (§8) disconnects the provider without devtools, so a recruiter can try the conflict story in two windows.
+### 8.3 Whole day in Google Maps
+See §7.
 
-## 8. Demo mode
+### 8.4 Weather per day
+For days within the forecast range, the day's forecast (icon, high/low, rain chance) at the trip's destination (else the centroid of its places), from **Open-Meteo** (free, no key) through our cached proxy. Further-out days show "Forecast from <date>".
 
-- **Landing page** (`/`): one-line pitch, a looping short video/animated screenshot of two windows editing, and a big **"Start a demo trip"** button. Plus "New empty trip" for real use.
-- **"Start a demo trip"** creates a fresh private copy of a seeded trip: **"Istanbul long weekend"**, 3 days, ~12 places across Karaköy, Balat, Kadıköy and the Bosphorus, notes, two suggestions with votes, and two pre-existing friends ("Deniz", "Selin") in the members list.
-- **"Try it with a friend"** button in the demo banner opens the same trip in a new window (or a split-screen on wide screens: Claude's call, decided at build time) under a second identity, so one visitor sees both sides.
-- **Scripted friend (Claude's call, cheap and memorable):** about 10 seconds after a demo trip opens, a server-side "Deniz" joins via awareness, moves her cursor on the map, adds a note and casts a vote, then leaves. It uses the same sync path as a real client (a headless Yjs client on the server), so it proves the plumbing instead of faking it. Runs once per demo trip.
-- Demo banner text: "This is a demo. Trips you create are private to their link and deleted after 30 days without edits."
+### 8.5 Shared checklist
+One checklist per trip (packing, tickets, to-dos): add, tick, reorder, delete, optionally assign to a member. Lives in the shared trip document, so it is live and offline like everything else.
 
-## 9. Server, storage, limits
+## 9. Editing together live
 
-- **Trip ids** are 128-bit random, base62 in the URL (`/t/<id>`). Knowing the id is the only access control; there are no listings. A "Share" dialog copies the link and shows a QR code.
-- **Postgres tables:** `trips` (id, title snapshot for the "My trips" page, created_at, last_edited_at, size_bytes), and Hocuspocus's document store (trip id → Yjs state as `bytea`, compacted on store). Drizzle for migrations.
-- **Limits** (protect the free hosting): trip creation 20 per IP per day; document size cap 2 MB and max 200 places per trip, both enforced **in the interface** (§9.1);  max 50 concurrent connections per trip; WebSocket message size cap; geocoding 60 per IP per minute; routing 120 per IP per minute and a global ceiling under OSRM's policy. IPs stored only as HMAC hashes (as in the clinic).
-- **Validation:** full schema validation of CRDT updates is out of scope; the client ignores malformed places rather than crashing. The server only refuses traffic no copy of this app produces (a single message over 1 MB, unknown top-level types), and closes that connection.
-- **Cleanup:** an hourly timer inside the app process deletes trips with no edits for 30 days (no separate cron service).
-- **Health:** `/api/health` for Railway.
+- One **Yjs** document per trip, synced by **Hocuspocus** (WebSocket at `/sync`) and persisted to Postgres. Every member's edits merge without conflicts; edits appear for others within about a second.
+- **Ordering by fractional indexes** stored on each place (`dayId` + `order`), not array moves: concurrent moves of the same place resolve to one winner and never duplicate it. This is the README's headline engineering decision, proven by tests that show the naive approach duplicating.
+- **Presence:** avatars of who's in the trip now; the place someone is editing outlined in their colour; their caret in notes; **live cursors on the map** (positioned by latitude/longitude).
+- **Undo/redo per person:** your undo never reverts a friend's edit.
+- Remote structural changes announced politely to screen readers ("Deniz moved Galata Tower to Day 2").
 
-### 9.1 When limits meet offline edits (Claude's call)
-The anti-goal "an offline edit never silently vanishes" wins over the limits:
-- **The server never refuses an update from a normal client.** Refusing one would leave that device permanently out of step with everyone else. The 2 MB and 200-place caps are soft: the interface stops offering "Add place" and shows "This trip is full" once the synced document reaches either cap. A burst of offline edits that overshoots the cap is accepted.
-- **A trip deleted by the cleanup is restored** if a device that still holds a copy reconnects: the server recreates it from that device's state. The banner's "deleted after 30 days" wording becomes "removed from our server after 30 days without edits; copies on your devices still work and come back online when opened".
-- The "changes waiting" counter therefore always reaches zero once a connection holds.
+## 10. Offline
 
-## 10. Accessibility and polish
+- **Web:** installable PWA; app shell, My trips and visited trip pages cached by a service worker; every trip opened on the device stored in IndexedDB; edits apply locally and sync on reconnect; header shows **"Synced" / "Syncing…" / "Offline — N changes waiting"**. Map tiles viewed online are cached best-effort ("map may be incomplete offline"). Search, travel times (falls back to "≈"), weather and opening hours need a connection.
+- **Limits never eat offline work:** the server never refuses a member's update for size. Soft caps (2 MB document, 200 places, 100 checklist items) are enforced in the interface ("This trip is full").
+- First open of a trip while offline: "Connect once to download this trip".
+- **"Simulate offline"** switch in demo mode (§11) so a visitor can see it without devtools.
 
-- WCAG 2.2 AA: every drag has a keyboard and button alternative; map pins are mirrored by the itinerary list (the list is the accessible source of truth); live remote changes announced politely only for structural changes ("Deniz moved Galata Tower to Day 2"), never per keystroke.
-- Respects `prefers-reduced-motion`.
-- Light theme required; dark theme optional (Claude's call: light only unless time allows).
-- Visual direction left to the builder within this brief: calm, map-forward, product-grade, with member colours as the main accent. A design reference page (like Lodos's `docs/design-reference`) is produced in the first days and shown to the owner, but **the sync, merge and offline work does not wait for it**; only the visual styling of the trip screen does.
+## 11. Demo mode
 
-## 11. Testing (the parts that prove the claims)
+- Landing page: pitch, a short looping animation of two windows editing (static under reduced motion), **"Try the demo"**, "Sign up", "Sign in".
+- **"Try the demo"** creates a private **demo account** for this visitor (flagged demo, a random friendly name they can change) with a seeded trip **"Istanbul long weekend"**: 3 days, ~12 places across Karaköy, Balat, Kadıköy and the Bosphorus with categories, tags, notes and stay durations, a checklist, two suggestions with votes, and two friends **Deniz** and **Selin** (demo accounts created with it, members of the trip). The visitor is signed in at once.
+- **"Try it with a friend"** opens the same trip in a second window (or side by side on wide screens) **signed in as Deniz**, using a bearer token kept in that window's `sessionStorage`, so one browser can be two people.
+- **Scripted friend (cut first):** about 10 s after a demo trip first opens, Selin joins through the real sync path (a server-side client), moves her cursor on the map, adds a note, votes, ticks a checklist item, and leaves. Once per demo trip.
+- Demo banner with "Simulate offline" and "Try it with a friend". Demo accounts and their trips are deleted after **7 days** without activity; real accounts are never auto-deleted.
 
-- **Merge tests** (unit, pure Yjs, no network): two docs, concurrent moves of the same place → exactly one copy; concurrent move + delete → deleted; concurrent edits to one note → both kept; offline doc with 50 edits merges with a doc that changed meanwhile; undo only reverts your own edits.
-- **Server integration:** persistence round-trip through Postgres; reconnect after server restart; size cap and rate limits.
-- **End-to-end (Playwright):** two contexts edit the same trip and see each other within 2 s; context A goes offline (`setOffline`), both edit the same day, A reconnects, both converge to the same itinerary; the demo flow from landing page to "Try it with a friend"; the scripted friend appears; PWA works offline after first load; axe scans of landing, trip (desktop + phone viewport) and share dialog.
-- Tests run with a non-Istanbul `TZ` (dates are local-date strings, not instants).
+## 12. Server, storage, limits
 
-## 12. Deliverables
+- **One Node process, one port**: a custom server hosts Next.js and Hocuspocus. One Docker container on **Railway**; **Neon free Postgres** **(owner: total hosting about $5/month)**. Neon sleeps when idle, so all DB access retries connection errors on cold start. Resend free tier for email. No paid APIs.
+- **Tables (Claude's call):** Better Auth's tables (plus `is_demo`, `colour`, `last_active_at` on users); `trips` (id, name, start date, days count, destination, owner, created/updated, is_demo, friend_ran_at); `trip_members` (trip, user, role, joined_at); `trip_invites` (trip, kind link|email, token hash or email, created_by, created_at, revoked_at); `trip_documents` (trip, Yjs state bytea, updated_at, size_bytes); `rate_limits`.
+- Trip ids: 128-bit random, base62, 22 chars (unguessable; access is still by membership).
+- **Free services through our proxies, cached and rate-limited:** Photon search, FOSSGIS OSRM routing, Overpass opening hours, Open-Meteo weather; OpenFreeMap tiles load directly. Per-IP limits: search 60/min, routing 120/min, opening hours 60/min, weather 60/min; at most 1 upstream request per second per service; descriptive User-Agent; OpenStreetMap attribution on the map.
+- **Other limits:** sign-ups and demo starts 20 per IP per day; 50 trips per user; 20 members per trip; 50 concurrent connections per trip; WebSocket messages over 1 MB close the connection. IPs stored only as HMAC hashes.
+- **Cleanup:** an hourly timer deletes demo accounts and their trips after 7 days without activity.
 
-- Working app, deployable to Railway as one container (Dockerfile, `railway.json`, README deploy steps), with `.env.example`. Going live is a separate step done with the owner (accounts, secrets, domain), as with Lodos and the clinic; the build delivers a container that is ready to deploy.
-- README in the style of the other two: live demo link placeholder, screenshots/GIF of two windows, "What it does", "Engineering decisions" (CRDT choice, fractional-index moves, offline queue and indicator, one-port server, rate-limited proxies to free map services), architecture diagram, how to run locally.
-- CI on GitHub Actions.
+## 13. Mobile app (phase 2, owner: done by the deadline)
 
-## 13. Left to the builder
+### 13.1 What it is
+A real **iOS and Android app built with Expo (React Native)**, sharing the trip logic with the web app. Same account, same trips, live with the web: an edit on the phone appears on the laptop at once and vice versa.
 
-Component structure, colour palette and typography within §10, exact copy wording (both languages), whether "Try it with a friend" is a new window or a split-screen, how the bottom sheet behaves on phone, the fractional-index library (or a small own implementation), and test file layout.
+### 13.2 What it does (core, not cut)
+Sign in / sign up / try the demo; My trips; create a trip; join by invite link (`rota://invite/<token>` and the https link); the trip screen: map with pins and routes, day list with drag reorder, add places by search or long-press on the map, categories and tags, notes, timeline and travel times, Google Maps links (opening the Google Maps app if installed), suggestions and votes, checklist, presence avatars; offline editing with the same sync indicator. Weather and opening-hours warnings when online. Live map cursors, the scripted friend and "Try it with a friend" are web-only.
+
+### 13.3 How it's shared and distributed (Claude's call)
+- npm workspaces monorepo: `apps/web`, `apps/mobile`, `packages/trip` (document model, ordering, view, timeline, travel estimates, Google Maps links, opening-hours evaluation; no DOM or React Native imports).
+- Maps on mobile: MapLibre React Native with the same OpenFreeMap style. Offline storage: the Yjs state persisted on the device (SQLite) instead of IndexedDB. Auth: Better Auth's Expo integration with bearer tokens in secure storage.
+- **Distribution without paid store accounts:** an **Android APK** built with Expo's free EAS tier, downloadable from the README/portfolio; **iOS** shown through a recorded simulator video and screenshots, plus instructions to run it locally. TestFlight or the App Store needs the paid Apple Developer Program ($99/year) and is out of scope unless the owner decides otherwise.
+
+## 14. Accessibility and polish
+
+WCAG 2.2 AA on web (every drag has a keyboard/button alternative; the list is the accessible source of truth for the map; reduced motion respected) and platform accessibility labels on mobile. Light theme only. English and Turkish on both apps, with a test that the message files have identical keys. Visual direction: calm, map-forward, product-grade, member colours as the accent; a design reference page is produced early and shown to the owner, while sync, data and offline work proceed without waiting for it.
+
+## 15. Testing
+
+- **Shared package:** merge tests (concurrent moves → one copy; move + delete; concurrent note edits; long offline merges), timeline arithmetic, opening-hours evaluation, Google Maps link building (including the 9-waypoint split), undo per member.
+- **Server integration (real Postgres):** auth, membership checks on API and sync (non-member refused, removed member disconnected), invites (link; email for existing and future accounts), persistence, rate limits, proxies with mocked upstreams.
+- **Web end-to-end (Playwright):** two signed-in users edit one trip and see each other within 2 s; offline convergence (`setOffline` and the Simulate offline switch); demo flow; invite flow; axe scans.
+- **Mobile:** unit tests for screens (React Native Testing Library); one end-to-end smoke flow on Android (Maestro) if time allows, otherwise run by hand before release.
+- Tests run with a non-Istanbul `TZ`.
+
+## 16. Deliverables
+
+- Web: one Docker container for Railway (Dockerfile, `railway.json`, `.env.example`), CI on GitHub Actions.
+- Mobile: Expo project, EAS build config, Android APK, iOS simulator video.
+- README in the style of the other two apps, covering both apps: screenshots and a two-window GIF, "Try this", "What it does", "Engineering decisions" (CRDT; fractional-index moves; offline queue and indicator; membership-checked sync; limits that never eat offline work; one-port server; rate-limited proxies to free services; Neon cold-start retry; one shared package for web and mobile), architecture diagram, running locally, deploy steps, credits (OpenStreetMap contributors, OpenFreeMap, Photon/komoot, FOSSGIS OSRM, Open-Meteo).
+- Going live (accounts, secrets, domain) is a separate step done with the owner, as with Lodos and the clinic.
+
+## 17. Left to the builder
+
+Component structure, palette and typography within §14, exact copy in both languages, category icons, the bottom-sheet behaviour, the fractional-index library, mobile navigation structure, and test file layout.
