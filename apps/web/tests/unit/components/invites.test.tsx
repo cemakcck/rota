@@ -75,7 +75,7 @@ describe("invite panel", () => {
 
     fireEvent.change(email, { target: { value: "friend@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Send invite" }));
-    expect(await screen.findByText("Invite sent to friend@example.com. They join when they sign up.")).toBeTruthy();
+    expect(await screen.findByText("Invite sent to friend@example.com. They join through the link in that email.")).toBeTruthy();
     const list = await screen.findByRole("list", { name: "Pending invites" });
     expect(within(list).getByText("friend@example.com")).toBeTruthy();
     expect(within(list).getByRole("button", { name: "Cancel invite for friend@example.com" })).toBeTruthy();
