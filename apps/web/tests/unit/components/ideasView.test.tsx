@@ -30,7 +30,7 @@ describe("ideas view", () => {
   it("ideas view lists ideas and suggestions with votes and accept/dismiss", () => {
     const { doc, dayIds } = newTrip();
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
-    addPlace(doc, { name: "Pierre Loti", category: "cafe", dayId: null }, "u1");
+    addPlace(doc, { name: "Pierre Loti", category: "cafe", dayId: null, stayMinutes: 45 }, "u1");
     addPlace(doc, { name: "Balat", category: "sight", dayId: null }, "u2");
     const moda = addPlace(doc, { name: "Moda Sahil", category: "nature", dayId: null, status: "suggested" }, "u2");
     vote(doc, moda, "u2", 1);
@@ -48,6 +48,8 @@ describe("ideas view", () => {
     const loti = screen.getByText("Pierre Loti", { selector: "[data-testid=place-name]" }).closest("li")!;
     expect(within(loti).getByRole("button", { name: "Add Pierre Loti to a day" }).textContent).toBe("Add to day…");
     expect(within(loti).queryByTestId("place-time")).toBeNull();
+    // Its stay stays on the row, beside Add to day….
+    expect(within(loti).getByText("45 min")).toBeTruthy();
 
     // Suggestions with their score, votes, Accept and Dismiss; dismissed ones behind a disclosure.
     const suggestions = screen.getByRole("region", { name: "Suggestions" });
@@ -130,10 +132,11 @@ describe("ideas view", () => {
 
   it("read-only: no Add to day…", () => {
     const { doc } = newTrip();
-    addPlace(doc, { name: "Pierre Loti", category: "cafe", dayId: null }, "u1");
+    addPlace(doc, { name: "Pierre Loti", category: "cafe", dayId: null, stayMinutes: 45 }, "u1");
     fake.userId = null;
     renderIntl(<TripScreen tripId="t1" />);
     expect(names(ideasRegion())).toEqual(["Pierre Loti"]);
+    expect(within(ideasRegion()).getByText("45 min")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add Pierre Loti to a day" })).toBeNull();
   });
 });

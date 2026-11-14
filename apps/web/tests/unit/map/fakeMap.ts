@@ -2,10 +2,10 @@ import type { Bounds, Route } from "@/components/map/mapFeatures";
 import type { LngLat, LoadMap, MapView, Padding } from "@/components/map/engine";
 
 /**
- * A stand-in for MapLibre (jsdom has no WebGL): a flat 800 × 600 view where 1° is 100 px, with the
+ * A stand-in for MapLibre (jsdom has no WebGL): a flat 800 (or `width`) × 600 view where 1° is 100 px, with the
  * top-left corner at (lng 28, lat 42). Markers are put into the container, so pins can be queried.
  */
-export function fakeMap() {
+export function fakeMap({ width = 800 }: { width?: number } = {}) {
   const state = {
     container: null as HTMLElement | null,
     start: null as { bounds: Bounds } | null,
@@ -27,7 +27,7 @@ export function fakeMap() {
       lng: state.origin.lng + x / 100,
       lat: state.origin.lat - y / 100,
     }),
-    size: () => ({ width: 800, height: 600 }),
+    size: () => ({ width, height: 600 }),
     fit: (bounds, options) => {
       state.fits.push(bounds);
       state.fitOptions.push(options);

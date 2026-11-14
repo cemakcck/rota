@@ -12,6 +12,7 @@ import { listDropId, parseTime } from "./plan";
 import { stayFrom, suggestedFor, TimeStayFields } from "./SearchBar";
 import { StopRow, type StopActions } from "./StopRow";
 import { Suggestions, type SuggestionActions } from "./Suggestions";
+import { useStay } from "./TravelLeg";
 
 /** What the rows of a list share (see DayPlan). */
 export type RowProps = {
@@ -175,6 +176,7 @@ export function IdeasView({
   dayChoices: DayChoice[];
 }) {
   const t = useTranslations("trip");
+  const stay = useStay();
   const headingId = useId();
   const [scheduling, setScheduling] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: listDropId(null), disabled: !rows.actions });
@@ -216,20 +218,22 @@ export function IdeasView({
                       onOpen={rows.onOpen}
                       actions={rows.actions}
                       trailing={
-                        canSchedule ? (
-                          <button
-                            type="button"
-                            id={addButtonId(place.id)}
-                            aria-label={t("addToDayFor", { name })}
-                            aria-expanded={open}
-                            onClick={() => (open ? cancel(place.id) : setScheduling(place.id))}
-                            className="whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover"
-                          >
-                            {t("addToDay")}
-                          </button>
-                        ) : (
-                          <span />
-                        )
+                        // Its stay, as on a day's rows; and the way into a day.
+                        <div className="grid justify-items-end gap-1 text-right">
+                          {canSchedule && (
+                            <button
+                              type="button"
+                              id={addButtonId(place.id)}
+                              aria-label={t("addToDayFor", { name })}
+                              aria-expanded={open}
+                              onClick={() => (open ? cancel(place.id) : setScheduling(place.id))}
+                              className="whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover"
+                            >
+                              {t("addToDay")}
+                            </button>
+                          )}
+                          <span className="whitespace-nowrap px-1 text-[12px] text-ink-2">{stay(place.stayMinutes)}</span>
+                        </div>
                       }
                       below={
                         open &&

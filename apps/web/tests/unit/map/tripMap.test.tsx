@@ -54,9 +54,9 @@ function trip() {
   return { doc, view: readTrip(doc), dayIds, tower, lokanta, loti };
 }
 
-function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}) {
+function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}, { width }: { width?: number } = {}) {
   const { view, dayIds, ...ids } = trip();
-  const fake = fakeMap();
+  const fake = fakeMap({ width });
   const props = {
     view,
     hiddenIds: new Set<string>(),
@@ -162,7 +162,7 @@ describe("TripMap", () => {
     expect(props.onSelectPlace).toHaveBeenCalledWith(lokanta);
     // Hovering a pin shows a small name card.
     expect(screen.queryByText("Karaköy Lokantası")).toBeNull();
-    fireEvent.pointerEnter(pins()[1]);
+    fireEvent.pointerEnter(pins()[1], { pointerType: "mouse" });
     expect(screen.getByText("Karaköy Lokantası")).toBeTruthy();
     fireEvent.pointerLeave(pins()[1]);
     expect(screen.queryByText("Karaköy Lokantası")).toBeNull();
@@ -185,6 +185,29 @@ describe("TripMap", () => {
     rerenderWith({ panel: true });
     fireEvent.click(screen.getByRole("button", { name: "Fit the map to the places" }));
     expect(fake.state.fitOptions.at(-1)!.padding.left).toBeGreaterThanOrEqual(340);
+  });
+
+  it("a narrow map (a 1024 px window) keeps room to fit beside the open panel", async () => {
+    // At 1024 px the map column is about 416 px wide: the panel's padding alone would exceed it.
+    const { fake, rerenderWith } = setup({ panel: true }, { width: 416 });
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: "Fit the map to the places" }));
+    for (const { padding } of fake.state.fitOptions) {
+      expect(padding.left).toBeGreaterThanOrEqual(32);
+      expect(416 - padding.left - padding.right).toBeGreaterThanOrEqual(120);
+    }
+    rerenderWith({ panel: true, shown: { kind: "all" } });
+    const { padding } = fake.state.fitOptions.at(-1)!;
+    expect(416 - padding.left - padding.right).toBeGreaterThanOrEqual(120);
+  });
+
+  it("the hover card is for mouse and pen, not touch", async () => {
+    setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    fireEvent.pointerEnter(pins()[0], { pointerType: "touch" });
+    expect(screen.queryByText("Galata Tower")).toBeNull();
+    fireEvent.pointerEnter(pins()[0], { pointerType: "pen" });
+    expect(screen.getByText("Galata Tower")).toBeTruthy();
   });
 
   it("right-click or a long-press adds a place there", async () => {

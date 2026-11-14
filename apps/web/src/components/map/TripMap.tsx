@@ -49,6 +49,8 @@ type Props = {
 
 /** How much of the map's left edge the details panel covers on wide screens (its 16 px inset and 340 px width). */
 export const PANEL_COVER_PX = 16 + 340;
+/** The least width (px) left between the paddings for a fit: below it MapLibre cannot fit at all. */
+const MIN_FIT_WIDTH = 120;
 
 /**
  * The trip's map (spec §2): MapLibre with OpenFreeMap's muted Positron style, following the view the
@@ -73,11 +75,14 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
   );
 
   // Room for the controls, for the details panel over the left edge (wide screens), and for the sheet
-  // where it covers the bottom of the map (phones).
-  const padding = (height: number): Padding => {
+  // where it covers the bottom of the map (phones). The panel's share is capped so at least
+  // MIN_FIT_WIDTH px are left to fit into: a narrow map (a window just over 1024 px) is mostly under it.
+  const padding = ({ width, height }: { width: number; height: number }): Padding => {
     const isWide = wide();
     const covered = isWide || sheet === null || sheet === "full" ? 0 : sheet === "half" ? height / 2 : PEEK_PX;
-    return { top: 48, right: 56, bottom: 32 + covered, left: 32 + (isWide && panel ? PANEL_COVER_PX : 0) };
+    const right = 56;
+    const left = isWide && panel ? Math.max(32, Math.min(32 + PANEL_COVER_PX, width - right - MIN_FIT_WIDTH)) : 32;
+    return { top: 48, right, bottom: 32 + covered, left };
   };
 
   const start = useEffectEvent(() => ({
@@ -116,7 +121,7 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
   const fitted = useRef<{ map: MapView; view: string } | null>(null);
   const follow = useEffectEvent((m: MapView) => {
     const options = {
-      padding: padding(m.size().height),
+      padding: padding(m.size()),
       animate: !reducedMotion(),
     };
     if (fitted.current?.map !== m) {
@@ -212,7 +217,7 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
           className="absolute right-2.5 top-[86px] z-[3] grid size-[29px] place-items-center rounded-[4px] bg-surface text-ink-2 shadow-[0_0_0_2px_rgba(0,0,0,.1)] hover:bg-hover"
           onClick={() =>
             map.fit(features.bounds, {
-              padding: padding(map.size().height),
+              padding: padding(map.size()),
               animate: !reducedMotion(),
             })
           }
@@ -287,7 +292,8 @@ function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; s
       data-idea={idea || undefined}
       aria-hidden="true"
       onClick={() => onSelect(pin.id)}
-      onPointerEnter={() => setHover(true)}
+      // Mouse and pen only: a finger has no hover, and the card would stay after the tap.
+      onPointerEnter={(e) => setHover(e.pointerType !== "touch")}
       onPointerLeave={() => setHover(false)}
       className="relative flex cursor-pointer flex-col items-center"
     >
