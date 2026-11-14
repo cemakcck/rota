@@ -32,6 +32,15 @@ The owner tried the built app and found it "too plain and hard to navigate and u
 - **Map tab:** full-screen map for the selected day; tapping a pin pulls up a small card (number, name, arrive · stay · walk) with Google Maps and Details; Details opens the details panel as a full-height sheet.
 - The current draggable BottomSheet is retired.
 
+## 2b. Times you set yourself (owner, 2026-11-15)
+Owner feedback after trying it: "I have to be able to change the times of the events… before it gets added to the day, I should decide the hour myself. And 9 AM cannot be the default start, because maybe my day will start at 7 AM."
+- **Every stop can have a time you set** (`time: "HH:MM"`, the time you arrive / it starts) besides its stay length. It is shown bold on the row and editable on the row (click the time) and in the details panel.
+- **Adding a place asks for the time first:** after picking a search result (or typing a name), a small step shows a time field before it's added — prefilled with a suggestion (the previous stop's end + travel; empty if the day has no timed stop yet) — plus the stay length (category default). "Add" puts it in the day at that time. Leaving the time empty adds it untimed (Claude's call: allowed, so quick adding still works).
+- **No default 9:00 day start.** The day's separate "start time" setting is removed; a day starts at its first stop's time. Untimed stops after a timed one show an **estimate** ("≈ 11:20", muted) = previous stop's arrival + stay + travel; untimed stops before any timed stop show no time ("Set a time").
+- **Order follows time** (Claude's call, calendar-like): setting or changing a time moves the stop to its chronological place among timed stops; untimed stops keep their position relative to their neighbours. Dragging a stop to a new position re-times it to the suggested time for that slot if it had a time, and leaves it untimed if it didn't.
+- **Conflicts are flagged, never blocked:** if a set time is earlier than you can get there (previous stop's end + travel), the row and details show "You'd arrive ≈ 20 min late (from Galata Tower)". Opening-hours warnings use set or estimated times.
+- Data: `place.time` added to the shared document (null = untimed); `day.startTime` is no longer read (existing values migrate: on first load a day's startTime becomes its first stop's time if that stop has none — Claude's call; then the field is ignored). The demo seed sets real times on its stops (e.g. 08:30 breakfast, 10:15 museum, 13:00 lunch) so the demo shows set and estimated times side by side.
+
 ## 3. Visual language (Claude's calls, from the mockup)
 - Warm neutral background (#f5f3ef), white cards with 1 px #e7e5e4 borders and 12 px radius, ink #1c1917, muted #57534e.
 - **Fraunces** (serif) for trip and day titles; Inter for everything else (next/font).
