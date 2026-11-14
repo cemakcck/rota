@@ -15,6 +15,13 @@
       "when": 1794658856655,
       "tag": "0001_trip_soft_removal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794678976429,
+      "tag": "0002_invite_creator_set_null",
+      "breakpoints": true
     }
   ]
 }

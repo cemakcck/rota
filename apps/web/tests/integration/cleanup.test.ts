@@ -1,11 +1,12 @@
 import { eq, inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { newTripId } from "@rota/trip";
-import { startCleanup } from "@/server/cleanup";
+import { cleanUp, startCleanup } from "@/server/cleanup";
 import { db } from "@/server/db/client";
 import { DEMO_FRIEND_DOMAIN } from "@/server/demo";
-import { tripMembers, tripTombstones, trips, user } from "@/server/db/schema";
-import { addMember, createTrip } from "@/server/trips/repo";
+import { tripInvites, tripMembers, tripTombstones, trips, user } from "@/server/db/schema";
+import { createLinkInvite } from "@/server/trips/invites";
+import { addMember, createTrip, transferOwnership } from "@/server/trips/repo";
 import { NEW_TRIP, insertUser } from "./helpers";
 
 const DAY = 86_400_000;
@@ -117,5 +118,58 @@ describe("cleanup", () => {
     await vi.waitFor(() => expect(logged).toHaveBeenCalledWith("[cleanup] failed", expect.any(Error)));
     // The timer keeps going: the next run succeeds.
     await vi.waitFor(async () => expect(await userExists(idle.id)).toBe(false), { timeout: 5000 });
+  });
+
+  it("a visitor who made an invite link and handed the trip to a demo friend is still deleted, with the trip and friends", async () => {
+    const idle = await demoUser(new Date(Date.now() - 8 * DAY));
+    const deniz = await demoFriend(idle.tripId);
+    const selin = await demoFriend(idle.tripId);
+    await createLinkInvite(idle.tripId, idle.id);
+    await transferOwnership(idle.tripId, deniz);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await cleanUp();
+    expect(await userExists(idle.id)).toBe(false);
+    expect(await tripExists(idle.tripId)).toBe(false);
+    expect(await userExists(deniz)).toBe(false);
+    expect(await userExists(selin)).toBe(false);
+  });
+
+  it("an invite outlives the user who made it", async () => {
+    const owner = await insertUser("Owner");
+    const maker = await insertUser("Maker");
+    const tripId = await createTrip({ ownerId: owner, ...NEW_TRIP, destination: null, isDemo: false });
+    await createLinkInvite(tripId, maker);
+    await db.delete(user).where(eq(user.id, maker));
+    const [invite] = await db.select().from(tripInvites).where(eq(tripInvites.tripId, tripId));
+    expect(invite.createdBy).toBeNull();
+  });
+
+  it("one demo user that cannot be deleted does not stop the others", async () => {
+    const first = await demoUser(new Date(Date.now() - 8 * DAY));
+    const second = await demoUser(new Date(Date.now() - 8 * DAY));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "delete").mockImplementationOnce(() => {
+      throw new Error("cannot delete this one");
+    });
+
+    await expect(cleanUp()).resolves.toBeUndefined();
+    expect(logged).toHaveBeenCalledWith("[cleanup] could not delete demo user", expect.any(String), expect.any(Error));
+    // Exactly one run happened: whichever user hit the error stays, everyone after it went.
+    const left = [await userExists(first.id), await userExists(second.id)].filter(Boolean);
+    expect(left.length).toBeLessThanOrEqual(1);
+  });
+
+  it("a trip handed to a demo friend stays while another real person is still on it", async () => {
+    const idle = await demoUser(new Date(Date.now() - 8 * DAY));
+    const deniz = await demoFriend(idle.tripId);
+    const joined = await insertUser("Joined");
+    await addMember(idle.tripId, joined, "member");
+    await transferOwnership(idle.tripId, deniz);
+
+    await cleanUp();
+    expect(await userExists(idle.id)).toBe(false);
+    expect(await tripExists(idle.tripId)).toBe(true);
+    expect(await userExists(joined)).toBe(true);
   });
 });

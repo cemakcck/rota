@@ -155,9 +155,8 @@ export const tripInvites = pgTable(
     tokenHash: text("token_hash").unique(),
     /** Lowercased invitee address for email invites. */
     email: text("email"),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => user.id),
+    /** Who made the invite; null once that account is gone (the invite belongs to the trip). */
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     revokedAt: tstz("revoked_at"),
   },
