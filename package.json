@@ -12,7 +12,7 @@
     "start": "npm run start -w @rota/web",
     "lint": "eslint",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "vitest run",
+    "test": "TZ=America/New_York vitest run",
     "test:e2e": "npm run test:e2e -w @rota/web --",
     "db:up": "docker compose up -d --wait 2>/dev/null || docker-compose up -d --wait",
     "db:generate": "npm run db:generate -w @rota/web --if-present",
