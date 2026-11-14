@@ -121,7 +121,7 @@ Open http://localhost:3400 and click **Try the demo**.
 | `IP_HASH_SECRET` | in production | HMAC key for visitor IPs (rate limits). Raw IPs are never stored |
 | `PORT` | no | The one port for pages, API and `/sync` (3400 locally; Railway sets it) |
 | `TRUSTED_PROXY_HOPS` | no | Proxies that append to `X-Forwarded-For`; the client IP is that many entries from the end. Default 1 (Railway); 0 ignores the header |
-| `RESEND_API_KEY`, `EMAIL_FROM` | no | Send real email through Resend; without them emails are logged |
+| `RESEND_API_KEY`, `EMAIL_FROM` | in production | Send real email through Resend. Without a key, every email (invites and password-reset links included) is only written to the server log, so nobody receives it |
 | `FRIEND_DELAY_MS` | no | How long the scripted friend waits before joining a new demo trip (default 10000) |
 | `TEST_DATABASE_URL` | for tests | Base URL for the test databases (`rota_test`, `rota_e2e`), created on the same server |
 
@@ -151,7 +151,7 @@ The app is one Docker container ([`Dockerfile`](Dockerfile), [`railway.json`](ra
 
 1. **Database.** Create a free project on [Neon](https://neon.tech) and copy the **direct** (not pooled) connection string, with `sslmode=require`. The pooled endpoint runs PgBouncer in transaction mode, which does not suit postgres.js's prepared statements.
 2. **Service.** On [Railway](https://railway.com), create a project from the GitHub repo. Railway finds `railway.json`, builds the Dockerfile, and health-checks `/api/health`. Keep one replica: live documents are held in the process.
-3. **Variables.** Set `DATABASE_URL` (from Neon), `BETTER_AUTH_SECRET` and `IP_HASH_SECRET` (each `openssl rand -base64 32`), `BETTER_AUTH_URL` (the public URL, e.g. `https://rota.example.com`), and optionally `RESEND_API_KEY` and `EMAIL_FROM`. Railway sets `PORT`; `TRUSTED_PROXY_HOPS` defaults to 1, right for Railway's edge.
+3. **Variables.** Set `DATABASE_URL` (from Neon), `BETTER_AUTH_SECRET` and `IP_HASH_SECRET` (each `openssl rand -base64 32`), `BETTER_AUTH_URL` (the public URL, e.g. `https://rota.example.com`), and `RESEND_API_KEY` and `EMAIL_FROM` (without a key, invite and password-reset emails only go to the server log). Railway sets `PORT`; `TRUSTED_PROXY_HOPS` defaults to 1, right for Railway's edge.
 4. **Domain.** Generate a Railway domain or add a custom one under the service's networking settings, and make sure `BETTER_AUTH_URL` matches it. WebSockets (`/sync`) need no extra setup.
 5. **Check.** Open the site, click "Try the demo", and confirm Selin shows up after about ten seconds: she connects through the deployed `/sync`, so that proves the WebSocket path through Railway's proxy.
 
