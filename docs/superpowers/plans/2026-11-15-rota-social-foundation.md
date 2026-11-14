@@ -53,8 +53,8 @@
 
 ### Task 4: App navigation shell
 **Files:** `components/app/AppShell.tsx` (web left sidebar: Home, Explore, ＋ New trip, Messages, Profile, bell; phone bottom tabs with the same + bell in the header), `app/[locale]/(app)/layout.tsx`, `app/[locale]/home/page.tsx` (empty state "Find people to follow" + suggestions; real feed comes in Block 3), `app/[locale]/messages/page.tsx` (placeholder "Messages are coming"), routing of `/trips` into Profile's "Your trips" tab; the trip screen renders inside the shell (desktop: sidebar collapses to icons on the trip screen to keep room for rail · list · map; phone: the trip screen keeps its own UI v2 tabs and hides the app tabs, with a back button).
-**Also owns the trip screen's phone layout (moved from the superseded UI v2 Task 5, ruling F3):** compact trip header with day chips (Day 1 · Day 2 · … · All), trip tabs Plan · Map · Ideas · Checklist, a floating ＋ that focuses the search, the Map tab's pulled-up pin card (number, name, arrive · stay · walk, Google Maps, Details), weather on phones (day title line), retire `map/BottomSheet.tsx` and the interim List/Map toggle, `inert` on the app content under the phone details sheet.
-**Tests:** shell items and active state per route; collapsed sidebar on the trip screen; phone tabs and back from a trip; landing (signed-out) unchanged; trip phone tabs keep the selected day; pin card shows Google Maps and Details; phone shows weather; resizing between phone and desktop keeps view and selection; axe on shell and on the phone trip screen.
+**Trip phone layout:** built in the Tripify UX round (Task 5) — this task only places the trip screen inside the shell (hide app tabs on the trip screen, back button).
+**Tests:** shell items and active state per route; collapsed sidebar on the trip screen; phone tabs and back from a trip; landing (signed-out) unchanged; axe on shell.
 **Commit:** `feat(social): app navigation shell`.
 
 ### Task 5: Profiles, avatars, followers lists, private accounts
