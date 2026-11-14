@@ -1,1 +1,47 @@
 @import "tailwindcss";
+
+/* Palette and type from docs/design-reference/rota-trip.html. Light theme only. */
+@theme {
+  --color-canvas: #e9e7e2;
+  --color-paper: #f8f7f4;
+  --color-surface: #ffffff;
+  --color-ink: #1c1b19;
+  --color-ink-2: #57544e;
+  --color-line: #e8e5df;
+  --color-line-2: #f0eee9;
+  --color-hover: #f3f1ec;
+  --color-warn-bg: #fdf3dc;
+  --color-warn-line: #f1dfb1;
+  --color-warn-ink: #8a4b08;
+  --color-danger: #b91c1c;
+  --color-ok: #166534;
+  --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --shadow-1: 0 1px 2px rgba(28, 27, 25, 0.06), 0 1px 1px rgba(28, 27, 25, 0.04);
+  --shadow-2: 0 6px 24px -6px rgba(28, 27, 25, 0.18), 0 2px 6px rgba(28, 27, 25, 0.06);
+  --shadow-3: 0 30px 60px -20px rgba(28, 27, 25, 0.3), 0 12px 24px -12px rgba(28, 27, 25, 0.18);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font: 14px/1.45 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+/* Landing animation: a place appears on one phone, then on the other. Static when motion is reduced. */
+@keyframes rota-appear {
+  0%, 20% { opacity: 0; transform: translateY(6px); }
+  30%, 90% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(6px); }
+}
+.rota-appear { animation: rota-appear 6s ease-in-out infinite; }
+.rota-appear-late { animation-delay: 1.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .rota-appear { animation: none; opacity: 1; transform: none; }
+}

@@ -1,11 +1,8 @@
-import { useTranslations } from "next-intl";
+import { setRequestLocale } from "next-intl/server";
+import { Landing } from "@/components/landing/Landing";
 
-export default function HomePage() {
-  const t = useTranslations("home");
-  return (
-    <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-3xl font-semibold">{t("title")}</h1>
-      <p className="mt-2 text-neutral-600">{t("tagline")}</p>
-    </main>
-  );
+export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  return <Landing locale={locale === "tr" ? "tr" : "en"} />;
 }

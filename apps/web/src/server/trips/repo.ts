@@ -235,3 +235,20 @@ export async function touchUser(userId: string): Promise<void> {
     .set({ lastActiveAt: new Date() })
     .where(and(eq(user.id, userId), sql`(${user.lastActiveAt} is null or ${user.lastActiveAt} < now() - interval '1 hour')`));
 }
+
+/** Refreshes the user's name and colour in the member mirror of every trip they are in. A trip that has vanished is skipped. */
+export async function mirrorProfile(userId: string): Promise<void> {
+  const [person] = await db.select().from(user).where(eq(user.id, userId));
+  if (!person) return;
+  const mine = await db
+    .select({ tripId: tripMembers.tripId })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.userId, userId), isNull(tripMembers.removedAt)));
+  for (const { tripId } of mine) {
+    try {
+      await applyServerChange(tripId, (doc) => upsertMember(doc, { id: person.id, name: person.name, colour: person.colour }));
+    } catch (err) {
+      if (!(err instanceof HttpError && err.status === 404)) throw err;
+    }
+  }
+}
