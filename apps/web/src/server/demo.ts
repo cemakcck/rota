@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { MEMBER_COLOURS, seedDemoTrip, type Locale, type MemberView } from "@rota/trip";
 import { auth } from "./auth";
 import { db } from "./db/client";
@@ -7,7 +7,7 @@ import { tripMembers, trips, user } from "./db/schema";
 import { HttpError } from "./httpError";
 import { hashIp } from "./ipHash";
 import { hit } from "./rateLimit";
-import { addMember, createTrip } from "./trips/repo";
+import { addMember, createTrip, deleteTrip } from "./trips/repo";
 
 const DEMO_STARTS_PER_IP_PER_DAY = 20;
 const DAY_SEC = 86_400;
@@ -58,29 +58,48 @@ export async function startDemo(input: { ip: string; locale: Locale }): Promise<
   const limited = await hit("demo:" + hashIp(input.ip), DEMO_STARTS_PER_IP_PER_DAY, DAY_SEC);
   if (!limited.ok) throw new HttpError(429, "rate_limited");
 
-  const guest = input.locale === "tr" ? "Misafir" : "Guest";
-  const visitor = await createDemoUser(`${guest} ${pick(ANIMALS[input.locale])}`, MEMBER_COLOURS[5], "visitor");
-  const deniz = await createDemoUser("Deniz", MEMBER_COLOURS[1], "friend");
-  const selin = await createDemoUser("Selin", MEMBER_COLOURS[4], "friend");
+  const created: string[] = [];
+  let tripId: string | undefined;
+  try {
+    const guest = input.locale === "tr" ? "Misafir" : "Guest";
+    const make = async (...args: Parameters<typeof createDemoUser>) => {
+      const made = await createDemoUser(...args);
+      created.push(made.member.id);
+      return made;
+    };
+    const visitor = await make(`${guest} ${pick(ANIMALS[input.locale])}`, MEMBER_COLOURS[5], "visitor");
+    const deniz = await make("Deniz", MEMBER_COLOURS[1], "friend");
+    const selin = await make("Selin", MEMBER_COLOURS[4], "friend");
 
-  const tripId = await createTrip({
-    ownerId: visitor.member.id,
-    name: "",
-    startDate: "",
-    days: 3,
-    destination: null,
-    isDemo: true,
-    locale: input.locale,
-    build: (doc) => seedDemoTrip(doc, { today: istanbulToday(), locale: input.locale, owner: visitor.member, deniz: deniz.member, selin: selin.member }),
-  });
-  await addMember(tripId, deniz.member.id, "member");
-  await addMember(tripId, selin.member.id, "member");
+    tripId = await createTrip({
+      ownerId: visitor.member.id,
+      name: "",
+      startDate: "",
+      days: 3,
+      destination: null,
+      isDemo: true,
+      locale: input.locale,
+      build: (doc) => seedDemoTrip(doc, { today: istanbulToday(), locale: input.locale, owner: visitor.member, deniz: deniz.member, selin: selin.member }),
+    });
+    await addMember(tripId, deniz.member.id, "member");
+    await addMember(tripId, selin.member.id, "member");
 
-  const { headers } = await auth.api.signInEmail({ body: { email: visitor.email, password: visitor.password }, returnHeaders: true });
-  const cookieName = (await auth.$context).authCookies.sessionToken.name;
-  const sessionCookie = headers.getSetCookie().find((c) => c.startsWith(`${cookieName}=`));
-  if (!sessionCookie) throw new Error("Better Auth did not set a session cookie");
-  return { sessionCookie, tripId };
+    const { headers } = await auth.api.signInEmail({ body: { email: visitor.email, password: visitor.password }, returnHeaders: true });
+    const cookieName = (await auth.$context).authCookies.sessionToken.name;
+    const sessionCookie = headers.getSetCookie().find((c) => c.startsWith(`${cookieName}=`));
+    if (!sessionCookie) throw new Error("Better Auth did not set a session cookie");
+    return { sessionCookie, tripId };
+  } catch (err) {
+    // Best effort: never leave half a demo behind. Cleanup's orphan sweep catches whatever this misses.
+    await discard(created, tripId).catch((e) => console.error("[demo] could not discard a failed start", e));
+    throw err;
+  }
+}
+
+/** Removes the users (and trip) of a start that failed; the trip is tombstoned first as it owns the visitor. */
+async function discard(userIds: string[], tripId: string | undefined): Promise<void> {
+  if (tripId) await deleteTrip(tripId);
+  if (userIds.length) await db.delete(user).where(inArray(user.id, userIds));
 }
 
 /**

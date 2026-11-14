@@ -85,6 +85,27 @@ describe("cleanup", () => {
     expect(await userExists(bystander)).toBe(true);
   });
 
+  it("sweeps orphaned demo friends (in no live trip) once a week old; younger ones and members of live trips stay", async () => {
+    const orphan = async (ageDays: number) => {
+      const id = await insertUser("Selin");
+      await db
+        .update(user)
+        .set({ isDemo: true, email: `${id}@${DEMO_FRIEND_DOMAIN}`, createdAt: new Date(Date.now() - ageDays * DAY) })
+        .where(eq(user.id, id));
+      return id;
+    };
+    const old = await orphan(8);
+    const fresh = await orphan(1); // a start may still be in flight
+    const housed = await demoUser(new Date());
+    const housedFriend = await demoFriend(housed.tripId);
+    await db.update(user).set({ createdAt: new Date(Date.now() - 30 * DAY) }).where(eq(user.id, housedFriend));
+
+    stop = startCleanup(20);
+    await vi.waitFor(async () => expect(await userExists(old)).toBe(false), { timeout: 5000 });
+    expect(await userExists(fresh)).toBe(true);
+    expect(await userExists(housedFriend)).toBe(true);
+  });
+
   it("cleanup survives a DB error", async () => {
     const idle = await demoUser(new Date(Date.now() - 8 * DAY));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});

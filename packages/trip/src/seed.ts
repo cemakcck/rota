@@ -39,6 +39,8 @@ export function demoStartDate(today: string): string {
 type Day = 0 | 1 | 2;
 type SeedPlace = {
   name: string;
+  /** OpenStreetMap element id (n/w/r + number), so the app can fetch its opening hours. */
+  osmId?: string;
   lat: number;
   lng: number;
   category: Category;
@@ -52,19 +54,19 @@ type SeedPlace = {
 // Real venues and landmarks; coordinates are approximate, which is enough for a map pin.
 const PLACES: SeedPlace[] = [
   // Day 1: Karaköy and Galata
-  { name: "Karaköy Güllüoğlu", lat: 41.0226, lng: 28.9776, category: "food", tags: ["breakfast", "baklava"], stay: 45, by: "owner", day: 0,
+  { name: "Karaköy Güllüoğlu", osmId: "n4548658690", lat: 41.0226, lng: 28.9776, category: "food", tags: ["breakfast", "baklava"], stay: 45, by: "owner", day: 0,
     note: { en: "Baklava by weight. Get the pistachio one and a tea.", tr: "Baklava kilo ile. Antep fıstıklısını bir çayla al." } },
   { name: "Istanbul Modern", lat: 41.0266, lng: 28.9757, category: "museum", stay: 120, by: "deniz", day: 0 },
-  { name: "Galata Tower", lat: 41.0256, lng: 28.9744, category: "sight", tags: ["views"], stay: 60, by: "selin", day: 0,
+  { name: "Galata Tower", osmId: "w23236783", lat: 41.0256, lng: 28.9744, category: "sight", tags: ["views"], stay: 60, by: "selin", day: 0,
     note: { en: "Queue is shortest right at opening or around sunset.", tr: "Sıra en az açılışta ve gün batımına doğru." } },
   { name: "Karaköy Lokantası", lat: 41.0239, lng: 28.9774, category: "food", tags: ["lunch"], stay: 75, by: "owner", day: 0 },
   // Day 2: Balat and the old city
   { name: "Forno Balat", lat: 41.0292, lng: 28.9478, category: "cafe", tags: ["breakfast", "pastry"], stay: 45, by: "selin", day: 1 },
   { name: "Balat colourful streets", lat: 41.0297, lng: 28.9489, category: "sight", tags: ["photos", "walk"], stay: 90, by: "deniz", day: 1,
     note: { en: "Best light before 11. Steep cobbles, wear proper shoes.", tr: "11'den önce ışık en güzel. Yokuşlu arnavut kaldırımı, rahat ayakkabı giy." } },
-  { name: "Chora Church", lat: 41.0316, lng: 28.9391, category: "museum", tags: ["mosaics"], stay: 75, by: "owner", day: 1 },
-  { name: "Bosphorus ferry from Eminönü", lat: 41.0172, lng: 28.9726, category: "sight", tags: ["ferry"], stay: 90, by: "owner", day: 1,
-    note: { en: "The public ferry is a fraction of a tour boat's price. Sit outside.", tr: "Şehir hatları vapuru tur teknesinin çok altında. Dışarıda otur." } },
+  { name: "Chora Church", osmId: "r7614527", lat: 41.0316, lng: 28.9391, category: "museum", tags: ["mosaics"], stay: 75, by: "owner", day: 1 },
+  { name: "Rumeli Hisarı", osmId: "r7318154", lat: 41.0849, lng: 29.0561, category: "museum", tags: ["fortress", "views"], stay: 90, by: "owner", day: 1,
+    note: { en: "Closes at 17:00. It is a long way from Balat, so go by taxi or the ferry-and-bus combo.", tr: "17:00'de kapanıyor. Balat'tan uzak, taksiyle ya da vapur ve otobüsle git." } },
   // Day 3: Bosphorus shore and Kadıköy
   { name: "Emirgan Park", lat: 41.1087, lng: 29.0556, category: "nature", tags: ["walk"], stay: 90, by: "selin", day: 2 },
   { name: "Çiya Sofrası", lat: 40.9904, lng: 29.0243, category: "food", tags: ["lunch", "regional"], stay: 90, by: "deniz", day: 2 },
@@ -117,6 +119,7 @@ export function seedDemoTrip(doc: Y.Doc, input: DemoSeedInput): void {
         name: p.name,
         lat: p.lat,
         lng: p.lng,
+        osmId: p.osmId,
         category: p.category,
         tags: p.tags,
         stayMinutes: p.stay,

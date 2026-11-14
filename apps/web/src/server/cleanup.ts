@@ -1,4 +1,4 @@
-import { and, eq, inArray, like, lt, notLike, sql } from "drizzle-orm";
+import { and, eq, inArray, like, lt, notExists, notLike, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { DEMO_FRIEND_DOMAIN } from "./demo";
 import { tripMembers, tripTombstones, trips, user } from "./db/schema";
@@ -37,6 +37,16 @@ async function cleanUp(): Promise<void> {
     if (friends.length) await db.delete(user).where(inArray(user.id, friends.map((f) => f.id)));
     await db.delete(user).where(eq(user.id, id));
   }
+  // Safety net: friends in no trip (a failed start, or a crash between deleting a trip and its friends).
+  // The week's grace keeps a start that is still in flight safe.
+  await db.delete(user).where(
+    and(
+      eq(user.isDemo, true),
+      like(user.email, `%@${DEMO_FRIEND_DOMAIN}`),
+      lt(user.createdAt, sql`now() - make_interval(days => ${DEMO_IDLE_DAYS})`),
+      notExists(db.select({ one: sql`1` }).from(tripMembers).where(eq(tripMembers.userId, user.id))),
+    ),
+  );
   await db.delete(tripTombstones).where(lt(tripTombstones.deletedAt, sql`now() - make_interval(days => ${TOMBSTONE_DAYS})`));
 }
 

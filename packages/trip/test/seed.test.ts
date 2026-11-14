@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { describe, expect, it } from "vitest";
-import { readTrip } from "../src";
+import { dayTimeline, estimateLeg, hoursWarning, readTrip } from "../src";
 import { seedDemoTrip } from "../src/seed";
 
 const owner = { id: "u-owner", name: "Guest Otter", colour: "#2563eb" };
@@ -79,5 +79,33 @@ describe("seedDemoTrip", () => {
     const { view } = seeded("2026-11-14", "tr");
     expect(view.name).toBe("İstanbul'da uzun hafta sonu");
     expect(view.locale).toBe("tr");
+  });
+
+  // opening_hours values read from OpenStreetMap on 2026-11-14 (see the task 7 report).
+  const OSM_HOURS: Record<string, string> = {
+    n4548658690: "Mo-Sa 07:30-01:00; Su 08:00-01:00", // Karaköy Güllüoğlu
+    w23236783: "09:00-20:30", // Galata Tower
+    r7614527: "09:00-18:00", // Kariye Camii (Chora)
+    r7318154: "Th-Tu 09:00-17:00", // Rumeli Hisarı
+  };
+
+  it("real OSM ids on well-known venues, and at least one stop that triggers an opening-hours warning", () => {
+    const { view } = seeded();
+    const planned = view.days.flatMap((d) => d.places);
+    const withOsm = planned.filter((p) => p.osmId !== null);
+    expect(withOsm.length).toBeGreaterThanOrEqual(3);
+    for (const p of withOsm) expect(Object.keys(OSM_HOURS)).toContain(p.osmId);
+
+    const warnings: string[] = [];
+    for (const day of view.days) {
+      const legs = day.places.slice(1).map((p, i) => estimateLeg(day.places[i] as { lat: number; lng: number }, p as { lat: number; lng: number }, day.travelMode));
+      dayTimeline(day, legs).forEach((entry, i) => {
+        const hours = OSM_HOURS[day.places[i].osmId ?? ""];
+        if (!hours) return;
+        const w = hoursWarning(hours, day.date, entry.arrive, entry.leave, "en");
+        if (w) warnings.push(`${day.places[i].name}:${w.kind}`);
+      });
+    }
+    expect(warnings).toEqual(["Rumeli Hisarı:closes-before"]);
   });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { eq, like, or } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { readTrip } from "@rota/trip";
 import { POST as startDemoRoute } from "@/app/api/demo/route";
@@ -67,6 +67,22 @@ describe("demo accounts", () => {
     const refused = await post(ip); // the 21st
     expect(refused.status).toBe(429);
     expect(refused.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("a start that fails midway leaves no demo users or trip behind", { timeout: 30_000 }, async () => {
+    const demoUsers = async () =>
+      (await db.select({ id: user.id }).from(user).where(or(like(user.email, "%@friend.demo.invalid"), like(user.email, "%@visitor.demo.invalid")))).length;
+    const tripCount = async () => (await db.select({ id: trips.id }).from(trips).where(eq(trips.isDemo, true))).length;
+    const before = [await demoUsers(), await tripCount()];
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(auth.api, "signInEmail").mockRejectedValueOnce(new Error("sign-in down"));
+    try {
+      expect((await post(newIp())).status).toBe(500);
+    } finally {
+      vi.restoreAllMocks();
+      logged.mockRestore();
+    }
+    expect([await demoUsers(), await tripCount()]).toEqual(before);
   });
 
   it("rejects a bad locale", async () => {
