@@ -2,15 +2,19 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import next from "next";
+import { startCleanup } from "./src/server/cleanup";
+import { createSyncServer, serveSync } from "./src/server/sync";
 
 export type RunningServer = { url: string; close(): Promise<void> };
 
-/** One Node process, one port: Next.js serves pages and API; `/sync` is reserved for the sync server. */
+/** One Node process, one port: Next.js serves pages and API; `/sync` is the Hocuspocus sync server. */
 export async function startServer({ port, dev }: { port: number; dev: boolean }): Promise<RunningServer> {
   const app = next({ dev, dir: import.meta.dirname, port });
   await app.prepare();
   const handle = app.getRequestHandler();
   const handleUpgrade = app.getUpgradeHandler();
+  const sync = serveSync(createSyncServer());
+  const stopCleanup = startCleanup();
 
   const server = createServer((req, res) => {
     void handle(req, res);
@@ -18,8 +22,7 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
     if (pathname === "/sync") {
-      // Hocuspocus attaches here in a later task; until then refuse the connection.
-      socket.destroy();
+      sync.handleUpgrade(req, socket, head);
       return;
     }
     // Everything else (Next's HMR socket in dev) belongs to Next.
@@ -35,6 +38,8 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
   return {
     url: `http://localhost:${actual}`,
     async close() {
+      stopCleanup();
+      await sync.close();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await app.close();

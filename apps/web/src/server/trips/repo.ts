@@ -15,54 +15,13 @@ import {
 import { db, type Db } from "../db/client";
 import { tripDocuments, tripMembers, tripTombstones, trips, user } from "../db/schema";
 import { HttpError } from "../httpError";
+import { applyServerChange, disconnectUser } from "./live";
 
 export const MAX_MEMBERS = 20;
 export const MAX_TRIPS_PER_USER = 50;
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Role = "owner" | "member";
-type MemberChange = { type: "upsert"; member: { id: string; name: string; colour: string } } | { type: "remove"; id: string };
-
-// ---- Stored document access --------------------------------------------------------------
-// Until the sync server (Task 6) holds live documents, membership changes and meta edits are
-// applied straight to the stored state. Task 6 swaps these two functions for live changes.
-
-function decode(state: Uint8Array): Y.Doc {
-  const doc = new Y.Doc();
-  Y.applyUpdate(doc, state);
-  return doc;
-}
-
-/** Writes a document's state and syncs the denormalised trip columns from its meta. */
-async function writeDoc(tx: Tx, tripId: string, doc: Y.Doc): Promise<void> {
-  const state = Buffer.from(Y.encodeStateAsUpdate(doc));
-  const view = readTrip(doc);
-  const now = new Date();
-  await tx
-    .update(tripDocuments)
-    .set({ state, sizeBytes: state.length, updatedAt: now })
-    .where(eq(tripDocuments.tripId, tripId));
-  await tx
-    .update(trips)
-    .set({ name: view.name, startDate: view.startDate, days: view.days.length, destination: view.destination, updatedAt: now })
-    .where(eq(trips.id, tripId));
-}
-
-async function mutateStoredDoc(tx: Tx, tripId: string, change: (doc: Y.Doc) => void): Promise<void> {
-  const [row] = await tx.select({ state: tripDocuments.state }).from(tripDocuments).where(eq(tripDocuments.tripId, tripId)).for("update");
-  if (!row) throw new HttpError(404, "not_found");
-  const doc = decode(row.state);
-  change(doc);
-  await writeDoc(tx, tripId, doc);
-}
-
-/** The one place membership is mirrored into the Yjs document. */
-function mirrorMember(tx: Tx, tripId: string, change: MemberChange): Promise<void> {
-  return mutateStoredDoc(tx, tripId, (doc) => {
-    if (change.type === "upsert") upsertMember(doc, change.member);
-    else removeDocMember(doc, change.id);
-  });
-}
 
 async function lockTrip(tx: Tx, tripId: string): Promise<void> {
   const [row] = await tx.select({ id: trips.id }).from(trips).where(eq(trips.id, tripId)).for("update");
@@ -165,44 +124,32 @@ export async function getTrip(id: string) {
   return row ?? null;
 }
 
-export async function loadState(id: string): Promise<Uint8Array | null> {
-  const [row] = await db.select({ state: tripDocuments.state }).from(tripDocuments).where(eq(tripDocuments.tripId, id));
-  return row?.state ?? null;
-}
-
-/** Stores a document state and syncs `trips.name`, `start_date`, `days` and `updated_at` from its meta. */
-export async function storeState(id: string, state: Uint8Array): Promise<void> {
-  const doc = decode(state);
-  await db.transaction(async (tx) => {
-    await writeDoc(tx, id, doc);
-  });
-}
-
 export async function patchTripMeta(
   tripId: string,
   userId: string,
   patch: { name?: string; startDate?: string; days?: number },
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await mutateStoredDoc(tx, tripId, (doc) => {
-      setTripMeta(doc, { name: patch.name, startDate: patch.startDate }, userId);
-      if (patch.days === undefined) return;
-      let { days } = readTrip(doc);
-      for (let n = days.length; n < patch.days; n++) addDay(doc, userId);
-      while (days.length > patch.days) {
-        removeDay(doc, days[days.length - 1].id, userId);
-        days = readTrip(doc).days;
-      }
-    });
+  await applyServerChange(tripId, (doc) => {
+    setTripMeta(doc, { name: patch.name, startDate: patch.startDate }, userId);
+    if (patch.days === undefined) return;
+    let { days } = readTrip(doc);
+    for (let n = days.length; n < patch.days; n++) addDay(doc, userId);
+    while (days.length > patch.days) {
+      removeDay(doc, days[days.length - 1].id, userId);
+      days = readTrip(doc).days;
+    }
   });
 }
 
-/** Deletes the trip and leaves a tombstone in the same transaction. */
+/** Deletes the trip, leaving a tombstone in the same transaction, then closes members' live connections. */
 export async function deleteTrip(id: string): Promise<void> {
-  await db.transaction(async (tx) => {
+  const members = await db.transaction(async (tx) => {
     await tx.insert(tripTombstones).values({ tripId: id }).onConflictDoNothing();
+    const rows = await tx.select({ userId: tripMembers.userId }).from(tripMembers).where(eq(tripMembers.tripId, id));
     await tx.delete(trips).where(eq(trips.id, id));
+    return rows;
   });
+  for (const { userId } of members) disconnectUser(id, userId, "deleted");
 }
 
 // ---- Members -----------------------------------------------------------------------------
@@ -216,8 +163,13 @@ export async function listMembers(tripId: string) {
     .orderBy(asc(tripMembers.joinedAt));
 }
 
-/** Adds (or re-adds a removed) member. Already being a member is a no-op, even on a full trip. */
+/**
+ * Adds (or re-adds a removed) member. Already being a member is a no-op, even on a full trip.
+ * The document's member mirror is refreshed either way, so a retry after a lost reply still mirrors.
+ */
 export async function addMember(tripId: string, userId: string, role: Role): Promise<void> {
+  const [person] = await db.select().from(user).where(eq(user.id, userId));
+  if (!person) throw new HttpError(404, "not_found");
   await db.transaction(async (tx) => {
     await lockTrip(tx, tripId);
     const [existing] = await tx
@@ -230,17 +182,18 @@ export async function addMember(tripId: string, userId: string, role: Role): Pro
       .from(tripMembers)
       .where(and(eq(tripMembers.tripId, tripId), isNull(tripMembers.removedAt)));
     if (active >= MAX_MEMBERS) throw new HttpError(409, "trip_full");
-    const [person] = await tx.select().from(user).where(eq(user.id, userId));
-    if (!person) throw new HttpError(404, "not_found");
     await tx
       .insert(tripMembers)
       .values({ tripId, userId, role })
       .onConflictDoUpdate({ target: [tripMembers.tripId, tripMembers.userId], set: { role, removedAt: null, joinedAt: sql`now()` } });
-    await mirrorMember(tx, tripId, { type: "upsert", member: { id: person.id, name: person.name, colour: person.colour } });
   });
+  await applyServerChange(tripId, (doc) => upsertMember(doc, { id: person.id, name: person.name, colour: person.colour }));
 }
 
-/** Soft removal: the row stays with `removed_at` set. The owner must transfer ownership first. */
+/**
+ * Soft removal: the row stays with `removed_at` set. The owner must transfer ownership first.
+ * The member's live connections are closed with "removed".
+ */
 export async function removeMember(tripId: string, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await lockTrip(tx, tripId);
@@ -254,8 +207,9 @@ export async function removeMember(tripId: string, userId: string): Promise<void
       .update(tripMembers)
       .set({ removedAt: new Date() })
       .where(and(eq(tripMembers.tripId, tripId), eq(tripMembers.userId, userId)));
-    await mirrorMember(tx, tripId, { type: "remove", id: userId });
   });
+  disconnectUser(tripId, userId, "removed");
+  await applyServerChange(tripId, (doc) => removeDocMember(doc, userId));
 }
 
 export async function transferOwnership(tripId: string, toUserId: string): Promise<void> {

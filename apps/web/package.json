@@ -14,24 +14,30 @@
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts"
   },
   "dependencies": {
+    "@hocuspocus/extension-database": "^4.8.0",
+    "@hocuspocus/server": "^4.8.0",
     "@rota/trip": "*",
     "better-auth": "^1.7.23",
     "drizzle-orm": "^0.45.4",
-    "zod": "^4.6.7",
     "next": "16.4.5",
     "next-intl": "^4.14.9",
     "postgres": "^4.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "resend": "^6.38.1",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "ws": "^8.23.0",
+    "yjs": "^13.6.33",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@hocuspocus/provider": "^4.8.0",
     "@playwright/test": "1.65",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.2.1",
     "drizzle-kit": "^0.31.11",
     "jsdom": "^31.0.0",

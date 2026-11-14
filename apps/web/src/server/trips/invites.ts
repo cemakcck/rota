@@ -6,7 +6,8 @@ import { db } from "../db/client";
 import { tripInvites, tripMembers, trips, user } from "../db/schema";
 import { sendEmail } from "../email";
 import { HttpError } from "../httpError";
-import { addMember, listMembers, loadState } from "./repo";
+import { loadState } from "./docStore";
+import { addMember, listMembers } from "./repo";
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const TOKEN_LENGTH = 43; // 62^43 > 2^256, so 32 random bytes always fit

@@ -7,9 +7,9 @@ import { user } from "@/server/db/schema";
 export const ORIGIN = "http://localhost:3400";
 const randomIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
 
-export type TestUser = { id: string; email: string; name: string; token: string };
+export type TestUser = { id: string; email: string; name: string; token: string; cookie: string };
 
-/** Signs a user up through Better Auth; the result carries a bearer token for `call`. */
+/** Signs a user up through Better Auth; the result carries a bearer token for `call` and the browser's session cookie. */
 export async function signUpUser(over: { email?: string; name?: string } = {}): Promise<TestUser> {
   const email = over.email ?? `${randomUUID()}@test.rota`;
   const name = over.name ?? "Ayşe";
@@ -22,7 +22,11 @@ export async function signUpUser(over: { email?: string; name?: string } = {}): 
   );
   if (res.status !== 200) throw new Error(`sign-up failed: ${res.status} ${await res.text()}`);
   const body = (await res.json()) as { user: { id: string } };
-  return { id: body.user.id, email, name, token: res.headers.get("set-auth-token")! };
+  const cookie = res.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0])
+    .join("; ");
+  return { id: body.user.id, email, name, token: res.headers.get("set-auth-token")!, cookie };
 }
 
 /** A user row without an account or session: enough to be a member. */
