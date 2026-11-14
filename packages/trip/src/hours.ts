@@ -66,3 +66,26 @@ export function closedAllDay(openingHours: string, date: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   return hoursWarning(openingHours, date, "00:00", "23:59", "en")?.kind === "closed-day";
 }
+
+/**
+ * When a place is open on `date`, as "09:00–20:30" spans (an interval past midnight ends at its
+ * closing time, "18:00–02:00"; open all day is "00:00–24:00"; the small hours left over from the
+ * night before are not listed). Empty when it does not open that day; null when the hours cannot be
+ * read, are uncertain that day, or there is no date.
+ */
+export function openingTimes(openingHours: string, date: string): string[] | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const dayStart = local(date, "00:00");
+  const shift = (days: number) => new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + days);
+  const nextMidnight = shift(1);
+  let intervals: [Date, Date, boolean, string | undefined][];
+  try {
+    intervals = new opening_hours(openingHours).getOpenIntervals(shift(-1), shift(2));
+  } catch {
+    return null;
+  }
+  const allDay = (i: (typeof intervals)[number]) => i[0] <= dayStart && i[1] >= nextMidnight;
+  const today = intervals.filter((i) => (i[0] >= dayStart && i[0] < nextMidnight) || allDay(i));
+  if (today.some((i) => i[2])) return null;
+  return today.map((i) => (allDay(i) ? "00:00–24:00" : `${clock(i[0])}–${clock(i[1])}`));
+}

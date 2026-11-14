@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
 import * as Y from "yjs";
@@ -8,6 +8,7 @@ import {
   addChecklistItem,
   addPlace,
   createUndo,
+  dayTimeline,
   deleteChecklistItem,
   deletePlace,
   isChecklistFull,
@@ -38,6 +39,7 @@ import { useRouter } from "@/i18n/navigation";
 import type { FriendWindow } from "../demo/FriendButton";
 import { SideBySide } from "../demo/SideBySide";
 import { BottomSheet, type Snap } from "../map/BottomSheet";
+import { dayColour } from "../map/mapFeatures";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
 import { Announcer } from "./Announcer";
@@ -45,9 +47,12 @@ import { Checklist, checkFocusId, type ChecklistActions } from "./Checklist";
 import { ClosedNotice } from "./ClosedNotice";
 import { DayPlan, SILENT, type PlanActions } from "./DayPlan";
 import { DemoBox } from "./DemoBox";
+import { MoveDialog } from "./MoveDialog";
+import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
+import { usePlaceControls } from "./placeControls";
 import { CollabContext, Presence, type Collab } from "./Presence";
 import { NO_FILTER, dropPlace, passes, plannedLists, tripCentre, type ListId } from "./plan";
-import { placeFocusId, placeRowId } from "./StopRow";
+import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { Rail } from "./Rail";
 import { TripHeader } from "./TripHeader";
 import { TripSettingsScreen } from "./TripSettingsScreen";
@@ -77,14 +82,13 @@ function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
 
 /**
  * True when Ctrl/Cmd+Z is not for the trip: typing in a field or an open note (its own undo wins), or
- * while a dialog (settings, Move to…) or a place editor is open, where undoing would change the trip
- * unseen.
+ * while a dialog (settings, Move to…) is open, where undoing would change the trip unseen.
  */
 function notForTrip(target: EventTarget | null): boolean {
   if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return true;
   // An open note (its toolbar too): the note's own undo, or nothing.
   if (target instanceof Element && target.closest("[data-note-editor]")) return true;
-  return document.querySelector('[role="dialog"], [data-place-editor]') !== null;
+  return document.querySelector('[role="dialog"]') !== null;
 }
 
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
@@ -106,6 +110,8 @@ function TripScreenFor({ tripId }: Props) {
   // What the list and the map show (mirrored in the address), and the place selected in the list or on the map.
   const [shown, show] = useTripView(view, ready);
   const [picked, setPicked] = useState<string | null>(null);
+  // The place whose details panel is open (a row or pin opened it).
+  const [openId, setOpenId] = useState<string | null>(null);
   // Phones: the full-screen map under the list's sheet, or the list alone.
   const [phoneView, setPhoneView] = useState<"map" | "list">("map");
   const [snap, setSnap] = useState<Snap>("half");
@@ -168,7 +174,7 @@ function TripScreenFor({ tripId }: Props) {
   // Travel times and road routes, opening hours and weather, through our proxies (estimates offline).
   const travel = useTravels(view);
   const legsFor = useCallback((dayId: string) => travel[dayId]?.legs ?? [], [travel]);
-  const warnings = useHours(view, legsFor, locale as Locale);
+  const { warnings, open: openingHours } = useHours(view, legsFor, locale as Locale);
   const weather = useWeather(view);
   const routeGeometry = useMemo(() => Object.fromEntries(Object.entries(travel).flatMap(([id, d]) => (d.geometry ? [[id, d.geometry]] : []))), [travel]);
   const centre = useMemo(() => tripCentre(view), [view]);
@@ -182,6 +188,60 @@ function TripScreenFor({ tripId }: Props) {
   );
   const dayDate = (date: string) =>
     date ? new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`)) : "";
+
+
+  // Selection, shared by the list and the map. A place removed meanwhile is no longer selected.
+  const listOf = (id: string) => plannedLists(view).find((l) => l.places.some((p) => p.id === id));
+  const selectedPlaceId = picked !== null && listOf(picked) ? picked : null;
+  // The details follow their place: gone (deleted, or un-planned) they close; moved to another list
+  // (by anyone), the view goes with it. Choosing a view that does not show the place closes them.
+  const openList = openId === null ? undefined : listOf(openId);
+  if (openId !== null && !openList) setOpenId(null);
+  const openListId = openList?.id;
+  const shownKey = shown.kind === "day" ? `day:${shown.dayId}` : shown.kind;
+  const [seen, setSeen] = useState({ id: openId, list: openListId, shown: shownKey });
+  if (seen.id !== openId || seen.list !== openListId || seen.shown !== shownKey) {
+    setSeen({ id: openId, list: openListId, shown: shownKey });
+    const moved = seen.id === openId && seen.list !== openListId;
+    const showsIt = shown.kind === "all" || (shown.kind === "ideas" ? openListId === null : shown.kind === "day" && openListId === shown.dayId);
+    if (openId !== null && openListId !== undefined && seen.shown !== shownKey && !moved && !showsIt) setOpenId(null);
+  }
+  const followed = useRef<{ id: string; list: string | null } | null>(null);
+  useEffect(() => {
+    const was = followed.current;
+    followed.current = openId === null || openListId === undefined ? null : { id: openId, list: openListId };
+    if (!was || was.id !== openId || openListId === undefined || was.list === openListId || shown.kind === "all") return;
+    show(openListId === null ? { kind: "ideas" } : { kind: "day", dayId: openListId });
+  }, [openId, openListId, shown.kind, show]);
+
+  const actions: PlanActions | null = editor === null ? null : {
+    save: (id, edit) => updatePlace(doc, id, edit, editor),
+    setTime: (id, time) => void setPlaceTime(doc, id, time, editor),
+    // Set by the plan (it knows the neighbours and says what happened).
+    nudge: () => undefined,
+    openMove: () => undefined,
+    // Every move from the plan (drag, Alt+arrows, Move to…) re-times a timed stop for its new slot (spec §2b).
+    move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
+    add: ({ time, ...place }, to) =>
+      void (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor) : addPlace(doc, { ...place, dayId: to, time }, editor)),
+    remove(place) {
+      // Its own undo step, so the toast's Undo restores just the place.
+      undo?.stopCapturing();
+      deletePlace(doc, place.id, editor);
+      setToast({ name: place.name || t("unnamed"), focus: placeFocusId(place.id), at: Date.now() });
+    },
+    setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
+    vote: (id, value) => vote(doc, id, editor, value),
+    // One transaction (one undo step, one announcement): planned, then into the chosen list.
+    accept: (id, to) =>
+      doc.transact(() => {
+        setPlaceStatus(doc, id, "planned", editor);
+        movePlace(doc, id, { dayId: to }, editor);
+      }, editor),
+    dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
+    restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
+  };
+  const controls = usePlaceControls(doc, view, actions);
 
   if (closed)
     return (
@@ -212,33 +272,6 @@ function TripScreenFor({ tripId }: Props) {
       </main>
     );
 
-  const actions: PlanActions | null = editor === null ? null : {
-    save: (id, edit) => updatePlace(doc, id, edit, editor),
-    setTime: (id, time) => void setPlaceTime(doc, id, time, editor),
-    // Set by the plan (it knows the neighbours and says what happened).
-    nudge: () => undefined,
-    openMove: () => undefined,
-    // Every move from the plan (drag, Alt+arrows, Move to…) re-times a timed stop for its new slot (spec §2b).
-    move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
-    add: ({ time, ...place }, to) =>
-      void (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor) : addPlace(doc, { ...place, dayId: to, time }, editor)),
-    remove(place) {
-      // Its own undo step, so the toast's Undo restores just the place.
-      undo?.stopCapturing();
-      deletePlace(doc, place.id, editor);
-      setToast({ name: place.name || t("unnamed"), focus: placeFocusId(place.id), at: Date.now() });
-    },
-    setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
-    vote: (id, value) => vote(doc, id, editor, value),
-    // One transaction (one undo step, one announcement): planned, then into the chosen list.
-    accept: (id, to) =>
-      doc.transact(() => {
-        setPlaceStatus(doc, id, "planned", editor);
-        movePlace(doc, id, { dayId: to }, editor);
-      }, editor),
-    dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
-    restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
-  };
   const checklistActions: ChecklistActions | null = editor === null ? null : {
     add: (text) => addChecklistItem(doc, text, editor),
     update: (id, patch) => updateChecklistItem(doc, id, patch, editor),
@@ -251,10 +284,7 @@ function TripScreenFor({ tripId }: Props) {
   };
   const lists = plannedLists(view).map((l) => ({ id: l.id, label: labelIn(view, l.id) }));
 
-  // Selection, shared by the list and the map. A place removed meanwhile is no longer selected.
   const selectedDayId = shown.kind === "day" ? shown.dayId : null;
-  const listOf = (id: string) => plannedLists(view).find((l) => l.places.some((p) => p.id === id));
-  const selectedPlaceId = picked !== null && listOf(picked) ? picked : null;
   // Selecting a place shows its list (its day, or Ideas), unless the whole trip is shown.
   const select = (id: string) => {
     setPicked(id);
@@ -262,13 +292,59 @@ function TripScreenFor({ tripId }: Props) {
     if (!list || shown.kind === "all") return;
     show(list.id === null ? { kind: "ideas" } : { kind: "day", dayId: list.id });
   };
-  // A pin: its row is selected and brought into view (the sheet comes up if it was down).
-  const selectPin = (id: string) => {
+  // A row or a pin opens the place's details; closing them puts focus back on its row.
+  const openDetails = (id: string) => {
     select(id);
+    setOpenId(id);
+  };
+  const closeDetails = () => {
+    const id = openId;
+    setOpenId(null);
+    if (id !== null) requestAnimationFrame(() => document.getElementById(placeFocusId(id))?.focus());
+  };
+  // A pin: its row is selected and brought into view (the sheet comes up if it was down), its details open.
+  const selectPin = (id: string) => {
+    openDetails(id);
     if (snap === "peek") setSnap("half");
     const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     requestAnimationFrame(() => document.getElementById(placeRowId(id))?.scrollIntoView?.({ block: "nearest", behavior }));
   };
+
+  const choices = plannedLists(view).map((l) => ({
+    id: l.id,
+    label: l.id === null ? t("ideas") : `${labelIn(view, l.id)} · ${dayDate(view.days.find((d) => d.id === l.id)!.date)}`,
+  }));
+
+  // The open place's details: where it is (its day's number, timeline and travel, or Ideas), who added it, its hours.
+  let details = null;
+  if (openId !== null && openList) {
+    const index = openList.places.findIndex((p) => p.id === openId);
+    const place = openList.places[index];
+    const day = view.days.find((d) => d.id === openList.id);
+    let where: DetailsWhere = { kind: "ideas", label: t("ideas") };
+    if (day) {
+      const dayTravel = travel[day.id];
+      const timing = dayTimeline(day, dayTravel?.legs ?? [])[index];
+      const leg = index > 0 ? dayTravel?.legs[index - 1] : undefined;
+      // As on the row: a late arrival is only said once the travel before it is known.
+      const late = timing?.lateBy && !(leg?.approximate && dayTravel?.loading) ? { minutes: timing.lateBy, from: day.places[index - 1]?.name || t("unnamed") } : null;
+      where = { kind: "day", label: labelIn(view, day.id), number: index + 1, colour: dayColour(day.index), mode: day.travelMode, timing, leg, late };
+    }
+    details = (
+      <PlaceDetails
+        key={place.id}
+        place={place}
+        where={where}
+        addedBy={view.members.find((m) => m.id === place.addedBy)}
+        hours={openingHours.get(place.id)}
+        warning={warnings.get(place.id)}
+        first={index === 0}
+        last={index === openList.places.length - 1}
+        actions={controls.stopActions}
+        onClose={closeDetails}
+      />
+    );
+  }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
@@ -343,8 +419,10 @@ function TripScreenFor({ tripId }: Props) {
                         hidden={hiddenIds.size}
                         visible={visible}
                         selectedId={selectedPlaceId}
-                        onSelect={select}
+                        openId={openId}
+                        onOpen={(id, open) => (open ? openDetails(id) : closeDetails())}
                         actions={actions}
+                        stopActions={controls.stopActions}
                         full={full}
                         near={centre}
                         listLabel={(list) => labelIn(view, list)}
@@ -379,6 +457,8 @@ function TripScreenFor({ tripId }: Props) {
                   )}
                 </section>
               </div>
+              {/* Over the map's left edge (wide screens), or a full-height sheet (phones). */}
+              {details}
             </div>
             {toast && undo && (
               <UndoToast
@@ -389,6 +469,27 @@ function TripScreenFor({ tripId }: Props) {
                   undo.undo();
                   setToast(null);
                   requestAnimationFrame(() => document.getElementById(toast.focus)?.focus());
+                }}
+              />
+            )}
+            <p data-testid="plan-status" role="status" aria-live="polite" className="sr-only">
+              {controls.status}
+            </p>
+            {controls.moving && actions && (
+              <MoveDialog
+                place={controls.moving.place}
+                current={controls.moving.list}
+                lists={choices}
+                onClose={() => {
+                  const id = controls.moving!.place.id;
+                  controls.closeMove();
+                  requestAnimationFrame(() => document.getElementById(placeMoveId(id))?.focus());
+                }}
+                onMove={(to) => {
+                  const id = controls.moving!.place.id;
+                  actions.move(id, { dayId: to });
+                  controls.closeMove();
+                  requestAnimationFrame(() => (document.getElementById(placeMoveId(id)) ?? document.getElementById(placeFocusId(id)))?.focus());
                 }}
               />
             )}

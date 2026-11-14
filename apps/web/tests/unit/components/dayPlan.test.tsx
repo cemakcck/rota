@@ -526,7 +526,7 @@ describe("day plan", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Time for A" }), { target: { value: "09:30" } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for A" }), { key: "Enter" });
     expect(fake.awareness.getLocalState()?.editing).toBe(id);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(fake.awareness.getLocalState()?.editing).toBeNull();
   });
 

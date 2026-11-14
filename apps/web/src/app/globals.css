@@ -47,6 +47,13 @@ body {
   .rota-appear { animation: none; opacity: 1; transform: none; }
 }
 
+/* The place details slide in over the map's edge (up from below on phones); still when motion is reduced. */
+@keyframes rota-slide { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@keyframes rota-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.rota-slide { animation: rota-rise 150ms ease-out; }
+@media (min-width: 64rem) { .rota-slide { animation-name: rota-slide; } }
+@media (prefers-reduced-motion: reduce) { .rota-slide { animation: none; } }
+
 /* Notes (Tiptap): lists keep their bullets; a friend's caret is a line in their colour with a name tag. */
 .note-editor { font-size: 13.5px; line-height: 1.5; }
 .note-editor p { margin: 0; }

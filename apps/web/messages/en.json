@@ -221,7 +221,6 @@
     "newTab": "opens in a new tab",
     "openPlace": "Open in Google Maps",
     "unnamed": "Unnamed place",
-    "editFor": "Edit {name}",
     "moveUpFor": "Move {name} up",
     "moveDownFor": "Move {name} down",
     "moveToFor": "Move {name} to…",
@@ -348,7 +347,17 @@
     "planHint": "Drag or Alt+↑/↓ to reorder · click a place for details",
     "delete": "Delete",
     "reorderedToAt": "{name} now at {time}, position {position} of {total}",
-    "timeCleared": "{name} has no set time"
+    "timeCleared": "{name} has no set time",
+    "detailsFor": "Details for {name}",
+    "addedBy": "Added by {name}",
+    "changeCategory": "Change category, now {category}",
+    "arrive": "Arrive",
+    "stay": "Stay",
+    "fromPrevious": "From previous stop",
+    "firstStop": "First stop",
+    "openingHours": "Opening hours",
+    "hoursClosed": "Closed",
+    "notKnown": "Not known"
   },
   "map": {
     "sheetHandle": "Resize the list",

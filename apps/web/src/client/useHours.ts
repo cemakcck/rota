@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { closedAllDay, dayTimeline, hoursWarning, type HoursWarning, type Leg, type Locale, type TripView } from "@rota/trip";
+import { closedAllDay, dayTimeline, hoursWarning, openingTimes, type HoursWarning, type Leg, type Locale, type TripView } from "@rota/trip";
 import { apiFetch } from "./authClient";
 import { createRemote, getJson, useRemote } from "./remote";
 
@@ -12,21 +12,32 @@ const hours = createRemote<string | null>(async (ids, signal) => {
   return new Map(ids.map((id) => [id, body.hours[id] ?? null]));
 }, 25);
 
+/** What a stop's details show: when it is open that day ("09:00–20:30" spans; empty when closed). */
+export type StopHours = string[];
+
 /**
  * Opening-hours warnings for the trip's planned stops, by place id (spec §8.2): OpenStreetMap's hours
  * at the stop's set or estimated arrival and stay. A stop with no time can only be warned that the
- * place is closed all day. No hours known, no warning.
+ * place is closed all day. No hours known, no warning. Also when each stop is open on its day, for its
+ * details (none when unknown).
  */
-export function useHours(view: TripView, legsFor: (dayId: string) => (Leg | null)[], locale: Locale): Map<string, StopWarning> {
+export function useHours(
+  view: TripView,
+  legsFor: (dayId: string) => (Leg | null)[],
+  locale: Locale,
+): { warnings: Map<string, StopWarning>; open: Map<string, StopHours> } {
   const ids = useMemo(() => [...new Set(view.days.flatMap((d) => d.places.flatMap((p) => (p.osmId ? [p.osmId] : []))))], [view.days]);
   // Re-renders as hours arrive.
   const { get } = useRemote(hours, ids);
   const warnings = new Map<string, StopWarning>();
+  const open = new Map<string, StopHours>();
   for (const day of view.days) {
     const timeline = dayTimeline(day, legsFor(day.id));
     day.places.forEach((place, i) => {
       const tag = place.osmId ? get(place.osmId) : null;
       if (!tag || !day.date) return;
+      const times = openingTimes(tag, day.date);
+      if (times) open.set(place.id, times);
       const { arrive, leave } = timeline[i];
       if (arrive === null || leave === null) {
         if (closedAllDay(tag, day.date)) warnings.set(place.id, { warning: { kind: "closed-day" }, date: day.date, arrive: null });
@@ -36,5 +47,5 @@ export function useHours(view: TripView, legsFor: (dayId: string) => (Leg | null
       if (warning) warnings.set(place.id, { warning, date: day.date, arrive });
     });
   }
-  return warnings;
+  return { warnings, open };
 }

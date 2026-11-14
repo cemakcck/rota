@@ -107,7 +107,7 @@ describe("header", () => {
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
   });
 
-  it("the undo shortcut does nothing while the settings sheet or a place editor is open", async () => {
+  it("the undo shortcut does nothing while the settings sheet is open or while typing in a place's details", async () => {
     const { doc, dayIds } = newTrip();
     const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
     const trip = { id: "t1", name: "Istanbul long weekend", startDate: "2026-11-27", days: 2, members: [{ id: "u1", name: "Ann", colour: "#2563eb", role: "owner" }] };
@@ -126,9 +126,9 @@ describe("header", () => {
     vi.unstubAllGlobals();
 
     fireEvent.click(screen.getByRole("button", { name: "Galata Kulesi" }));
-    fireEvent.keyDown(screen.getByRole("button", { name: "Save" }), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Tower");
   });

@@ -3,18 +3,17 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { useDroppable, type Announcements } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
-import { dayNote, dayTimeline, dayUrls, readTrip, type DayPatch, type DayView, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import { dayNote, dayTimeline, dayUrls, type DayPatch, type DayView, type PlaceView, type Slot, type TripView } from "@rota/trip";
 import type { StopWarning } from "@/client/useHours";
 import type { Travel } from "@/client/useTravel";
 import { dayColour } from "../map/mapFeatures";
 import { Connector } from "./Connector";
 import { FilterPopover, HiddenCount } from "./FilterPopover";
 import { GoogleMapsPin, Icon } from "./icons";
-import { MoveDialog } from "./MoveDialog";
 import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { SearchBar, type NewStop } from "./SearchBar";
-import { StopRow, placeFocusId, placeMoveId, type StopActions } from "./StopRow";
+import { StopRow, type StopActions } from "./StopRow";
 import { Suggestions, type SuggestionActions } from "./Suggestions";
 import { Approximate, useDuration } from "./TravelLeg";
 import { listDropId, plannedLists, type Filter, type ListId } from "./plan";
@@ -24,7 +23,7 @@ import type { TripViewState } from "./view";
  * dnd-kit's own screen reader output (an assertive live region with English "Picked up draggable item
  * <id>" messages, and keyboard instructions for a keyboard sensor this screen does not use) is silenced
  * and rendered into a detached element. Dragging is pointer-only; keyboard and screen reader users move
- * places with Alt+↑/↓ and the Move to… dialog, and others' moves come from the Announcer.
+ * places with Alt+↑/↓ and the details panel's Move up/down and Move to…, and others' moves come from the Announcer.
  * The checklist does the same.
  */
 export const SILENT: Announcements = {
@@ -160,8 +159,6 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
                   open={place.id === rows.openId}
                   onOpen={rows.onOpen}
                   actions={rows.actions}
-                  first={i === 0}
-                  last={i === places.length - 1}
                 />
               </Fragment>
             );
@@ -187,8 +184,10 @@ export function DayPlan({
   hidden,
   visible,
   selectedId,
-  onSelect,
+  openId,
+  onOpen,
   actions,
+  stopActions,
   full,
   near,
   listLabel,
@@ -208,8 +207,13 @@ export function DayPlan({
   visible: (p: PlaceView) => boolean;
   /** The place selected in the list or on the map. */
   selectedId: string | null;
-  onSelect(id: string): void;
+  /** The place whose details panel is open. */
+  openId: string | null;
+  /** Opens (or closes) a place's details. */
+  onOpen(id: string, open: boolean): void;
   actions: PlanActions | null;
+  /** What rows can do (see usePlaceControls). */
+  stopActions: StopActions | null;
   full: boolean;
   near: { lat: number; lng: number } | null;
   listLabel: (list: ListId) => string;
@@ -219,74 +223,10 @@ export function DayPlan({
 }) {
   const t = useTranslations("trip");
   const headingBase = useId();
-  const [moving, setMoving] = useState<string | null>(null);
-  // The place whose editor is open under its row (until the details panel).
-  const [openId, setOpenId] = useState<string | null>(null);
-  // What this person's own keyboard reorder did, said politely (others' changes come from the Announcer).
-  const [status, setStatus] = useState("");
-  const collab = useCollab();
-
   const lists = plannedLists(view);
-  const find = (id: string | null) => {
-    for (const list of lists) {
-      const place = list.places.find((p) => p.id === id);
-      if (place) return { list: list.id, place };
-    }
-    return null;
-  };
-  const movingPlace = find(moving);
-  // Someone else deleted (or un-planned) the place while its Move dialog was open: the dialog closes
-  // (and puts focus somewhere that still exists, see MoveDialog).
-  if (moving !== null && !movingPlace) setMoving(null);
-  if (openId !== null && !find(openId)) setOpenId(null);
-
   const listChoiceLabel = (id: ListId) => (id === null ? t("ideas") : `${listLabel(id)} · ${dayDate(view.days.find((d) => d.id === id)!.date)}`);
   const choices = lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }));
-
-  // After this person's own reorder or time change: where the stop is now, and its time if it has one.
-  const sayWhere = (id: string) => {
-    if (!collab) return;
-    const list = plannedLists(readTrip(collab.doc)).find((l) => l.places.some((p) => p.id === id));
-    if (!list) return;
-    const position = list.places.findIndex((p) => p.id === id) + 1;
-    const place = list.places[position - 1];
-    const name = place.name || t("unnamed");
-    const total = list.places.length;
-    setStatus(place.time === null || list.id === null ? t("reorderedTo", { name, position, total }) : t("reorderedToAt", { name, time: place.time, position, total }));
-  };
-  const stopActions: StopActions | null = actions && {
-    ...actions,
-    openMove: setMoving,
-    setTime(id, time) {
-      actions.setTime(id, time);
-      if (time !== null) return sayWhere(id);
-      const place = find(id)?.place;
-      if (place) setStatus(t("timeCleared", { name: place.name || t("unnamed") }));
-    },
-    nudge(id, by) {
-      const list = find(id);
-      const places = lists.find((l) => l.id === list?.list)?.places ?? [];
-      const at = places.findIndex((p) => p.id === id);
-      const neighbour = places[at + by];
-      if (!list || !neighbour) return;
-      if (!actions.move(id, by < 0 ? { dayId: list.list, beforeId: neighbour.id } : { dayId: list.list, afterId: neighbour.id })) return;
-      sayWhere(id);
-      // Focus stays on what was used (the name with Alt+arrows, or the Move up/down button).
-      const was = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
-      requestAnimationFrame(() => (was?.isConnected ? was : document.getElementById(placeFocusId(id)))?.focus());
-    },
-  };
-  const rows: RowProps = {
-    visible,
-    warnings,
-    selectedId,
-    openId,
-    onOpen(id, open) {
-      if (open) onSelect(id);
-      setOpenId(open ? id : null);
-    },
-    actions: stopActions,
-  };
+  const rows: RowProps = { visible, warnings, selectedId, openId, onOpen, actions: stopActions };
 
   const filterButton = <FilterPopover view={view} filter={filter} onChange={onFilter} />;
   const shownDay = shown.kind === "day" ? view.days.find((d) => d.id === shown.dayId) : undefined;
@@ -349,28 +289,6 @@ export function DayPlan({
         </>
       )}
       {shown.kind === "day" && <p className="px-5 pb-2 text-[12px] text-ink-2">{t("planHint")}</p>}
-      <p data-testid="plan-status" role="status" aria-live="polite" className="sr-only">
-        {status}
-      </p>
-
-      {movingPlace && actions && (
-        <MoveDialog
-          place={movingPlace.place}
-          current={movingPlace.list}
-          lists={choices}
-          onClose={() => {
-            const id = movingPlace.place.id;
-            setMoving(null);
-            requestAnimationFrame(() => document.getElementById(placeMoveId(id))?.focus());
-          }}
-          onMove={(to) => {
-            const id = movingPlace.place.id;
-            actions.move(id, { dayId: to });
-            setMoving(null);
-            requestAnimationFrame(() => (document.getElementById(placeMoveId(id)) ?? document.getElementById(placeFocusId(id)))?.focus());
-          }}
-        />
-      )}
     </>
   );
 }

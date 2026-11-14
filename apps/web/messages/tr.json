@@ -221,7 +221,6 @@
     "newTab": "yeni sekmede açılır",
     "openPlace": "Google Haritalar'da aç",
     "unnamed": "Adsız yer",
-    "editFor": "Düzenle: {name}",
     "moveUpFor": "Yukarı taşı: {name}",
     "moveDownFor": "Aşağı taşı: {name}",
     "moveToFor": "Şuraya taşı: {name}…",
@@ -348,7 +347,17 @@
     "planHint": "Sıralamak için sürükleyin ya da Alt+↑/↓ kullanın · ayrıntılar için bir yere tıklayın",
     "delete": "Sil",
     "reorderedToAt": "{name} şimdi {time}, {total} durak içinde {position}. sırada",
-    "timeCleared": "{name} için belirlenmiş saat yok"
+    "timeCleared": "{name} için belirlenmiş saat yok",
+    "detailsFor": "{name} ayrıntıları",
+    "addedBy": "Ekleyen: {name}",
+    "changeCategory": "Kategoriyi değiştir, şu an {category}",
+    "arrive": "Varış",
+    "stay": "Kalış",
+    "fromPrevious": "Önceki duraktan",
+    "firstStop": "İlk durak",
+    "openingHours": "Açılış saatleri",
+    "hoursClosed": "Kapalı",
+    "notKnown": "Bilinmiyor"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

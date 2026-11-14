@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closedAllDay, hoursWarning } from "../src";
+import { closedAllDay, hoursWarning, openingTimes } from "../src";
 
 // 2026-11-16 is a Monday.
 describe("hoursWarning", () => {
@@ -60,5 +60,20 @@ describe("hoursWarning", () => {
       kind: "closes-before",
       at: "02:00",
     });
+  });
+});
+
+describe("openingTimes", () => {
+  it("lists the times a place is open on a date (for the details panel)", () => {
+    expect(openingTimes("Mo-Su 09:00-20:30", "2026-11-16")).toEqual(["09:00–20:30"]);
+    expect(openingTimes("Mo 09:00-12:00,14:00-18:00", "2026-11-16")).toEqual(["09:00–12:00", "14:00–18:00"]);
+    expect(openingTimes("Mo-Su 18:00-02:00", "2026-11-16")).toEqual(["18:00–02:00"]);
+    expect(openingTimes("24/7", "2026-11-16")).toEqual(["00:00–24:00"]);
+  });
+  it("is empty on a closed day and null when unknown", () => {
+    expect(openingTimes("Tu-Su 09:00-17:00", "2026-11-16")).toEqual([]);
+    expect(openingTimes("not hours at all", "2026-11-16")).toBeNull();
+    expect(openingTimes('Mo "by appointment"', "2026-11-16")).toBeNull();
+    expect(openingTimes("Mo-Su 09:00-17:00", "")).toBeNull();
   });
 });

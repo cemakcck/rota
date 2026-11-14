@@ -3,13 +3,11 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
-import { placeNote, placeUrl, type PlaceView, type TimelineEntry } from "@rota/trip";
+import { placeNote, type PlacePatch, type PlaceView, type TimelineEntry } from "@rota/trip";
 import type { StopWarning } from "@/client/useHours";
-import { btn, btnSm } from "../ui";
 import { HoursWarning } from "./HoursWarning";
-import { CategoryGlyph, GoogleMapsPin, Icon } from "./icons";
-import { NoteEditor, noteOrNull } from "./NoteEditor";
-import { PlaceEditor, type PlaceEdit } from "./PlaceEditor";
+import { CategoryGlyph, Icon } from "./icons";
+import { noteOrNull } from "./NoteEditor";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { noteFirstLine } from "./Rail";
 import { parseTime, placeDropId } from "./plan";
@@ -17,7 +15,8 @@ import { Approximate, useStay } from "./TravelLeg";
 
 /** What a member can do to a stop; absent while the user is unknown (read-only). */
 export type StopActions = {
-  save(id: string, edit: PlaceEdit): void;
+  /** Saves a change to the place's name, category, tags or stay. */
+  save(id: string, patch: PlacePatch): void;
   /** Sets the stop's own time ("HH:MM"), or clears it with null. */
   setTime(id: string, time: string | null): void;
   /** Swaps with the neighbour above (-1) or below (1) in the same list. */
@@ -28,7 +27,7 @@ export type StopActions = {
 
 /** The id of a stop's own button (its name), where focus goes back to after editing, moving or undoing. */
 export const placeFocusId = (id: string) => `place-open-${id}`;
-/** The id of a place's Move to… button, where focus goes back to when the Move dialog closes. */
+/** The id of a place's Move to… button (in its details), where focus goes back to when the Move dialog closes. */
 export const placeMoveId = (id: string) => `place-move-${id}`;
 /** The id of a place's row, scrolled into view when its pin is tapped. */
 export const placeRowId = (id: string) => `place-row-${id}`;
@@ -174,8 +173,8 @@ function When({
   );
 }
 
-/** A small amber line under a stop's sub-line. */
-function WarnLine({ text }: { text: string }) {
+/** A small amber line under a stop's sub-line (and in its details). */
+export function WarnLine({ text }: { text: string }) {
   return (
     <p className="mt-0.5 flex min-w-0 items-start gap-1 text-[12px] font-medium leading-snug text-warn-ink">
       <Icon name="warn" size={13} className="mt-px" />
@@ -188,8 +187,9 @@ function WarnLine({ text }: { text: string }) {
  * One stop on one line (spec §2): number in the day colour, category glyph, name, a muted sub-line
  * (category · tags, or its note), and on the right its time and stay; under the sub-line, a late
  * arrival or an opening-hours warning. Clicking the row (or Enter on its name) selects it and opens
- * the place's editor below it; Alt+↑/↓ on the name reorders. A peer editing it outlines it in their
- * colour. The whole row drags (pointer); every drag has a keyboard way (Alt+↑/↓, Move to…).
+ * its details panel (PlaceDetails); Alt+↑/↓ on the name reorders. A peer editing it outlines it in
+ * their colour. The whole row drags (pointer); every drag has a keyboard way (Alt+↑/↓, and Move up/down
+ * and Move to… in the details).
  */
 export function StopRow({
   place,
@@ -203,8 +203,6 @@ export function StopRow({
   open,
   onOpen,
   actions,
-  first,
-  last,
 }: {
   place: PlaceView;
   /** Stop number within a day; none in Ideas. */
@@ -217,33 +215,25 @@ export function StopRow({
   warning?: StopWarning;
   dimmed: boolean;
   selected: boolean;
-  /** The place's editor is open under the row. */
+  /** The place's details panel is open. */
   open: boolean;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
-  /** First / last in its list (Move up / Move down stay focusable but do nothing there). */
-  first: boolean;
-  last: boolean;
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
-  const [noteOpen, setNoteOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const name = place.name || t("unnamed");
   const collab = useCollab();
   const note = collab && noteOrNull(() => placeNote(collab.doc, place.id));
   const hasNote = note !== null && noteFirstLine(note) !== "";
   const peer = useEditingPeer(place.id);
-  // One publisher per place: the editor, its note and the time field together.
-  usePublishEditing(place.id, actions !== null && (open || noteOpen || timeOpen));
+  // One publisher per place: its details panel (with its note) and the row's time field together.
+  usePublishEditing(place.id, actions !== null && (open || timeOpen));
   const { setNodeRef: setDragRef, listeners, isDragging } = useDraggable({ id: place.id, disabled: !actions });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: placeDropId(place.id), disabled: !actions });
 
   const sub = [tc(place.category), place.tags.length > 0 ? place.tags.join(", ") : hasNote ? t("noteCount", { count: 1 }) : null].filter(Boolean).join(" · ");
-  const close = () => {
-    onOpen(place.id, false);
-    focusLater(placeFocusId(place.id));
-  };
   const onKeyDown = (e: KeyboardEvent) => {
     if (!actions || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
     e.preventDefault();
@@ -316,49 +306,6 @@ export function StopRow({
         />
       </div>
 
-      {open && (
-        // Until the details panel (Task 3): the place's editor, note and actions, under the row.
-        <div className="grid gap-3 border-t border-line-2 px-3 pb-3 pt-1">
-          {actions && <PlaceEditor place={place} onCancel={close} onSave={(edit) => {
-                actions.save(place.id, edit);
-                close();
-              }}
-            />}
-          {note && <NoteEditor fragment={note} awareness={collab?.awareness ?? null} name={name} editable={actions !== null} onOpenChange={setNoteOpen} />}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <a href={placeUrl(place)} target="_blank" rel="noopener noreferrer" className={`${btn} ${btnSm} mr-auto`}>
-              <GoogleMapsPin />
-              {t("openPlace")}
-              <span className="sr-only">
-                {" "}
-                — {name} ({t("newTab")})
-              </span>
-              <Icon name="ext" size={12} className="text-ink-2" />
-            </a>
-            {actions && (
-              <>
-                {/* The single-pointer way to reorder (WCAG 2.5.7), besides dragging and Alt+↑/↓. */}
-                <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveUpFor", { name })} aria-disabled={first || undefined} onClick={() => !first && actions.nudge(place.id, -1)}>
-                  <Icon name="up" size={14} />
-                </button>
-                <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveDownFor", { name })} aria-disabled={last || undefined} onClick={() => !last && actions.nudge(place.id, 1)}>
-                  <Icon name="down" size={14} />
-                </button>
-                <button type="button" id={placeMoveId(place.id)} className={`${btn} ${btnSm}`} aria-haspopup="dialog" onClick={() => actions.openMove(place.id)}>
-                  <Icon name="move" size={14} />
-                  <span aria-hidden="true">{t("moveSubmit")}</span>
-                  <span className="sr-only">{t("moveToFor", { name })}</span>
-                </button>
-                <button type="button" className={`${btn} ${btnSm}`} onClick={() => actions.remove(place)}>
-                  <Icon name="trash" size={14} />
-                  <span aria-hidden="true">{t("delete")}</span>
-                  <span className="sr-only">{t("deleteFor", { name })}</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </li>
   );
 }

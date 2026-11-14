@@ -30,7 +30,7 @@ afterEach(cleanup);
 const day = (n: number) => screen.getByRole("region", { name: new RegExp(`^Day ${n}\\b`) });
 const names = (region: HTMLElement) => within(region).queryAllByTestId("place-name").map((e) => e.textContent);
 const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
-/** Opens a stop (click on its name): its editor, note and actions show under the row. */
+/** Opens a stop (click on its name): its details panel. */
 const open = (name: string) => fireEvent.click(within(row(name)).getByRole("button", { name }));
 
 describe("stops", () => {
@@ -46,22 +46,21 @@ describe("stops", () => {
 
     open("Galata Tower");
     expect(within(row("Galata Tower")).getByRole("button", { name: "Galata Tower" }).getAttribute("aria-expanded")).toBe("true");
-    const editor = screen.getByRole("form", { name: "Edit Galata Tower" });
-    fireEvent.click(within(editor).getByRole("radio", { name: "Museum" }));
-    const tags = within(editor).getByLabelText("Tags");
+    const details = screen.getByRole("region", { name: "Details for Galata Tower" });
+    fireEvent.click(within(details).getByRole("button", { name: /^Change category/ }));
+    fireEvent.click(within(details).getByRole("radio", { name: "Museum" }));
+    const tags = within(details).getByLabelText("Tags");
     fireEvent.change(tags, { target: { value: "views" } });
     fireEvent.keyDown(tags, { key: "Enter" });
     fireEvent.change(tags, { target: { value: "sunset, Views" } });
-    fireEvent.change(within(editor).getByLabelText("Stay (minutes)"), { target: { value: "90" } });
-    fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
+    fireEvent.change(within(details).getByLabelText("Stay"), { target: { value: "90" } });
 
     expect(fake.view.days[0].places[0]).toMatchObject({ name: "Galata Tower", category: "museum", tags: ["views", "sunset"], stayMinutes: 90 });
-    expect(screen.queryByRole("form", { name: "Edit Galata Tower" })).toBeNull();
     expect(within(row("Galata Tower")).getByRole("img", { name: "Museum" })).toBeTruthy();
     expect(within(row("Galata Tower")).getByText("Museum · views, sunset")).toBeTruthy();
     expect(within(row("Galata Tower")).getByText("1 h 30 min")).toBeTruthy();
 
-    open("Galata Tower");
+    // Still open: Delete is in the details.
     fireEvent.click(screen.getByRole("button", { name: "Delete Galata Tower" }));
     expect(names(day(1))).toEqual([]);
     expect(screen.getByText("Galata Tower deleted.")).toBeTruthy();
@@ -212,7 +211,7 @@ describe("stops", () => {
     addPlace(doc, { name: "Galata Tower", category: "sight", lat: 41.0256, lng: 28.9744, dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
     open("Galata Tower");
-    const link = within(row("Galata Tower")).getByRole("link", { name: /^Open in Google Maps/ });
+    const link = within(screen.getByRole("region", { name: "Details for Galata Tower" })).getByRole("link", { name: /^Open in Google Maps/ });
     expect(link.getAttribute("href")).toBe(placeUrl(fake.view.days[0].places[0]));
     expect(link.getAttribute("href")).toBe("https://www.google.com/maps/search/?api=1&query=41.0256,28.9744");
     expect(link.getAttribute("target")).toBe("_blank");
@@ -231,8 +230,9 @@ describe("stops", () => {
     expect(screen.queryByRole("button", { name: /time for Galata Tower/ })).toBeNull();
     expect(within(row("Galata Tower")).getByTestId("place-time").textContent).toBe("10:00");
     open("Galata Tower");
+    expect(screen.getByRole("region", { name: "Details for Galata Tower" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete Galata Tower" })).toBeNull();
-    expect(screen.queryByRole("form", { name: "Edit Galata Tower" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Name" })).toBeNull();
     expect(screen.getByText(/Editing is off/)).toBeTruthy();
   });
 
