@@ -178,4 +178,18 @@ describe("invites", () => {
     expect(statuses.filter((s) => s === 201)).toHaveLength(40);
     expect(statuses.filter((s) => s === 429)).toHaveLength(20);
   });
+
+  it("invite emails are written in the trip's language", async () => {
+    const ann = await signUpUser({ name: "Ann" });
+    const res = await call(createTrip, "POST", ann, { body: { ...NEW_TRIP, name: "Kapadokya", locale: "tr" } });
+    const id = ((await res.json()) as { id: string }).id;
+    await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: `tr-${randomBytes(6).toString("hex")}@test.rota` } });
+    const bob = await signUpUser({ name: "Bob" });
+    await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: bob.email } });
+    expect(sent).toHaveLength(2);
+    expect(sent[0].subject).toBe("Ann sizi Rota'da “Kapadokya” gezisine davet etti");
+    expect(sent[0].text).toContain("Katılmak için hesabınızı oluşturun: http://localhost:3400/tr/sign-up?");
+    expect(sent[0].html).toContain("Katılmak için hesabınızı oluşturun");
+    expect(sent[1].text).toContain(`Geziyi açın: http://localhost:3400/tr/t/${id}`);
+  });
 });

@@ -1,8 +1,9 @@
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MEMBER_COLOURS } from "@rota/trip";
 import { auth, getSessionFromRequest } from "@/server/auth";
+import * as email from "@/server/email";
 
 const ORIGIN = "http://localhost:3400";
 const randomIp = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
@@ -89,5 +90,28 @@ describe("accounts", () => {
   it("sign-up stores the trimmed name", async () => {
     const res = await signUp({ name: "  Ayşe  " });
     expect(((await res.json()) as { user: { name: string } }).user.name).toBe("Ayşe");
+  });
+});
+
+describe("password reset email", () => {
+  it.each([
+    ["en", "Reset your Rota password", "Reset your password: "],
+    ["tr", "Rota şifrenizi sıfırlayın", "Şifrenizi sıfırlayın: "],
+  ])("is written in the language of the page that asked for it (%s)", async (locale, subject, text) => {
+    const sent: email.EmailMessage[] = [];
+    const spy = vi.spyOn(email, "sendEmail").mockImplementation(async (m) => {
+      sent.push(m);
+    });
+    try {
+      const address = uniqueEmail();
+      expect((await signUp({ email: address })).status).toBe(200);
+      const res = await post("/request-password-reset", { email: address, redirectTo: `${ORIGIN}/${locale}/reset` });
+      expect(res.status).toBe(200);
+      await vi.waitFor(() => expect(sent).toHaveLength(1));
+      expect(sent[0].subject).toBe(subject);
+      expect(sent[0].text.startsWith(text + `${ORIGIN}/api/auth/reset-password/`)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

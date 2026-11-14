@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { readTrip } from "@rota/trip";
 import { db } from "../db/client";
 import { tripInvites, tripMembers, trips, user } from "../db/schema";
-import { sendEmail } from "../email";
+import { type EmailLocale, emailLocale, inviteMessage, sendEmail } from "../email";
 import { HttpError } from "../httpError";
 import { hashIp } from "../ipHash";
 import { hit } from "../rateLimit";
@@ -106,31 +106,23 @@ export async function listInvites(tripId: string) {
 // ---- Email invites -----------------------------------------------------------------------
 
 const baseUrl = () => (process.env.BETTER_AUTH_URL ?? process.env.PUBLIC_URL ?? "http://localhost:3400").replace(/\/$/, "");
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-/** English only for now; the trip's locale still picks the link's language prefix. */
-async function sendInviteEmail(opts: { to: string; tripName: string; inviter: string; url: string; newUser: boolean }) {
-  const { to, tripName, inviter, url, newUser } = opts;
-  const action = newUser ? "Create your account to join" : "Open the trip";
+/** Sent in the trip's language. */
+async function sendInviteEmail(opts: Parameters<typeof inviteMessage>[0]) {
   try {
-    await sendEmail({
-      to,
-      subject: `${inviter} invited you to ${tripName} on Rota`,
-      text: `${inviter} invited you to plan "${tripName}" together on Rota.\n\n${action}: ${url}`,
-      html: `<p>${escapeHtml(inviter)} invited you to plan &ldquo;${escapeHtml(tripName)}&rdquo; together on Rota.</p><p><a href="${url}">${action}</a></p>`,
-    });
+    await sendEmail(inviteMessage(opts));
   } catch (err) {
     // The invite itself is recorded; a mail failure must not undo it.
     console.error("[invite] email failed", err);
   }
 }
 
-async function tripLocale(tripId: string): Promise<string> {
+async function tripLocale(tripId: string): Promise<EmailLocale> {
   const state = await loadState(tripId);
   if (!state) return "en";
   const doc = new Y.Doc();
   Y.applyUpdate(doc, state);
-  return readTrip(doc).locale;
+  return emailLocale(readTrip(doc).locale);
 }
 
 const EMAIL_INVITES_PER_USER_PER_DAY = 20;
@@ -162,7 +154,7 @@ export async function inviteEmail(tripId: string, rawEmail: string, byUserId: st
     const members = await listMembers(tripId);
     if (members.some((m) => m.id === existing.id)) return { status: "already_member" };
     await addMember(tripId, existing.id, "member");
-    await sendInviteEmail({ to: email, tripName: trip.name, inviter: inviterName, url: `${baseUrl()}/${locale}/t/${tripId}`, newUser: false });
+    await sendInviteEmail({ locale, to: email, tripName: trip.name, inviter: inviterName, url: `${baseUrl()}/${locale}/t/${tripId}`, newUser: false });
     return { status: "added" };
   }
 
@@ -179,6 +171,7 @@ export async function inviteEmail(tripId: string, rawEmail: string, byUserId: st
   await db.insert(tripInvites).values({ tripId, kind: "email", email, tokenHash: hashToken(token), createdBy: byUserId });
   const next = encodeURIComponent(`/invite/${token}`);
   await sendInviteEmail({
+    locale,
     to: email,
     tripName: trip.name,
     inviter: inviterName,

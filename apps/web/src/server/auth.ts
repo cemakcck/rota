@@ -6,7 +6,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { sendEmail } from "./email";
+import { resetPasswordMessage, sendEmail } from "./email";
 import { clientIp, hashIp, toHeaders } from "./ipHash";
 import { hit } from "./rateLimit";
 
@@ -22,12 +22,7 @@ export const auth = betterAuth({
     requireEmailVerification: false,
     sendResetPassword: async ({ user, url }) => {
       // Not awaited: response time must not reveal whether the address has an account.
-      void sendEmail({
-        to: user.email,
-        subject: "Reset your Rota password",
-        text: `Reset your password: ${url}\n\nIf you did not ask for this, ignore this email.`,
-        html: `<p><a href="${url}">Reset your Rota password</a></p><p>If you did not ask for this, ignore this email.</p>`,
-      }).catch((e) => console.error("[email] password reset failed", e));
+      void sendEmail(resetPasswordMessage(user.email, url)).catch((e) => console.error("[email] password reset failed", e));
     },
   },
   user: {
