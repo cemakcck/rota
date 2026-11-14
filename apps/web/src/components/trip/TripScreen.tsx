@@ -236,6 +236,7 @@ function TripScreenFor({ tripId }: Props) {
     return (
       <ClosedNotice
         reason={closed}
+        pending={status.pending}
         tripId={tripId}
         onRemove={async () => {
           if (userId) await forgetTrip(tripId, userId).catch(() => undefined);
