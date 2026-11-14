@@ -7,8 +7,8 @@ import { DEFAULT_STAY_MINUTES, type Category } from "@rota/trip";
 import { btn, btnPrimary, btnSm, errorText, hint, input, label } from "../ui";
 import { CategoryPicker } from "../trip/CategoryPicker";
 import type { ListChoice } from "../trip/MoveDialog";
-import { parseTime, type ListId } from "../trip/plan";
-import { stayFrom, TimeStayFields } from "../trip/SearchBar";
+import type { ListId } from "../trip/plan";
+import { stayFrom, timeFrom, TimeStayFields } from "../trip/TimeStayFields";
 import type { LngLat } from "./engine";
 
 export type ReverseGeocode = (at: LngLat) => Promise<string | null>;
@@ -86,7 +86,7 @@ export function AddHere({
       setError(true);
       return nameRef.current?.focus();
     }
-    const parsed = to === null ? "" : parseTime(time);
+    const parsed = to === null ? "" : timeFrom(time, timeRef.current);
     if (parsed === null) {
       setInvalidTime(true);
       return timeRef.current?.focus();
@@ -169,6 +169,7 @@ export function AddHere({
                 timeRef={timeRef}
                 withTime={to !== null}
                 time={time}
+                suggested={suggestion(to)}
                 onTime={(v) => {
                   setTime(v);
                   setTimeTyped(true);

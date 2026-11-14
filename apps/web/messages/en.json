@@ -365,7 +365,16 @@
     "addToDayFor": "Add {name} to a day",
     "scheduleDay": "Day",
     "scheduled": "{name} added to {list}",
-    "scheduledAt": "{name} added to {list} at {time}"
+    "scheduledAt": "{name} added to {list} at {time}",
+    "timeEarlier": "30 minutes earlier",
+    "timeLater": "30 minutes later",
+    "timeSuggested": "Suggested {time}",
+    "noSetTime": "No set time",
+    "stayCustom": "Custom…",
+    "addedToAt": "Added to {list} at {time}",
+    "addedTo": "Added to {list}",
+    "addedSuggestion": "{name} suggested to the group",
+    "undoAddFor": "Undo adding {name}"
   },
   "map": {
     "sheetHandle": "Resize the list",

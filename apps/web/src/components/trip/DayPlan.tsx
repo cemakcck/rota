@@ -12,7 +12,7 @@ import { FilterPopover, HiddenCount } from "./FilterPopover";
 import { GoogleMapsPin, Icon } from "./icons";
 import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
-import { SearchBar, type NewStop } from "./SearchBar";
+import { SearchBar, type NewStop, type PreviewPlace } from "./SearchBar";
 import { StopRow, type StopActions } from "./StopRow";
 import { IdeasView, type RowProps, type Schedule } from "./IdeasView";
 import type { SuggestionActions } from "./Suggestions";
@@ -153,6 +153,7 @@ function StopList({ day, places, travel, empty, rows }: { day: DayView; places: 
                   dimmed={!rows.visible(place)}
                   selected={place.id === rows.selectedId}
                   open={place.id === rows.openId}
+                  highlighted={place.id === rows.highlightId}
                   onOpen={rows.onOpen}
                   actions={rows.actions}
                 />
@@ -190,6 +191,8 @@ export function DayPlan({
   listLabel,
   dayDate,
   userId,
+  highlightId = null,
+  onPreview,
 }: {
   view: TripView;
   shown: PlanView;
@@ -219,13 +222,17 @@ export function DayPlan({
   dayDate: (date: string) => string;
   /** The signed-in member (their votes), when known. */
   userId: string | null;
+  /** A place just added: its row is highlighted for a moment. */
+  highlightId?: string | null;
+  /** A search result hovered or arrowed to, for the map's preview pin. */
+  onPreview?(place: PreviewPlace | null): void;
 }) {
   const t = useTranslations("trip");
   const headingBase = useId();
   const lists = plannedLists(view);
   const listChoiceLabel = (id: ListId) => (id === null ? t("ideas") : `${listLabel(id)} · ${dayDate(view.days.find((d) => d.id === id)!.date)}`);
   const choices = lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }));
-  const rows: RowProps = { visible, warnings, selectedId, openId, onOpen, actions: stopActions };
+  const rows: RowProps = { visible, warnings, selectedId, openId, highlightId, onOpen, actions: stopActions };
 
   const filterButton = <FilterPopover view={view} filter={filter} onChange={onFilter} />;
   const shownDay = shown.kind === "day" ? view.days.find((d) => d.id === shown.dayId) : undefined;
@@ -242,6 +249,7 @@ export function DayPlan({
         near={near}
         filter={filterButton}
         onAdd={actions && ((stop, to) => actions.add(stop, to))}
+        onPreview={onPreview}
       />
       <HiddenCount hidden={hidden} />
     </>

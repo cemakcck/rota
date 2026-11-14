@@ -42,6 +42,7 @@ import { BottomSheet, type Snap } from "../map/BottomSheet";
 import { dayColour } from "../map/mapFeatures";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
+import { ActionToastProvider, useActionToast } from "./ActionToast";
 import { Announcer } from "./Announcer";
 import { Checklist, checkFocusId, type ChecklistActions } from "./Checklist";
 import { ClosedNotice } from "./ClosedNotice";
@@ -54,13 +55,15 @@ import { CollabContext, Presence, type Collab } from "./Presence";
 import { NO_FILTER, dropPlace, moveKeepingTime, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { Rail } from "./Rail";
-import { suggestedFor } from "./SearchBar";
+import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
 import { TripSettingsScreen } from "./TripSettingsScreen";
-import { UndoToast } from "./UndoToast";
 import { useTripView } from "./view";
 
 type Props = { tripId: string };
+
+/** How long a just-added stop stays highlighted. */
+export const ADDED_HIGHLIGHT_MS = 2000;
 
 /** Per-person undo for the signed-in user; null while the user is unknown. Re-renders when the stacks change. */
 function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
@@ -95,7 +98,11 @@ function notForTrip(target: EventTarget | null): boolean {
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
 export function TripScreen(props: Props) {
   const userId = useUserId();
-  return <TripScreenFor key={userId ?? ""} {...props} />;
+  return (
+    <ActionToastProvider key={userId ?? ""}>
+      <TripScreenFor {...props} />
+    </ActionToastProvider>
+  );
 }
 
 function TripScreenFor({ tripId }: Props) {
@@ -122,12 +129,16 @@ function TripScreenFor({ tripId }: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [offscreen] = useState(() => (typeof document === "undefined" ? undefined : document.createElement("div")));
-  // What was deleted, and the element its Undo puts focus back on.
-  const [toast, setToast] = useState<{ name: string; focus: string; at: number } | null>(null);
+  // The one toast of the screen (Undo for a delete, an add, …).
+  const toast = useActionToast();
+  const { dismiss: dismissToast } = toast;
+  const toastShown = toast.current !== null;
+  // A stop just added (highlighted for a moment), and the search result previewed on the map.
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewPlace | null>(null);
   // Who is here and what they edit; map cursors stay out, so their moves do not re-render the screen.
   const peers = usePeers(awareness, userId, { cursors: false });
   const self = view.members.find((m) => m.id === userId);
-  const closeToast = useCallback(() => setToast(null), []);
 
   // The tab's title names the trip (WCAG 2.4.2).
   useEffect(() => {
@@ -154,20 +165,27 @@ function TripScreenFor({ tripId }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo]);
 
-  // The toast's Undo reverts the delete only while that is still the last thing this person did: any
-  // later edit of theirs, or an undo/redo elsewhere, dismisses it.
+  // The toast's Undo reverts the action only while that is still the last thing this person did: any
+  // later edit of theirs, or an undo/redo elsewhere, dismisses it. Others' edits do not (their changes
+  // are not on this person's undo stack, so Undo never reverts them).
   useEffect(() => {
-    if (!toast || !undo) return;
+    if (!toastShown || !undo) return;
     const onTransaction = (tr: Y.Transaction) => {
-      if (tr.origin === editor) setToast(null);
+      if (tr.origin === editor) dismissToast();
     };
     doc.on("afterTransaction", onTransaction);
-    const off = undo.onChange(() => setToast(null));
+    const off = undo.onChange(dismissToast);
     return () => {
       doc.off("afterTransaction", onTransaction);
       off();
     };
-  }, [toast, undo, doc, editor]);
+  }, [toastShown, undo, doc, editor, dismissToast]);
+
+  useEffect(() => {
+    if (highlight === null) return;
+    const timer = setTimeout(() => setHighlight(null), ADDED_HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [highlight]);
 
   const full = useMemo(() => isTripFull(view, Y.encodeStateAsUpdate(doc).byteLength), [view, doc]);
   const visible = useCallback((p: PlaceView) => passes(filter, p), [filter]);
@@ -215,6 +233,36 @@ function TripScreenFor({ tripId }: Props) {
     show(openListId === null ? { kind: "ideas" } : { kind: "day", dayId: openListId });
   }, [openId, openListId, shown.kind, show]);
 
+  // An add by this person: its own undo step, the new row highlighted, focused and scrolled to when it
+  // is shown, and a toast saying where it went, whose Undo removes just that place.
+  const addOwn = (put: () => string, name: string, to: ListId | "suggest", time: string | null): string => {
+    undo?.stopCapturing();
+    const id = put();
+    undo?.stopCapturing();
+    const list = to === "suggest" ? "" : labelIn(view, to);
+    toast.show({
+      message: to === "suggest" ? t("addedSuggestion", { name }) : time ? t("addedToAt", { list, time }) : t("addedTo", { list }),
+      undoLabel: t("undoAddFor", { name }),
+      onUndo: () => (undo ? undo.undo() : editor !== null && deletePlace(doc, id, editor)),
+    });
+    setHighlight(id);
+    requestAnimationFrame(() => {
+      const row = document.getElementById(placeRowId(id));
+      if (!row) return;
+      const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+      row.scrollIntoView?.({ block: "nearest", behavior });
+      document.getElementById(placeFocusId(id))?.focus();
+    });
+    return id;
+  };
+  const addStop = ({ time, ...place }: NewStop, to: ListId | "suggest", origin: string) =>
+    addOwn(
+      () => (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, origin) : addPlace(doc, { ...place, dayId: to, time }, origin)),
+      place.name.trim(),
+      to,
+      to === null || to === "suggest" ? null : time,
+    );
+
   const actions: PlanActions | null = editor === null ? null : {
     save: (id, edit) => updatePlace(doc, id, edit, editor),
     setTime: (id, time) => void setPlaceTime(doc, id, time, editor),
@@ -225,13 +273,12 @@ function TripScreenFor({ tripId }: Props) {
     // keeps a set time and slots the stop by it in the new day (ruling F1).
     move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
     moveTo: (id, dayId) => moveKeepingTime(doc, id, dayId, editor),
-    add: ({ time, ...place }, to) =>
-      void (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor) : addPlace(doc, { ...place, dayId: to, time }, editor)),
+    add: (stop, to) => void addStop(stop, to, editor),
     remove(place) {
       // Its own undo step, so the toast's Undo restores just the place.
       undo?.stopCapturing();
       deletePlace(doc, place.id, editor);
-      setToast({ name: place.name || t("unnamed"), focus: placeFocusId(place.id), at: Date.now() });
+      showDeleted(place.name || t("unnamed"), placeFocusId(place.id));
     },
     setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
     vote: (id, value) => vote(doc, id, editor, value),
@@ -255,6 +302,19 @@ function TripScreenFor({ tripId }: Props) {
     restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
   const controls = usePlaceControls(doc, view, actions);
+
+  // "Galata Tower deleted. Undo": focus moves to Undo (the row's buttons are gone), and back to the restored row after.
+  function showDeleted(name: string, focus: string) {
+    toast.show({
+      message: t("deleted", { name }),
+      undoLabel: t("undoDeleteFor", { name }),
+      focus: true,
+      onUndo: () => {
+        undo?.undo();
+        requestAnimationFrame(() => document.getElementById(focus)?.focus());
+      },
+    });
+  }
 
   if (closed)
     return (
@@ -292,7 +352,7 @@ function TripScreenFor({ tripId }: Props) {
     remove(item) {
       undo?.stopCapturing();
       deleteChecklistItem(doc, item.id, editor);
-      setToast({ name: item.text || t("untitledItem"), focus: checkFocusId(item.id), at: Date.now() });
+      showDeleted(item.text || t("untitledItem"), checkFocusId(item.id));
     },
   };
   const lists = plannedLists(view).map((l) => ({ id: l.id, label: labelIn(view, l.id) }));
@@ -444,6 +504,8 @@ function TripScreenFor({ tripId }: Props) {
                         listLabel={(list) => labelIn(view, list)}
                         dayDate={dayDate}
                         userId={editor}
+                        highlightId={highlight}
+                        onPreview={setPreview}
                       />
                     )}
                   </main>
@@ -467,10 +529,11 @@ function TripScreenFor({ tripId }: Props) {
                             lists,
                             reverseGeocode,
                             suggest: (dayId, at) => suggestedFor(view.days.find((d) => d.id === dayId), legsFor(dayId), at),
-                            onAdd: (place) => select(addPlace(doc, place, editor)),
+                            onAdd: (place) => select(addOwn(() => addPlace(doc, place, editor), place.name.trim(), place.dayId, place.dayId === null ? null : place.time)),
                           }
                     }
                     sheet={phoneView === "map" ? snap : null}
+                    preview={preview}
                   />
                   {status.kind === "offline" && (
                     <p className="pointer-events-none absolute right-14 top-3 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
@@ -482,18 +545,6 @@ function TripScreenFor({ tripId }: Props) {
               {/* Over the map's left edge (wide screens), or a full-height sheet (phones). */}
               {details}
             </div>
-            {toast && undo && (
-              <UndoToast
-                key={toast.at}
-                name={toast.name}
-                onClose={closeToast}
-                onUndo={() => {
-                  undo.undo();
-                  setToast(null);
-                  requestAnimationFrame(() => document.getElementById(toast.focus)?.focus());
-                }}
-              />
-            )}
             <p data-testid="plan-status" role="status" aria-live="polite" className="sr-only">
               {controls.status}
             </p>

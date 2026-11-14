@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { haversineMeters } from "@rota/trip";
 import { searchPlaces, SearchUnavailable, type SearchResult } from "@/client/geocode";
 import { input } from "../ui";
 import { CategoryIcon } from "./icons";
@@ -27,7 +28,22 @@ type Props = {
   onEnter?(): void;
   /** Replaces the field's own look (the day plan's search bar draws its own box). */
   inputClassName?: string;
+  /** Each result says how far it is from here (the day's last stop, or the destination). */
+  from?: { lat: number; lng: number } | null;
+  /** The result hovered or arrowed to (null when none), for a preview pin on the map. */
+  onPreview?(result: SearchResult | null): void;
 };
+
+/** "680 m" or "7.9 km": to the nearest 10 m under a kilometre. */
+function useDistance(): (meters: number) => string {
+  const locale = useLocale();
+  return (meters) => {
+    const km = meters >= 1000;
+    return new Intl.NumberFormat(locale, { style: "unit", unit: km ? "kilometer" : "meter", maximumFractionDigits: km ? 1 : 0 }).format(
+      km ? meters / 1000 : Math.round(meters / 10) * 10,
+    );
+  };
+}
 
 /**
  * A place search field: an ARIA 1.2 combobox whose listbox shows OpenStreetMap places (Photon through
@@ -49,18 +65,28 @@ export function PlaceSearch({
   maxLength = 200,
   onEnter,
   inputClassName,
+  from = null,
+  onPreview,
 }: Props) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const locale = useLocale();
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [active, setActive] = useState(-1);
+  const [hovered, setHovered] = useState(-1);
+  const distance = useDistance();
   const [problem, setProblem] = useState<"offline" | "unavailable" | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const inflight = useRef<AbortController>(undefined);
   const listId = `${id}-results`;
   const statusId = `${id}-status`;
   const open = results !== null && results.length > 0;
+
+  // The preview pin follows the pointer, else the keyboard; none once the list closes.
+  const previewed = open ? (results[hovered >= 0 ? hovered : active] ?? null) : null;
+  const preview = useEffectEvent((result: SearchResult | null) => onPreview?.(result));
+  useEffect(() => preview(previewed), [previewed]);
+  useEffect(() => () => preview(null), []);
 
   const cancel = () => {
     clearTimeout(timer.current);
@@ -71,6 +97,7 @@ export function PlaceSearch({
   const close = () => {
     setResults(null);
     setActive(-1);
+    setHovered(-1);
   };
 
   function change(text: string) {
@@ -89,6 +116,7 @@ export function PlaceSearch({
           if (controller.signal.aborted) return;
           setResults(found);
           setActive(-1);
+          setHovered(-1);
         },
         (err) => {
           if (!controller.signal.aborted) setProblem(err instanceof SearchUnavailable ? "unavailable" : "offline");
@@ -152,7 +180,9 @@ export function PlaceSearch({
           id={listId}
           role="listbox"
           aria-label={label}
-          className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-2"
+          // Wider than a narrow field (about 360 px, never wider than the screen), so names and addresses fit.
+          className="absolute left-0 top-full z-30 mt-1 max-h-80 w-full min-w-[min(360px,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-2"
+          onMouseLeave={() => setHovered(-1)}
         >
           {results.map((r, i) => (
             <li
@@ -163,13 +193,20 @@ export function PlaceSearch({
               // Keeps focus in the field, so the pick does not blur and close the list first.
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(r)}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered((h) => (h === i ? -1 : h))}
               className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover aria-selected:bg-hover aria-selected:outline-2 aria-selected:outline-ink"
             >
               <CategoryIcon category={r.category} label={tc(r.category)} small />
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block text-[13.5px] font-medium [overflow-wrap:anywhere]">{r.name}</span>
                 {r.label && <span className="block text-[12px] text-ink-2 [overflow-wrap:anywhere]">{r.label}</span>}
               </span>
+              {from && (
+                <span data-testid="result-distance" className="shrink-0 self-start whitespace-nowrap pt-0.5 text-[12px] tabular-nums text-ink-2">
+                  {distance(haversineMeters(from, r))}
+                </span>
+              )}
             </li>
           ))}
         </ul>

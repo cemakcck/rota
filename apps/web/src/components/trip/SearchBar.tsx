@@ -1,17 +1,20 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { DEFAULT_STAY_MINUTES, estimateLeg, suggestTime, type Category, type DayView, type Leg } from "@rota/trip";
+import { CATEGORIES, DEFAULT_STAY_MINUTES, estimateLeg, suggestTime, type Category, type DayView, type Leg } from "@rota/trip";
 import type { SearchResult } from "@/client/geocode";
-import { btn, btnPrimary, btnSm, errorText, hint } from "../ui";
-import { Icon } from "./icons";
+import { btn, btnPrimary, btnSm } from "../ui";
+import { CategoryIcon, Icon } from "./icons";
 import { PlaceSearch } from "./PlaceSearch";
-import { parseTime, type ListId } from "./plan";
+import type { ListId } from "./plan";
+import { stayFrom, timeFrom, TimeStayFields } from "./TimeStayFields";
 
 /** What the add step adds: a searched place with its coordinates, OSM id and address, or just a name; with its time and stay. */
 export type NewStop = { name: string; category: Category; lat?: number; lng?: number; osmId?: string; address?: string; time: string | null; stayMinutes: number };
 type Candidate = Omit<NewStop, "time" | "stayMinutes">;
+/** A search result shown as a preview pin on the map while it is hovered or arrowed to. */
+export type PreviewPlace = Pick<SearchResult, "name" | "category" | "lat" | "lng">;
 
 /**
  * The time suggested for a new last stop of `day`: the last stop's end plus travel to the new place
@@ -29,101 +32,10 @@ export function suggestedFor(day: DayView | undefined, legs: readonly (Leg | nul
 }
 
 /**
- * The time and stay fields of an add step (spec §2b): the time (when it goes into a day) prefilled with
- * the suggestion, editable, may be left empty; the stay. `before` comes first in the row (a day choice).
- */
-export function TimeStayFields({
-  id,
-  timeRef,
-  withTime,
-  time,
-  onTime,
-  invalid,
-  stay,
-  onStay,
-  before,
-  autoFocus = !before,
-}: {
-  id: string;
-  timeRef: RefObject<HTMLInputElement | null>;
-  withTime: boolean;
-  time: string;
-  onTime(value: string): void;
-  invalid: boolean;
-  stay: string;
-  onStay(value: string): void;
-  before?: ReactNode;
-  /** Focus its first field when shown (by default, unless `before` comes first). */
-  autoFocus?: boolean;
-}) {
-  const t = useTranslations("trip");
-  return (
-    <>
-      <div className="flex flex-wrap items-start gap-3">
-        {before}
-        {withTime && (
-          <div>
-            <label htmlFor={`${id}-time`} className="mb-1 block text-[13px] font-medium">
-              {t("time")}
-            </label>
-            <input
-              ref={timeRef}
-              id={`${id}-time`}
-              autoFocus={autoFocus}
-              type="text"
-              inputMode="numeric"
-              placeholder="HH:MM"
-              maxLength={5}
-              aria-invalid={invalid || undefined}
-              aria-describedby={invalid ? `${id}-error` : `${id}-hint`}
-              className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
-              value={time}
-              onChange={(e) => onTime(e.target.value)}
-            />
-          </div>
-        )}
-        <div>
-          <label htmlFor={`${id}-stay`} className="mb-1 block text-[13px] font-medium">
-            {t("stayMinutes")}
-          </label>
-          <input
-            id={`${id}-stay`}
-            autoFocus={autoFocus && !withTime}
-            type="number"
-            min={0}
-            max={1440}
-            step={5}
-            inputMode="numeric"
-            className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] tabular-nums"
-            value={stay}
-            onChange={(e) => onStay(e.target.value)}
-          />
-        </div>
-      </div>
-      {withTime &&
-        (invalid ? (
-          <p id={`${id}-error`} role="alert" className={errorText}>
-            {t("timeInvalid")}
-          </p>
-        ) : (
-          <p id={`${id}-hint`} className={`${hint} !mt-0`}>
-            {t("timeHint")}
-          </p>
-        ))}
-    </>
-  );
-}
-
-/** A stay typed in an add step, in whole minutes (0–1440); `fallback` when it is empty or not a number. */
-export function stayFrom(stay: string, fallback: number): number {
-  const minutes = Number(stay);
-  return stay.trim() !== "" && Number.isFinite(minutes) ? Math.min(1440, Math.max(0, Math.round(minutes))) : fallback;
-}
-
-/**
- * The step between choosing a place and adding it (spec §2b): when (prefilled with the suggestion,
- * editable, may be left empty) and for how long (the category's usual stay); then Add to the day (Enter),
- * to Ideas, or as a suggestion. Escape goes back to the search.
+ * The step between choosing a place and adding it (spec §1, §2b): when (a picker defaulting to the
+ * suggestion, may be left without a time), for how long (chips, from the category's usual stay) and
+ * the category (suggested by the search, changeable); then Add to the day (Enter), to Ideas, or as a
+ * suggestion. Escape goes back to the search.
  */
 function AddStep({
   place,
@@ -140,23 +52,28 @@ function AddStep({
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("common");
+  const tcat = useTranslations("categories");
   const id = useId();
   const timeRef = useRef<HTMLInputElement>(null);
   const [time, setTime] = useState(initialTime);
+  const [category, setCategory] = useState<Category>(place.category);
   const [stay, setStay] = useState(String(DEFAULT_STAY_MINUTES[place.category]));
+  // The stay follows the category until one is chosen.
+  const [stayChosen, setStayChosen] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const toDay = target.id !== null;
 
   function add(to: ListId | "suggest") {
-    const stayMinutes = stayFrom(stay, DEFAULT_STAY_MINUTES[place.category]);
+    const stayMinutes = stayFrom(stay, DEFAULT_STAY_MINUTES[category]);
+    const stop = { ...place, category };
     // Only a stop in a day has a time; Ideas and suggestions are not scheduled.
-    if (to === null || to === "suggest") return onAdd({ ...place, time: null, stayMinutes }, to);
-    const parsed = parseTime(time);
+    if (to === null || to === "suggest") return onAdd({ ...stop, time: null, stayMinutes }, to);
+    const parsed = timeFrom(time, timeRef.current);
     if (parsed === null) {
       setInvalid(true);
       return timeRef.current?.focus();
     }
-    onAdd({ ...place, time: parsed || null, stayMinutes }, to);
+    onAdd({ ...stop, time: parsed || null, stayMinutes }, to);
   }
 
   return (
@@ -179,14 +96,53 @@ function AddStep({
       }}
       className="mx-5 mb-3 grid gap-3 rounded-xl border border-line bg-surface p-3 shadow-1"
     >
-      <p className="min-w-0 truncate text-[14px] font-semibold" title={place.name}>
-        {place.name}
-        {place.address && <span className="ml-1.5 text-[12.5px] font-normal text-ink-2">{place.address}</span>}
+      <p className="flex min-w-0 items-center gap-2 text-[14px] font-semibold" title={place.name}>
+        <CategoryIcon category={category} label={tcat(category)} small />
+        <span className="min-w-0 truncate">
+          {place.name}
+          {place.address && <span className="ml-1.5 text-[12.5px] font-normal text-ink-2">{place.address}</span>}
+        </span>
       </p>
-      <TimeStayFields id={id} timeRef={timeRef} withTime={toDay} time={time} onTime={(v) => {
+      <TimeStayFields
+        id={id}
+        timeRef={timeRef}
+        withTime={toDay}
+        time={time}
+        suggested={initialTime}
+        onTime={(v) => {
           setTime(v);
           setInvalid(false);
-        }} invalid={invalid} stay={stay} onStay={setStay} />
+        }}
+        invalid={invalid}
+        stay={stay}
+        onStay={(v) => {
+          setStay(v);
+          setStayChosen(true);
+        }}
+        after={
+          <div>
+            <label htmlFor={`${id}-category`} className="mb-1 block text-[13px] font-medium">
+              {t("category")}
+            </label>
+            <select
+              id={`${id}-category`}
+              className="h-9 max-w-[180px] rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
+              value={category}
+              onChange={(e) => {
+                const next = e.target.value as Category;
+                setCategory(next);
+                if (!stayChosen) setStay(String(DEFAULT_STAY_MINUTES[next]));
+              }}
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {tcat(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={`${btnPrimary} ${btnSm}`}>
           {t("addToList", { list: target.label })}
@@ -220,6 +176,7 @@ export function SearchBar({
   near,
   filter,
   onAdd,
+  onPreview,
 }: {
   /** Where Add puts it: the day shown (or Ideas), with its label. */
   target: { id: ListId; label: string };
@@ -233,6 +190,8 @@ export function SearchBar({
   filter?: ReactNode;
   /** Null when the user cannot edit: the bar is not shown, only the filter. */
   onAdd: ((stop: NewStop, to: ListId | "suggest") => void) | null;
+  /** The result hovered or arrowed to, for a preview pin on the map; null when none. */
+  onPreview?(place: PreviewPlace | null): void;
 }) {
   const t = useTranslations("trip");
   const tm = useTranslations("map");
@@ -241,6 +200,9 @@ export function SearchBar({
   const [text, setText] = useState("");
   const [step, setStep] = useState<{ place: Candidate; time: string } | null>(null);
   const label = t("searchIn", { list: target.label });
+  // Distances are from the day's last pinned stop, else the trip's destination (or centre).
+  const lastPinned = day?.places.findLast((p) => p.lat !== null && p.lng !== null);
+  const from = lastPinned ? { lat: lastPinned.lat!, lng: lastPinned.lng! } : near;
 
   const choose = (place: Candidate) => setStep({ place, time: target.id === null ? "" : suggestedFor(day, legs, place) });
   const back = () => {
@@ -271,6 +233,8 @@ export function SearchBar({
             onPick={(r: SearchResult) => choose({ name: r.name, category: r.category, lat: r.lat, lng: r.lng, osmId: r.osmId, address: r.label || undefined })}
             onEnter={() => text.trim() && choose({ name: text.trim(), category: "other" })}
             near={near}
+            from={from}
+            onPreview={onPreview && ((r) => onPreview(r && { name: r.name, category: r.category, lat: r.lat, lng: r.lng }))}
             disabled={full}
             describedBy={full ? `${id}-full` : `${id}-help`}
             placeholder={label}
@@ -287,10 +251,11 @@ export function SearchBar({
           initialTime={step.time}
           onCancel={back}
           onAdd={(stop, to) => {
-            onAdd(stop, to);
             setText("");
             setStep(null);
+            // Here for adding the next one; the plan moves focus to the new row when it is shown.
             inputRef.current?.focus();
+            onAdd(stop, to);
           }}
         />
       )}

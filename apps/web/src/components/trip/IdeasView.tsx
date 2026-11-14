@@ -8,8 +8,9 @@ import type { StopWarning } from "@/client/useHours";
 import type { Travel } from "@/client/useTravel";
 import { btn, btnPrimary, btnSm } from "../ui";
 import type { ListChoice } from "./MoveDialog";
-import { listDropId, parseTime } from "./plan";
-import { stayFrom, suggestedFor, TimeStayFields } from "./SearchBar";
+import { listDropId } from "./plan";
+import { suggestedFor } from "./SearchBar";
+import { stayFrom, timeFrom, TimeStayFields } from "./TimeStayFields";
 import { StopRow, type StopActions } from "./StopRow";
 import { Suggestions, type SuggestionActions } from "./Suggestions";
 import { useStay } from "./TravelLeg";
@@ -20,6 +21,8 @@ export type RowProps = {
   warnings: Map<string, StopWarning>;
   selectedId: string | null;
   openId: string | null;
+  /** A place just added: its row is highlighted for a moment. */
+  highlightId?: string | null;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
 };
@@ -70,7 +73,7 @@ function ScheduleStep({
   const dayName = days.find((d) => d.id === dayId)?.name ?? "";
 
   function submit() {
-    const parsed = parseTime(time);
+    const parsed = timeFrom(time, timeRef.current);
     if (parsed === null) {
       setInvalid(true);
       return timeRef.current?.focus();
@@ -100,6 +103,7 @@ function ScheduleStep({
         timeRef={timeRef}
         withTime
         time={time}
+        suggested={suggestion(dayId)}
         onTime={(v) => {
           setTime(v);
           setTyped(true);
@@ -215,6 +219,7 @@ export function IdeasView({
                       warning={rows.warnings.get(place.id)}
                       selected={place.id === rows.selectedId}
                       open={place.id === rows.openId}
+                      highlighted={place.id === rows.highlightId}
                       onOpen={rows.onOpen}
                       actions={rows.actions}
                       trailing={

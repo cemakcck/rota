@@ -113,7 +113,7 @@ describe("trip screen map", () => {
     expect(within(dialog).getByRole("alert").textContent).toBe("Enter a time like 09:30, or leave it empty.");
     expect(fake.view.days[0].places).toHaveLength(1);
     fireEvent.change(time, { target: { value: "16:30" } });
-    fireEvent.change(within(dialog).getByLabelText("Stay (minutes)"), { target: { value: "30" } });
+    fireEvent.click(within(within(dialog).getByRole("group", { name: "Stay" })).getByRole("button", { name: "30 min" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
     expect(fake.view.days[0].places.at(-1)).toMatchObject({ name: "Ferry pier", time: "16:30", stayMinutes: 30, dayId: dayIds[0] });
 

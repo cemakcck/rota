@@ -6,7 +6,9 @@ import { useTranslations } from "next-intl";
 import type { Awareness } from "y-protocols/awareness";
 import type { TripView } from "@rota/trip";
 import { setMapCursor, stopMapCursor } from "@/client/presence";
+import { Icon } from "../trip/icons";
 import type { ListChoice } from "../trip/MoveDialog";
+import type { PreviewPlace } from "../trip/SearchBar";
 import { AddHere, type NewMapPlace, type ReverseGeocode, type SuggestAt } from "./AddHere";
 import { PEEK_PX, type Snap } from "./BottomSheet";
 import { MapLoaderContext, type LngLat, type MapView, type Padding } from "./engine";
@@ -47,6 +49,8 @@ type Props = {
   } | null;
   /** How far the phone's list sheet is pulled up over the map; null when it is not over the map. */
   sheet: Snap | null;
+  /** A search result hovered or arrowed to: a temporary pin, drawn on this map only (never saved or shared). */
+  preview?: PreviewPlace | null;
 };
 
 /** How much of the map's left edge the details panel covers on wide screens (its 16 px inset and 340 px width). */
@@ -62,7 +66,7 @@ const MIN_FIT_WIDTH = 120;
  * list is brought into view. No controls on its left edge, where the details panel opens.
  * Visual only: the list is the accessible source of truth, so pins are hidden from assistive technology.
  */
-export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSelectPlace, routeGeometry, awareness, userId, add, sheet }: Props) {
+export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSelectPlace, routeGeometry, awareness, userId, add, sheet, preview = null }: Props) {
   const tm = useTranslations("map");
   const load = useContext(MapLoaderContext);
   const container = useRef<HTMLDivElement>(null);
@@ -145,6 +149,17 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
     if (map) follow(map);
   }, [map, shownKey, selectedPlaceId]);
 
+  // A previewed result is shown where it is; the map moves only when it is out of view.
+  const reveal = useEffectEvent((m: MapView, at: LngLat) => {
+    const p = padding(m.size());
+    const { x, y } = m.project(at);
+    const { width, height } = m.size();
+    if (x < p.left || y < p.top || x > width - p.right || y > height - p.bottom) m.centre(at, { padding: p, animate: !reducedMotion() });
+  });
+  useEffect(() => {
+    if (map && preview) reveal(map, { lat: preview.lat, lng: preview.lng });
+  }, [map, preview?.lat, preview?.lng]); // eslint-disable-line react-hooks/exhaustive-deps -- follows the coordinates only
+
   // This person's pointer, for friends' maps (mouse and pen; a finger on the map is panning).
   useEffect(() => {
     if (!awareness) return;
@@ -208,6 +223,7 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
       {/* Sized as well as placed: maplibre-gl.css makes the map container `position: relative`. */}
       <div ref={container} className="absolute inset-0 h-full w-full" />
       {map && features.pins.map((pin) => <PinMarker key={pin.id} map={map} pin={pin} selected={pin.id === selectedPlaceId} onSelect={onSelectPlace} />)}
+      {map && preview && <PreviewMarker key={`${preview.lat},${preview.lng}`} map={map} place={preview} />}
       {map && <RemoteCursors map={map} awareness={awareness} userId={userId} />}
       {unavailable && <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-[13.5px] text-ink-2">{tm("unavailable")}</p>}
 
@@ -258,6 +274,26 @@ const tint = (hex: string, alpha: number) => {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 };
+
+/** The preview of a search result: an outlined pin with its category icon, above the trip's pins. Visual only. */
+function PreviewMarker({ map, place }: { map: MapView; place: PreviewPlace }) {
+  const [element] = useState(() => document.createElement("div"));
+  const at = useEffectEvent(() => ({ lat: place.lat, lng: place.lng }));
+  useEffect(() => {
+    element.style.setProperty("z-index", "4");
+    element.style.setProperty("pointer-events", "none");
+    const m = map.addMarker(at(), element);
+    return () => m.remove();
+  }, [map, element]);
+  return createPortal(
+    <div data-preview-pin={place.name} aria-hidden="true" className="flex flex-col items-center">
+      <div className="grid size-[34px] -rotate-45 place-items-center rounded-[50%_50%_50%_4px] border-[3px] border-ink bg-surface shadow-2" style={{ marginBottom: 7 }}>
+        <Icon name={place.category} size={15} className="rotate-45 text-ink" />
+      </div>
+    </div>,
+    element,
+  );
+}
 
 /**
  * One pin: a teardrop in its day's colour with the stop number (about 34 px; 42 px with a halo when

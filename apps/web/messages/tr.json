@@ -365,7 +365,16 @@
     "addToDayFor": "{name} yerini bir güne ekle",
     "scheduleDay": "Gün",
     "scheduled": "{name}, {list} planına eklendi",
-    "scheduledAt": "{name}, {list} planına {time} için eklendi"
+    "scheduledAt": "{name}, {list} planına {time} için eklendi",
+    "timeEarlier": "30 dakika önce",
+    "timeLater": "30 dakika sonra",
+    "timeSuggested": "Önerilen {time}",
+    "noSetTime": "Saat yok",
+    "stayCustom": "Özel…",
+    "addedToAt": "Eklendi: {list}, saat {time}",
+    "addedTo": "Eklendi: {list}",
+    "addedSuggestion": "{name} gruba önerildi",
+    "undoAddFor": "Eklemeyi geri al: {name}"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

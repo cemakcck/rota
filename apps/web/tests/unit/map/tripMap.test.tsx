@@ -176,6 +176,26 @@ describe("TripMap", () => {
     expect(fake.state.centred).toEqual([expect.objectContaining({ lat: 41.0536, lng: 28.9338 })]);
   });
 
+  it("a search result's preview pin: drawn locally, brought into view only when off-screen, removed when cleared", async () => {
+    const { fake, rerenderWith } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    const preview = () => [...document.querySelectorAll<HTMLElement>("[data-preview-pin]")];
+    expect(preview()).toHaveLength(0);
+    // On screen: shown where it is, no camera move.
+    rerenderWith({ preview: { name: "Pera Müzesi", category: "museum", lat: 41.0317, lng: 28.9752 } });
+    expect(preview().map((p) => p.dataset.previewPin)).toEqual(["Pera Müzesi"]);
+    expect(preview()[0].getAttribute("aria-hidden")).toBe("true");
+    expect(fake.state.centred).toHaveLength(0);
+    // Off screen (far east of the view): the map goes to it.
+    rerenderWith({ preview: { name: "Far away", category: "sight", lat: 41.5, lng: 37 } });
+    expect(preview().map((p) => p.dataset.previewPin)).toEqual(["Far away"]);
+    expect(fake.state.centred).toEqual([{ lat: 41.5, lng: 37 }]);
+    rerenderWith({ preview: null });
+    expect(preview()).toHaveLength(0);
+    // Not a place: the trip's own pins are untouched.
+    expect(pins()).toHaveLength(2);
+  });
+
   it("no day chips on the map, and fits leave room for the open details panel on wide screens", async () => {
     const { fake, rerenderWith } = setup();
     await waitFor(() => expect(pins()).toHaveLength(2));

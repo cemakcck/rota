@@ -117,7 +117,8 @@ describe("day plan", () => {
     fireEvent.change(search(), { target: { value: "Galata" } });
     fireEvent.click(await screen.findByRole("option", { name: /Galata Kulesi/ }));
     const step = screen.getByRole("form", { name: "Add Galata Kulesi" });
-    expect(within(step).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+    // The step's actions (after the time and stay pickers).
+    expect(within(step).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent).slice(-4)).toEqual([
       "Add to Day 1",
       "Add to Ideas",
       "Suggest",
@@ -331,9 +332,10 @@ describe("day plan", () => {
     const time = within(step).getByLabelText("Time") as HTMLInputElement;
     // Breakfast ends at 10:00; no pin for the new place, so no travel to add.
     expect(time.value).toBe("10:00");
-    expect((within(step).getByLabelText("Stay (minutes)") as HTMLInputElement).value).toBe("60");
+    const stay = within(step).getByRole("group", { name: "Stay" });
+    expect(within(stay).getByRole("button", { name: "1 h" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.change(time, { target: { value: "8:15" } });
-    fireEvent.change(within(step).getByLabelText("Stay (minutes)"), { target: { value: "30" } });
+    fireEvent.click(within(stay).getByRole("button", { name: "30 min" }));
     fireEvent.click(within(step).getByRole("button", { name: "Add to Day 1" }));
     expect(fake.view.days[0].places.map((p) => [p.name, p.time, p.stayMinutes])).toEqual([
       ["Galata Tower", "08:15", 30],

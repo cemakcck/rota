@@ -5,8 +5,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
 import type { PlaceView } from "@rota/trip";
 import { btn, btnPrimary, btnSm } from "../ui";
-import { parseTime, type ListId } from "./plan";
-import { stayFrom, TimeStayFields } from "./SearchBar";
+import type { ListId } from "./plan";
+import { stayFrom, timeFrom, TimeStayFields } from "./TimeStayFields";
 
 export type ListChoice = { id: ListId; label: string };
 
@@ -68,7 +68,7 @@ export function MoveDialog({
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!when || choice === null) return onMove(choice);
-    const parsed = parseTime(time);
+    const parsed = timeFrom(time, timeRef.current);
     if (parsed === null) {
       setInvalid(true);
       return timeRef.current?.focus();
@@ -112,6 +112,7 @@ export function MoveDialog({
                   withTime
                   autoFocus={false}
                   time={time}
+                  suggested={suggestion(choice)}
                   onTime={(v) => {
                     setTime(v);
                     setTyped(true);
