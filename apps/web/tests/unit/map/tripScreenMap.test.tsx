@@ -19,7 +19,10 @@ vi.mock("@/i18n/navigation", () => ({
 
 import { TripScreen } from "@/components/trip/TripScreen";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
 const pin = (id: string) => document.querySelector<HTMLElement>(`[data-pin="${id}"]`)!;
@@ -39,9 +42,10 @@ async function open() {
 }
 
 describe("trip screen map", () => {
-  it("a pin selects its row, and a row its pin and day", async () => {
+  it("a pin selects its row and shows its day, and a row its pin", async () => {
     const { tower, chora, map } = await open();
     const days = screen.getByRole("group", { name: "Day shown on the map" });
+    const rail = screen.getByRole("navigation", { name: "Trip" });
     // The map opens on the first day.
     expect(within(days).getByRole("button", { name: "Day 1" }).getAttribute("aria-pressed")).toBe("true");
     expect(map.state.route).toBeNull();
@@ -50,18 +54,25 @@ describe("trip screen map", () => {
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
     expect(pin(tower).className).toContain("outline-ink");
 
-    // Clicking a row (not one of its buttons) selects it, and shows its day on the map.
-    fireEvent.click(screen.getByText("Chora Church"));
+    // A pin on another day shows that day (list, rail and map), its row selected.
+    fireEvent.click(pin(chora));
     expect(row("Chora Church").getAttribute("aria-current")).toBe("true");
-    expect(row("Galata Tower").getAttribute("aria-current")).toBeNull();
+    expect(screen.queryByText("Galata Tower", { selector: "[data-testid=place-name]" })).toBeNull();
     expect(pin(chora).className).toContain("outline-ink");
     expect(within(days).getByRole("button", { name: "Day 2" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(rail).getByRole("button", { name: /^Day 2 · / }).getAttribute("aria-current")).toBe("true");
     expect(map.state.fits.at(-1)).toEqual([28.9393, 41.0312, 28.9393, 41.0312]);
-    fireEvent.click(within(row("Galata Tower")).getByRole("button", { name: "Edit Galata Tower" }));
-    expect(row("Chora Church").getAttribute("aria-current")).toBe("true");
 
+    // All days on the map is the whole trip in the list too; clicking a row (not one of its buttons) selects it.
     fireEvent.click(within(days).getByRole("button", { name: "All days" }));
     expect(within(days).getByRole("button", { name: "All days" }).getAttribute("aria-pressed")).toBe("true");
+    expect(window.location.search).toBe("?view=all");
+    fireEvent.click(screen.getByText("Galata Tower"));
+    expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
+    expect(row("Chora Church").getAttribute("aria-current")).toBeNull();
+    expect(pin(tower).className).toContain("outline-ink");
+    fireEvent.click(within(row("Chora Church")).getByRole("button", { name: "Edit Chora Church" }));
+    expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
   });
 
   it("a place added on the map gets its coordinates; nothing is added while editing is off", async () => {

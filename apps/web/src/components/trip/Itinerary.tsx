@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from "@dnd-kit/core";
+import type { Announcements } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { dayTimeline, type DayPatch, type PlaceView, type Slot, type TripView } from "@rota/trip";
 import type { StopWarning } from "@/client/useHours";
@@ -11,7 +11,7 @@ import { MoveDialog } from "./MoveDialog";
 import { placeMoveId, type PlaceActions } from "./PlaceRow";
 import { DaySection } from "./DaySection";
 import { Suggestions, type SuggestionActions } from "./Suggestions";
-import { dropTarget, plannedLists, type ListId } from "./plan";
+import { plannedLists, type ListId } from "./plan";
 
 /**
  * dnd-kit's own screen reader output (an assertive live region with English "Picked up draggable item
@@ -32,12 +32,17 @@ export type ItineraryActions = PlaceActions & {
   setDay(dayId: string, patch: DayPatch): void;
 } & SuggestionActions;
 
+/** What the itinerary shows: one day, Ideas with the suggestions, or every day then Ideas. */
+export type ItineraryScope = { dayId: string } | "ideas" | "all";
+
 /**
- * The days in order, then Ideas. Places move by dragging (pointer), or with the row's up/down buttons
- * and the Move to… dialog (keyboard and screen readers).
+ * The days in scope, then (for Ideas or the whole trip) Ideas and the suggestions. Places move by
+ * dragging (pointer; the drag context is the trip screen's, so rows also drop on the rail), or with the
+ * row's up/down buttons and the Move to… dialog (keyboard and screen readers).
  */
 export function Itinerary({
   view,
+  scope,
   visible,
   travel,
   warnings,
@@ -50,6 +55,8 @@ export function Itinerary({
   userId,
 }: {
   view: TripView;
+  /** What to show: one day, Ideas with the suggestions, or everything. */
+  scope: ItineraryScope;
   visible: (p: PlaceView) => boolean;
   /** Each day's travel, by day id. */
   travel: Record<string, Travel>;
@@ -67,9 +74,6 @@ export function Itinerary({
 }) {
   const t = useTranslations("trip");
   const [moving, setMoving] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [offscreen] = useState(() => (typeof document === "undefined" ? undefined : document.createElement("div")));
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const lists = plannedLists(view);
   const find = (id: string | null) => {
@@ -87,24 +91,12 @@ export function Itinerary({
   if (moving !== null && !movingPlace) setMoving(null);
 
   const rowActions: ItineraryActions | null = actions && { ...actions, openMove: setMoving };
+  const days = scope === "all" ? view.days : scope === "ideas" ? [] : view.days.filter((d) => d.id === scope.dayId);
+  const ideas = scope === "all" || scope === "ideas";
 
-  function onDragEnd({ active, over }: DragEndEvent) {
-    setDragging(null);
-    if (!actions || !over) return;
-    const to = dropTarget(view, String(active.id), String(over.id));
-    if (to) actions.move(String(active.id), to);
-  }
-
-  const dragged = find(dragging)?.place;
   return (
-    <DndContext
-      accessibility={{ announcements: SILENT, screenReaderInstructions: { draggable: "" }, container: offscreen }}
-      sensors={sensors}
-      onDragStart={({ active }) => setDragging(String(active.id))}
-      onDragCancel={() => setDragging(null)}
-      onDragEnd={onDragEnd}
-    >
-      {view.days.map((day) => (
+    <>
+      {days.map((day) => (
         <DaySection
           key={day.id}
           day={day}
@@ -123,31 +115,28 @@ export function Itinerary({
           onDay={actions && ((patch) => actions.setDay(day.id, patch))}
         />
       ))}
-      <DaySection
-        title={t("ideas")}
-        places={view.ideas}
-        visible={visible}
-        selectedId={selectedId}
-        onSelect={onSelect}
-        members={view.members}
-        actions={rowActions}
-        onDay={null}
-      />
-
-      <Suggestions
-        suggestions={view.suggestions}
-        dismissed={view.dismissed}
-        members={view.members}
-        userId={userId}
-        lists={lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }))}
-        actions={actions}
-      />
-
-      <DragOverlay dropAnimation={null}>
-        {dragged && (
-          <div className="rounded-xl border border-ink bg-surface px-3 py-2 text-[14px] font-semibold shadow-2 [overflow-wrap:anywhere]">{dragged.name || t("unnamed")}</div>
-        )}
-      </DragOverlay>
+      {ideas && (
+        <>
+          <DaySection
+            title={t("ideas")}
+            places={view.ideas}
+            visible={visible}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            members={view.members}
+            actions={rowActions}
+            onDay={null}
+          />
+          <Suggestions
+            suggestions={view.suggestions}
+            dismissed={view.dismissed}
+            members={view.members}
+            userId={userId}
+            lists={lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }))}
+            actions={actions}
+          />
+        </>
+      )}
 
       {movingPlace && actions && (
         <MoveDialog
@@ -167,6 +156,6 @@ export function Itinerary({
           }}
         />
       )}
-    </DndContext>
+    </>
   );
 }

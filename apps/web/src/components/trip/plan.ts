@@ -14,9 +14,12 @@ export function plannedLists(view: TripView): { id: ListId; places: PlaceView[] 
 
 /**
  * Where a dragged place lands when dropped on `overId`. On a row: before it, or after it when moving
- * down within the same list (so the place takes the row's position). On a list: at its end.
+ * down within the same list (so the place takes the row's position). On a list or its rail entry: at its end.
  */
 export function dropTarget(view: TripView, activeId: string, overId: string): ({ dayId: ListId } & Slot) | null {
+  // The rail's entries (a day, Ideas): at the end of that list.
+  if (overId === "rail:ideas") return { dayId: null };
+  if (overId.startsWith("rail:day:")) return { dayId: overId.slice("rail:day:".length) };
   if (overId.startsWith("list:")) {
     const key = overId.slice("list:".length);
     return { dayId: key === "ideas" ? null : key };

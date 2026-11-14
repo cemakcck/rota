@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { addPlace, setPlaceStatus, vote } from "@rota/trip";
 import { renderIntl } from "./helpers";
@@ -21,6 +21,9 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import { TripScreen } from "@/components/trip/TripScreen";
+
+// Ideas & votes in the list column.
+beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=ideas"));
 
 afterEach(() => {
   cleanup();

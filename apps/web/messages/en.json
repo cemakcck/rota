@@ -202,7 +202,7 @@
     "ideasEmpty": "Places you might visit. Move one into a day when you decide.",
     "day": "Day {n}",
     "dayEmpty": "Nothing planned yet. Add a place, or drag one here.",
-    "dates": "{range} · {count, plural, one {# day} other {# days}}",
+    "summary": "{range} · {days, plural, one {# day} other {# days}} · {places, plural, one {# place} other {# places}}",
     "rename": "Rename trip",
     "tripName": "Trip name",
     "nameInvalid": "Enter a trip name of 1 to 60 characters.",
@@ -390,13 +390,28 @@
   },
   "demo": {
     "label": "Demo",
-    "notice": "This is a demo. Demo accounts and trips are deleted after 7 days without activity.",
+    "notice": "Deleted after 7 days without activity.",
     "simulateOffline": "Simulate offline",
     "tryFriend": "Try it with a friend",
     "sideBySide": "Side by side",
     "closeSideBySide": "Close side by side",
     "friendFailed": "The friend window could not open. Please try again.",
     "friendWindow": "You're {name} in this window",
-    "friendFrame": "The same trip, signed in as {name}"
+    "friendFrame": "The same trip, signed in as {name}",
+    "title": "Demo trip"
+  },
+  "rail": {
+    "label": "Trip",
+    "day": "Day {n} · {date}",
+    "date": "{weekday} {day}",
+    "stops": "{count, plural, =0 {No stops yet} one {# stop} other {# stops}}",
+    "addDay": "Add a day",
+    "ideas": "Ideas & votes",
+    "ideasCount": "Ideas & votes, {count}",
+    "all": "Whole trip on map"
+  },
+  "share": {
+    "title": "Share",
+    "ownerOnly": "Only the trip's owner can invite people. Ask them for a join link."
   }
 }

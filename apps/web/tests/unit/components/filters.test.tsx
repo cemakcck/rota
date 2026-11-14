@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
 import { MapLoaderContext } from "@/components/map/engine";
@@ -18,6 +18,9 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import { TripScreen } from "@/components/trip/TripScreen";
+
+// The whole trip in the list column.
+beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=all"));
 
 afterEach(cleanup);
 

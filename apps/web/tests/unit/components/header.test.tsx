@@ -50,7 +50,7 @@ describe("header", () => {
     newTrip({ days: 3 });
     renderIntl(<TripScreen tripId="t1" />);
     expect(screen.getByRole("heading", { level: 1, name: "Istanbul long weekend" })).toBeTruthy();
-    expect(screen.getByText("Fri, Nov 27 – Sun, Nov 29 · 3 days")).toBeTruthy();
+    expect(screen.getByText("Fri, Nov 27 – Sun, Nov 29 · 3 days · 0 places")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Rename trip" }));
     const input = screen.getByLabelText("Trip name");

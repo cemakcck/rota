@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
 import { renderIntl, stubFetch } from "./helpers";
@@ -16,6 +16,9 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import { TripScreen } from "@/components/trip/TripScreen";
+
+// The whole trip in the list column: these cover every day and Ideas at once.
+beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=all"));
 
 afterEach(() => {
   cleanup();

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { setTripMeta } from "@rota/trip";
 import { friendSession, isFriendWindow } from "@/client/authClient";
 import { FRIEND_HANDOFF_SCRIPT } from "@/client/friendHandoff";
@@ -41,7 +41,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("demo banner", () => {
+describe("demo box", () => {
   it("shows on demo trips only, as a named region", () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
@@ -50,8 +50,9 @@ describe("demo banner", () => {
 
     demoTrip();
     renderIntl(<TripScreen tripId="t1" />);
-    const banner = screen.getByRole("region", { name: "Demo" });
-    expect(banner.textContent).toContain("This is a demo. Demo accounts and trips are deleted after 7 days without activity.");
+    // At the bottom of the rail, not a strip across the screen.
+    const box = within(screen.getByRole("navigation", { name: "Trip" })).getByRole("region", { name: "Demo" });
+    expect(box.textContent).toBe("Demo trip · Deleted after 7 days without activity.Try it with a friendSimulate offline");
   });
 
   it("Simulate offline toggles the provider", () => {
@@ -143,7 +144,7 @@ describe("demo banner", () => {
     expect(window.location.hash).toBe("#place-1");
   });
 
-  it("friend windows hide the banner and say who you are", () => {
+  it("friend windows hide the demo controls and say who you are", () => {
     demoTrip();
     act(() => window.history.replaceState(null, "", "/en/t/t1?friend=1"));
     sessionStorage.setItem("rota.friend", JSON.stringify({ token: "tok-deniz", user: deniz }));

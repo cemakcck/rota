@@ -202,7 +202,7 @@
     "ideasEmpty": "Gidebileceğiniz yerler. Karar verince birini bir güne taşıyın.",
     "day": "{n}. Gün",
     "dayEmpty": "Henüz plan yok. Bir yer ekleyin ya da buraya sürükleyin.",
-    "dates": "{range} · {count} gün",
+    "summary": "{range} · {days} gün · {places} yer",
     "rename": "Geziyi yeniden adlandır",
     "tripName": "Gezi adı",
     "nameInvalid": "1 ile 60 karakter arasında bir gezi adı girin.",
@@ -390,13 +390,28 @@
   },
   "demo": {
     "label": "Demo",
-    "notice": "Bu bir demo. Demo hesapları ve gezileri 7 gün işlem yapılmazsa silinir.",
+    "notice": "7 gün işlem yapılmazsa silinir.",
     "simulateOffline": "Çevrimdışı simülasyonu",
     "tryFriend": "Bir arkadaşla dene",
     "sideBySide": "Yan yana",
     "closeSideBySide": "Yan yana görünümü kapat",
     "friendFailed": "Arkadaş penceresi açılamadı. Lütfen tekrar deneyin.",
     "friendWindow": "Bu pencerede {name} sizsiniz",
-    "friendFrame": "Aynı gezi, {name} olarak oturum açılmış"
+    "friendFrame": "Aynı gezi, {name} olarak oturum açılmış",
+    "title": "Demo gezi"
+  },
+  "rail": {
+    "label": "Gezi",
+    "day": "{n}. Gün · {date}",
+    "date": "{day} {weekday}",
+    "stops": "{count, plural, =0 {Henüz durak yok} other {# durak}}",
+    "addDay": "Gün ekle",
+    "ideas": "Fikirler ve oylar",
+    "ideasCount": "Fikirler ve oylar, {count}",
+    "all": "Tüm gezi haritada"
+  },
+  "share": {
+    "title": "Paylaş",
+    "ownerOnly": "Yalnızca gezinin sahibi kişi davet edebilir. Ondan bir katılma bağlantısı isteyin."
   }
 }
