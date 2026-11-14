@@ -370,11 +370,11 @@
     "timeLater": "30 minutes later",
     "timeSuggested": "Suggested {time}",
     "noSetTime": "No set time",
-    "stayCustom": "Custom…",
     "addedToAt": "Added to {list} at {time}",
     "addedTo": "Added to {list}",
     "addedSuggestion": "{name} suggested to the group",
-    "undoAddFor": "Undo adding {name}"
+    "undoAddFor": "Undo adding {name}",
+    "stayChipHours": "{h} h {m}"
   },
   "map": {
     "sheetHandle": "Resize the list",

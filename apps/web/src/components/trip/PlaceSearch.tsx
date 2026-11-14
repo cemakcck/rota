@@ -32,6 +32,11 @@ type Props = {
   from?: { lat: number; lng: number } | null;
   /** The result hovered or arrowed to (null when none), for a preview pin on the map. */
   onPreview?(result: SearchResult | null): void;
+  /**
+   * Results open under the caller's positioned box (it is `relative`), as wide as that box, instead of
+   * under the field: the day plan's search box, so the list never reaches past the column.
+   */
+  anchorToParent?: boolean;
 };
 
 /** "680 m" or "7.9 km": to the nearest 10 m under a kilometre. */
@@ -67,6 +72,7 @@ export function PlaceSearch({
   inputClassName,
   from = null,
   onPreview,
+  anchorToParent = false,
 }: Props) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
@@ -85,7 +91,9 @@ export function PlaceSearch({
   // The preview pin follows the pointer, else the keyboard; none once the list closes.
   const previewed = open ? (results[hovered >= 0 ? hovered : active] ?? null) : null;
   const preview = useEffectEvent((result: SearchResult | null) => onPreview?.(result));
-  useEffect(() => preview(previewed), [previewed]);
+  useEffect(() => {
+    preview(previewed);
+  }, [previewed]);
   useEffect(() => () => preview(null), []);
 
   const cancel = () => {
@@ -154,7 +162,7 @@ export function PlaceSearch({
 
   const message = problem === "offline" ? t("searchOffline") : problem === "unavailable" ? t("searchUnavailable") : null;
   return (
-    <div className="relative">
+    <div className={anchorToParent ? undefined : "relative"}>
       <input
         ref={inputRef}
         id={id}
@@ -180,8 +188,8 @@ export function PlaceSearch({
           id={listId}
           role="listbox"
           aria-label={label}
-          // Wider than a narrow field (about 360 px, never wider than the screen), so names and addresses fit.
-          className="absolute left-0 top-full z-30 mt-1 max-h-80 w-full min-w-[min(360px,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-2"
+          // Under the field, or (anchorToParent) under the whole search box, as wide as it.
+          className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-2"
           onMouseLeave={() => setHovered(-1)}
         >
           {results.map((r, i) => (

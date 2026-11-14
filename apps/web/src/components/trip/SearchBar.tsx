@@ -215,7 +215,8 @@ export function SearchBar({
 
   return (
     <div className="grid">
-      <div className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2">
+      {/* The results list opens under this whole box (360 px in the 400 px column), as wide as it. */}
+      <div data-search-box className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2">
         <Icon name="search" size={16} className="text-ink-2" />
         <label htmlFor={`${id}-search`} className="sr-only">
           {label}
@@ -234,6 +235,7 @@ export function SearchBar({
             onEnter={() => text.trim() && choose({ name: text.trim(), category: "other" })}
             near={near}
             from={from}
+            anchorToParent
             onPreview={onPreview && ((r) => onPreview(r && { name: r.name, category: r.category, lat: r.lat, lng: r.lng }))}
             disabled={full}
             describedBy={full ? `${id}-full` : `${id}-help`}

@@ -117,8 +117,9 @@ describe("day plan", () => {
     fireEvent.change(search(), { target: { value: "Galata" } });
     fireEvent.click(await screen.findByRole("option", { name: /Galata Kulesi/ }));
     const step = screen.getByRole("form", { name: "Add Galata Kulesi" });
-    // The step's actions (after the time and stay pickers).
-    expect(within(step).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent).slice(-4)).toEqual([
+    // The step's actions, exactly (the time and stay pickers come before them).
+    const actionsRow = within(step).getByRole("button", { name: "Add to Day 1" }).parentElement!;
+    expect(within(actionsRow).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
       "Add to Day 1",
       "Add to Ideas",
       "Suggest",

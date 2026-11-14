@@ -370,11 +370,11 @@
     "timeLater": "30 dakika sonra",
     "timeSuggested": "Önerilen {time}",
     "noSetTime": "Saat yok",
-    "stayCustom": "Özel…",
     "addedToAt": "Eklendi: {list}, saat {time}",
     "addedTo": "Eklendi: {list}",
     "addedSuggestion": "{name} gruba önerildi",
-    "undoAddFor": "Eklemeyi geri al: {name}"
+    "undoAddFor": "Eklemeyi geri al: {name}",
+    "stayChipHours": "{h} sa {m}"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

@@ -95,7 +95,7 @@ describe("suggestions", () => {
     const time = () => within(dialog).queryByLabelText("Time") as HTMLInputElement | null;
     // Day 1 is chosen: after Breakfast (08:00 + 45 min).
     expect(time()!.value).toBe("08:45");
-    expect(within(within(dialog).getByRole("group", { name: "Stay" })).getByRole("button", { name: "1 h 30 min" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(within(dialog).getByRole("group", { name: "Stay" })).getByRole("button", { name: "1 h 30" }).getAttribute("aria-pressed")).toBe("true");
     // Day 2 has nothing timed: empty. Ideas: no time at all.
     fireEvent.click(within(dialog).getByRole("radio", { name: /^Day 2/ }));
     expect(time()!.value).toBe("");

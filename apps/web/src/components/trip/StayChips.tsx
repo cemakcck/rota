@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useStay } from "./TravelLeg";
 
 /** The stays offered as chips, in minutes (spec §1); anything else is Custom…. */
 export const STAY_CHIPS = [15, 30, 60, 90, 120, 180] as const;
@@ -15,7 +14,11 @@ const isChip = (stay: string) => stay.trim() !== "" && (STAY_CHIPS as readonly n
  */
 export function StayChips({ id, value, onChange, autoFocus }: { id: string; value: string; onChange(value: string): void; autoFocus?: boolean }) {
   const t = useTranslations("trip");
-  const stay = useStay();
+  // "15 min", "1 h", "1 h 30" (spec §1).
+  const stay = (minutes: number) => {
+    const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+    return h === 0 ? t("minutesShort", { m }) : m === 0 ? t("hoursOnly", { h }) : t("stayChipHours", { h, m });
+  };
   const field = useRef<HTMLInputElement>(null);
   const [customChosen, setCustomChosen] = useState(false);
   // Custom… moves focus to its field once the field is there.
@@ -62,7 +65,7 @@ export function StayChips({ id, value, onChange, autoFocus }: { id: string; valu
             else focusField.current = true;
           }}
         >
-          {t("stayCustom")}
+          {t("customStay")}
         </button>
       </div>
       {custom && (

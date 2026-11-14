@@ -243,7 +243,8 @@ function TripScreenFor({ tripId }: Props) {
     toast.show({
       message: to === "suggest" ? t("addedSuggestion", { name }) : time ? t("addedToAt", { list, time }) : t("addedTo", { list }),
       undoLabel: t("undoAddFor", { name }),
-      onUndo: () => (undo ? undo.undo() : editor !== null && deletePlace(doc, id, editor)),
+      // This person's undo step: the add only, never a friend's edit (no Undo without the manager).
+      onUndo: undo ? () => undo.undo() : undefined,
     });
     setHighlight(id);
     requestAnimationFrame(() => {
@@ -309,10 +310,12 @@ function TripScreenFor({ tripId }: Props) {
       message: t("deleted", { name }),
       undoLabel: t("undoDeleteFor", { name }),
       focus: true,
-      onUndo: () => {
-        undo?.undo();
-        requestAnimationFrame(() => document.getElementById(focus)?.focus());
-      },
+      onUndo: undo
+        ? () => {
+            undo.undo();
+            requestAnimationFrame(() => document.getElementById(focus)?.focus());
+          }
+        : undefined,
     });
   }
 

@@ -74,8 +74,15 @@ describe("add-place flow", () => {
     // From Breakfast (Galata): about 680 m; Çamlıca is across the water, kilometres away.
     expect(within(first).getByTestId("result-distance").textContent).toBe("680 m");
     expect(within(second).getByTestId("result-distance").textContent).toBe("7.9 km");
-    // Wider than the field, so names and addresses fit.
-    expect(list.className).toContain("min-w-[min(360px");
+    // As wide as the whole search box (icon and Filter included), anchored to it: never wider than the
+    // column, so nothing is clipped at 400 px or on a phone.
+    const box = search().closest("[data-search-box]") as HTMLElement;
+    expect(box.className).toMatch(/(^| )relative( |$)/);
+    expect(list.className).toMatch(/(^| )inset-x-0( |$)/);
+    expect(list.className).not.toMatch(/min-w-|w-full/);
+    let anchor = list.parentElement!;
+    while (!/(^| )relative( |$)/.test(anchor.className)) anchor = anchor.parentElement!;
+    expect(anchor).toBe(box);
   });
 
   it("arrowing or hovering a result shows a preview pin on the map, leaving removes it, and nothing is saved", async () => {
@@ -161,6 +168,21 @@ describe("add-place flow", () => {
     ]);
   });
 
+  it("without a time or a suggestion, −30/+30 have nothing to move and are disabled", () => {
+    newTrip();
+    offline();
+    renderIntl(<TripScreen tripId="t1" />);
+    const form = stepFor("Galata Tower");
+    const earlier = within(form).getByRole("button", { name: "30 minutes earlier" }) as HTMLButtonElement;
+    const later = within(form).getByRole("button", { name: "30 minutes later" }) as HTMLButtonElement;
+    expect(within(form).queryByRole("button", { name: /^Suggested/ })).toBeNull();
+    expect([earlier.disabled, later.disabled]).toEqual([true, true]);
+    fireEvent.change(within(form).getByLabelText("Time"), { target: { value: "14:00" } });
+    expect([earlier.disabled, later.disabled]).toEqual([false, false]);
+    fireEvent.click(later);
+    expect((within(form).getByLabelText("Time") as HTMLInputElement).value).toBe("14:30");
+  });
+
   it("time picker uses the device's own time input on touch screens", () => {
     withBreakfast();
     offline();
@@ -182,7 +204,7 @@ describe("add-place flow", () => {
     const form = stepFor("Market");
     const stay = within(form).getByRole("group", { name: "Stay" });
     const chips = within(stay).getAllByRole("button").map((b) => b.textContent);
-    expect(chips).toEqual(["15 min", "30 min", "1 h", "1 h 30 min", "2 h", "3 h", "Custom…"]);
+    expect(chips).toEqual(["15 min", "30 min", "1 h", "1 h 30", "2 h", "3 h", "Custom…"]);
     // "Other": an hour.
     expect(within(stay).getByRole("button", { name: "1 h" }).getAttribute("aria-pressed")).toBe("true");
     expect(within(form).queryByLabelText("Stay (minutes)")).toBeNull();

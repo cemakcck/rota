@@ -27,11 +27,12 @@ const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.
 const fromMinutes = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 /**
- * `time` moved by `by` minutes, kept within the day (00:00–23:59). From the suggestion (or 09:00) when
- * nothing valid is typed.
+ * `time` moved by `by` minutes, kept within the day (00:00–23:59); from the suggestion when nothing valid
+ * is typed. Null when there is neither (no default start time, spec §2b).
  */
-export function shiftTime(time: string, by: number, suggested: string): string {
-  const base = parseTime(time) || parseTime(suggested) || "09:00";
+export function shiftTime(time: string, by: number, suggested: string): string | null {
+  const base = parseTime(time) || parseTime(suggested);
+  if (!base) return null;
   return fromMinutes(Math.min(LAST_MINUTE, Math.max(0, toMinutes(base) + by)));
 }
 
@@ -62,7 +63,10 @@ export function TimePicker({
 }) {
   const t = useTranslations("trip");
   const coarse = useCoarsePointer();
-  const step = "inline-flex h-9 min-w-9 items-center justify-center rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold tabular-nums hover:bg-hover";
+  // −30/+30 move a time: with none typed and none suggested they are disabled.
+  const shift = (by: number) => shiftTime(value, by, suggested ?? "");
+  const canShift = shift(0) !== null;
+  const step = "inline-flex h-9 min-w-9 items-center justify-center rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold tabular-nums hover:bg-hover disabled:cursor-not-allowed disabled:text-ink-2 disabled:hover:bg-surface";
   const chip =
     "inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
   return (
@@ -71,7 +75,7 @@ export function TimePicker({
         {t("time")}
       </label>
       <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" className={step} aria-label={t("timeEarlier")} onClick={() => onChange(shiftTime(value, -30, suggested ?? ""))}>
+        <button type="button" className={step} aria-label={t("timeEarlier")} disabled={!canShift} onClick={() => onChange(shift(-30) ?? value)}>
           <span aria-hidden="true">−30</span>
         </button>
         <input
@@ -85,7 +89,7 @@ export function TimePicker({
           onChange={(e) => onChange(e.target.value)}
           {...(coarse ? { type: "time" } : { type: "text", inputMode: "numeric" as const, placeholder: "HH:MM", maxLength: 5 })}
         />
-        <button type="button" className={step} aria-label={t("timeLater")} onClick={() => onChange(shiftTime(value, 30, suggested ?? ""))}>
+        <button type="button" className={step} aria-label={t("timeLater")} disabled={!canShift} onClick={() => onChange(shift(30) ?? value)}>
           <span aria-hidden="true">+30</span>
         </button>
       </div>
