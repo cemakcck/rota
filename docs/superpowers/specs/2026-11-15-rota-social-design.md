@@ -1,6 +1,6 @@
 # Rota Social: Design — a social travel app built around shared trips
 
-**Status:** pitched by Claude and accepted by the owner ("write it up"), 2026-11-15. Once the owner approves this document, it is approved in full, Claude's calls included.
+**Status:** approved by the owner 2026-11-15 ("deadline can be procrastinated. continue with all") — full scope, Claude's calls included.
 **Extends:** `2026-11-14-rota-design.md` (the trip planner) and `2026-11-15-rota-ui-v2-design.md` (the trip screen redesign). Everything there still holds unless this document changes it.
 
 Owner-decided parts are marked **(owner)**; everything else is Claude's call.
@@ -16,7 +16,7 @@ So:
 - **Social glue around it:** follows, a feed, likes and comments, photos on trips, messages — and conversation turns into trips in one tap.
 - Web and mobile (Expo) share the design **(owner)**.
 
-**Deadline (owner, unchanged):** about 2026-12-13 for web and mobile. This document is larger than that window comfortably holds; §13 orders the work so the most important parts land first and names what gets cut if time runs out.
+**Deadline (owner):** the full scope matters more than the 2026-12-13 date — "deadline can be procrastinated. continue with all". Build everything in §13's order; the cut list below is no longer used.
 
 ## 2. Goals, non-goals, anti-goals
 
