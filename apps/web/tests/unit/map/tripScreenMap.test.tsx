@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { addPlace } from "@rota/trip";
+import { addPlace, setPlaceTime } from "@rota/trip";
+import { suggestedFor } from "@/components/trip/SearchBar";
 import { MapLoaderContext } from "@/components/map/engine";
 import { renderIntl } from "../components/helpers";
 import { fake, newTrip, refresh, useFakeTrip } from "../components/tripHarness";
@@ -92,6 +93,35 @@ describe("trip screen map", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(2));
     fireEvent.contextMenu(document.querySelector<HTMLElement>("[data-pin]")!.parentElement!, { clientX: 100, clientY: 90 });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a place added on the map asks its time (the suggestion, editable) and stay before it is added", async () => {
+    const { doc, dayIds, tower } = await open();
+    setPlaceTime(doc, tower, "10:00", "u1");
+    const surface = document.querySelector<HTMLElement>("[data-pin]")!.parentElement!;
+    fireEvent.contextMenu(surface, { clientX: 100, clientY: 90 });
+    const dialog = await screen.findByRole("dialog", { name: "Add a place here" });
+    fireEvent.change(within(dialog).getByLabelText("Place name"), { target: { value: "Ferry pier" } });
+    const time = within(dialog).getByLabelText("Time") as HTMLInputElement;
+    // Prefilled with the time suggested after Day 1's last stop (its end + travel to the point).
+    const suggested = suggestedFor(fake.view.days[0], [], { lat: 41.1, lng: 29 });
+    expect(suggested).toMatch(/^\d\d:\d[05]$/);
+    expect(time.value).toBe(suggested);
+    // An invalid time is said, and nothing is added.
+    fireEvent.change(time, { target: { value: "25:00" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("Enter a time like 09:30, or leave it empty.");
+    expect(fake.view.days[0].places).toHaveLength(1);
+    fireEvent.change(time, { target: { value: "16:30" } });
+    fireEvent.change(within(dialog).getByLabelText("Stay (minutes)"), { target: { value: "30" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(fake.view.days[0].places.at(-1)).toMatchObject({ name: "Ferry pier", time: "16:30", stayMinutes: 30, dayId: dayIds[0] });
+
+    // Ideas have no time: the field goes.
+    fireEvent.contextMenu(surface, { clientX: 100, clientY: 90 });
+    const again = await screen.findByRole("dialog", { name: "Add a place here" });
+    fireEvent.change(within(again).getByLabelText("Add to"), { target: { value: "" } });
+    expect(within(again).queryByLabelText("Time")).toBeNull();
   });
 
   it("phones switch between the map with the list's sheet and the list alone", async () => {

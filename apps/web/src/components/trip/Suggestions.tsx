@@ -5,14 +5,15 @@ import { useTranslations } from "next-intl";
 import type { MemberView, PlaceView } from "@rota/trip";
 import { btn, btnSm } from "../ui";
 import { CategoryIcon } from "./icons";
-import { MoveDialog, type ListChoice } from "./MoveDialog";
+import { MoveDialog, type ListChoice, type MoveTiming } from "./MoveDialog";
 import type { ListId } from "./plan";
 import { VoteButtons } from "./VoteButtons";
 
 /** What a member can do with suggestions; absent while the user is unknown (read-only). */
 export type SuggestionActions = {
   vote(id: string, value: 1 | -1 | 0): void;
-  accept(id: string, to: ListId): void;
+  /** Planned, into `to`: into a day at a time (null: untimed) and with a stay, when given; one step. */
+  accept(id: string, to: ListId, timing?: MoveTiming): void;
   dismiss(id: string): void;
   restore(id: string): void;
 };
@@ -38,6 +39,7 @@ export function Suggestions({
   members,
   userId,
   lists,
+  suggest,
   actions,
 }: {
   suggestions: PlaceView[];
@@ -46,6 +48,8 @@ export function Suggestions({
   userId: string | null;
   /** Where an accepted suggestion can go: the days, then Ideas. */
   lists: ListChoice[];
+  /** The time suggested for a place as a day's new last stop ("" when none): accepting into a day asks it first. */
+  suggest?: (dayId: string, place: PlaceView) => string;
   actions: SuggestionActions | null;
 }) {
   const t = useTranslations("trip");
@@ -161,9 +165,10 @@ export function Suggestions({
           place={target}
           accept
           lists={lists}
+          when={suggest && { suggest: (dayId) => suggest(dayId, target), stayMinutes: target.stayMinutes }}
           onClose={() => setAccepting(null)}
-          onMove={(to) => {
-            actions.accept(target.id, to);
+          onMove={(to, timing) => {
+            actions.accept(target.id, to, timing);
             setAccepting(null);
             keepFocus();
           }}

@@ -226,6 +226,9 @@ describe("TripMap", () => {
       target: { value: "Ferry pier" },
     });
     fireEvent.click(screen.getByRole("radio", { name: "Sight" }));
+    // Into a day it asks the time (no suggestion here: empty, so untimed) and the stay (the category's).
+    expect((screen.getByLabelText("Time") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Stay (minutes)") as HTMLInputElement).value).toBe("45");
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(props.add!.onAdd).toHaveBeenCalledWith({
       name: "Ferry pier",
@@ -233,6 +236,8 @@ describe("TripMap", () => {
       dayId: dayIds[0],
       lng: 29,
       lat: 41.1,
+      time: null,
+      stayMinutes: 45,
     });
     expect(dialog.isConnected).toBe(false);
 

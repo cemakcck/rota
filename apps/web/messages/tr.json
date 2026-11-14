@@ -323,7 +323,7 @@
     "restore": "Geri al",
     "dismissedCount": "Reddedilenler ({count})",
     "acceptTitle": "{name} yerini kabul et",
-    "acceptHelp": "Nereye gideceğini seçin. Listenin sonuna eklenir.",
+    "acceptHelp": "Nereye gideceğini seçin; bir güne eklenirse saatini ve süresini de.",
     "acceptSubmit": "Kabul et",
     "dayTitle": "{n}. Gün · {weekday}",
     "searchIn": "{list} için yer ekle…",

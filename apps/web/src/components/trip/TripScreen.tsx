@@ -54,6 +54,7 @@ import { CollabContext, Presence, type Collab } from "./Presence";
 import { NO_FILTER, dropPlace, moveKeepingTime, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { Rail } from "./Rail";
+import { suggestedFor } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
 import { TripSettingsScreen } from "./TripSettingsScreen";
 import { UndoToast } from "./UndoToast";
@@ -234,11 +235,14 @@ function TripScreenFor({ tripId }: Props) {
     },
     setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
     vote: (id, value) => vote(doc, id, editor, value),
-    // One transaction (one undo step, one announcement): planned, then into the chosen list.
-    accept: (id, to) =>
+    // One transaction (one undo step, one announcement): planned, then into the chosen list; into a day
+    // at the chosen time (to its place by time) and with the chosen stay.
+    accept: (id, to, timing) =>
       doc.transact(() => {
         setPlaceStatus(doc, id, "planned", editor);
-        movePlace(doc, id, { dayId: to }, editor);
+        if (!movePlace(doc, id, { dayId: to }, editor) || to === null || !timing) return;
+        setPlaceTime(doc, id, timing.time, editor);
+        updatePlace(doc, id, { stayMinutes: timing.stayMinutes }, editor);
       }, editor),
     dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
     // An idea into a day, at its time (or untimed) and with its stay: one transaction, one undo step.
@@ -459,7 +463,12 @@ function TripScreenFor({ tripId }: Props) {
                     add={
                       editor === null || full
                         ? null
-                        : { lists, reverseGeocode, onAdd: ({ name, category, dayId, lat, lng }) => select(addPlace(doc, { name, category, dayId, lat, lng }, editor)) }
+                        : {
+                            lists,
+                            reverseGeocode,
+                            suggest: (dayId, at) => suggestedFor(view.days.find((d) => d.id === dayId), legsFor(dayId), at),
+                            onAdd: (place) => select(addPlace(doc, place, editor)),
+                          }
                     }
                     sheet={phoneView === "map" ? snap : null}
                   />

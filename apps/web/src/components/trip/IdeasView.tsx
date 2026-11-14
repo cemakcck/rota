@@ -261,7 +261,18 @@ export function IdeasView({
           )}
         </div>
       </section>
-      <Suggestions suggestions={view.suggestions} dismissed={view.dismissed} members={view.members} userId={userId} lists={lists} actions={suggestionActions} />
+      <Suggestions
+        suggestions={view.suggestions}
+        dismissed={view.dismissed}
+        members={view.members}
+        userId={userId}
+        lists={lists}
+        suggest={(dayId, place) => {
+          const day = view.days.find((d) => d.id === dayId);
+          return suggestedFor(day, day ? (travel[day.id]?.legs ?? []) : [], { lat: place.lat ?? undefined, lng: place.lng ?? undefined });
+        }}
+        actions={suggestionActions}
+      />
     </>
   );
 }

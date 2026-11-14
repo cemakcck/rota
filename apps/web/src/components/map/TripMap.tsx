@@ -7,7 +7,7 @@ import type { Awareness } from "y-protocols/awareness";
 import type { TripView } from "@rota/trip";
 import { setMapCursor, stopMapCursor } from "@/client/presence";
 import type { ListChoice } from "../trip/MoveDialog";
-import { AddHere, type NewMapPlace, type ReverseGeocode } from "./AddHere";
+import { AddHere, type NewMapPlace, type ReverseGeocode, type SuggestAt } from "./AddHere";
 import { PEEK_PX, type Snap } from "./BottomSheet";
 import { MapLoaderContext, type LngLat, type MapView, type Padding } from "./engine";
 import { mapFeatures, type MapShown, type Pin } from "./mapFeatures";
@@ -41,6 +41,8 @@ type Props = {
   add: {
     lists: ListChoice[];
     reverseGeocode?: ReverseGeocode;
+    /** The time suggested for the new stop in a day (the add step's prefill). */
+    suggest?: SuggestAt;
     onAdd(place: NewMapPlace): void;
   } | null;
   /** How far the phone's list sheet is pulled up over the map; null when it is not over the map. */
@@ -234,6 +236,7 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
           lists={add.lists}
           defaultList={view.days.some((d) => d.id === shownDayId) ? shownDayId : null}
           reverseGeocode={add.reverseGeocode}
+          suggest={add.suggest}
           onClose={() => setAdding(null)}
           onAdd={(place) => {
             add.onAdd(place);

@@ -323,7 +323,7 @@
     "restore": "Restore",
     "dismissedCount": "Dismissed ({count})",
     "acceptTitle": "Accept {name}",
-    "acceptHelp": "Choose where it goes. It is added to the end of that list.",
+    "acceptHelp": "Choose where it goes; into a day, also when and for how long.",
     "acceptSubmit": "Accept",
     "dayTitle": "Day {n} · {weekday}",
     "searchIn": "Add a place to {list}…",

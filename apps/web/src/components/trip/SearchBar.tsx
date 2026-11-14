@@ -42,6 +42,7 @@ export function TimeStayFields({
   stay,
   onStay,
   before,
+  autoFocus = !before,
 }: {
   id: string;
   timeRef: RefObject<HTMLInputElement | null>;
@@ -52,6 +53,8 @@ export function TimeStayFields({
   stay: string;
   onStay(value: string): void;
   before?: ReactNode;
+  /** Focus its first field when shown (by default, unless `before` comes first). */
+  autoFocus?: boolean;
 }) {
   const t = useTranslations("trip");
   return (
@@ -66,7 +69,7 @@ export function TimeStayFields({
             <input
               ref={timeRef}
               id={`${id}-time`}
-              autoFocus={!before}
+              autoFocus={autoFocus}
               type="text"
               inputMode="numeric"
               placeholder="HH:MM"
@@ -85,7 +88,7 @@ export function TimeStayFields({
           </label>
           <input
             id={`${id}-stay`}
-            autoFocus={!withTime && !before}
+            autoFocus={autoFocus && !withTime}
             type="number"
             min={0}
             max={1440}
@@ -99,7 +102,7 @@ export function TimeStayFields({
       </div>
       {withTime &&
         (invalid ? (
-          <p id={`${id}-error`} className={errorText}>
+          <p id={`${id}-error`} role="alert" className={errorText}>
             {t("timeInvalid")}
           </p>
         ) : (
