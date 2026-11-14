@@ -94,7 +94,7 @@ describe("demo accounts", () => {
     const { tripId } = (await res.json()) as { tripId: string };
     const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
     const session = await auth.api.getSession({ headers: new Headers({ cookie }) });
-    const visitor = { id: session!.user.id, token: "", email: "", name: "", cookie };
+    const visitor = { id: session!.user.id, token: "", email: "", name: "", cookie, ip: newIp() };
     // Bearer-only caller for the owner: reuse the cookie's token (signed) via Authorization.
     const ownerToken = decodeURIComponent(cookie.split("=").slice(1).join("="));
 
