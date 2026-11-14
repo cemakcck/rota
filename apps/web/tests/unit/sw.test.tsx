@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
+import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { registerSw } from "@/client/registerSw";
+import { RegisterSw, keepThisPage, registerSw } from "@/client/registerSw";
+
+const pathname = vi.hoisted(() => ({ current: "/en/trips" }));
+vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
 
 // src/sw/sw.js runs as served (its build id filled in, see app/sw.js/route.ts), against a fake service
 // worker global: `self` collects the event handlers, and `caches` / `fetch` are stand-ins the tests control.
@@ -138,6 +142,15 @@ describe("service worker", () => {
     expect(await (await sw.fire("fetch", sw.get("/maplibre-gl-worker.mjs?v=6")))!.text()).toBe(`network ${ORIGIN}/maplibre-gl-worker.mjs?v=6`);
   });
 
+  it("a page it already has is not fetched again", async () => {
+    const sw = loadSw();
+    await sw.fire("install");
+    await sw.fire("fetch", sw.get("/en/t/trip-1", "navigate"));
+    sw.fetch.mockClear();
+    await sw.fire("message", undefined, { type: "keep", urls: [`${ORIGIN}/en/t/trip-1?friend=1`, `${ORIGIN}/en/trips`] });
+    expect(sw.fetch).not.toHaveBeenCalled();
+  });
+
   it("other messages are ignored", async () => {
     const sw = loadSw();
     sw.fetch.mockClear();
@@ -254,8 +267,23 @@ describe("service worker registration", () => {
     const entries = [`${location.origin}/_next/static/chunks/app.js`, `${location.origin}/maplibre-gl-worker.mjs?v=6`, `${location.origin}/api/trips`, "https://tiles.openfreemap.org/styles/liberty"];
     vi.spyOn(performance, "getEntriesByType").mockReturnValue(entries.map((name) => ({ name })) as PerformanceEntryList);
     vi.stubEnv("NODE_ENV", "production");
-    registerSw();
+    keepThisPage();
     await vi.waitFor(() => expect(postMessage).toHaveBeenCalled());
     expect(postMessage).toHaveBeenCalledWith({ type: "keep", urls: [location.href, entries[0], entries[1]] });
+  });
+
+  it("asks again after every in-app navigation (they never reach the worker as page loads)", async () => {
+    const { register, postMessage } = fakeServiceWorker();
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([]);
+    vi.stubEnv("NODE_ENV", "production");
+    const { rerender } = render(<RegisterSw />);
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+
+    history.pushState(null, "", "/en/t/trip-1");
+    pathname.current = "/en/t/trip-1";
+    rerender(<RegisterSw />);
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+    expect(postMessage).toHaveBeenLastCalledWith({ type: "keep", urls: [`${location.origin}/en/t/trip-1`] });
+    expect(register).toHaveBeenCalledTimes(1);
   });
 });

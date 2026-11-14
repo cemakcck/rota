@@ -10,8 +10,9 @@
 // - OpenFreeMap style, TileJSON, glyphs and sprites: stale while revalidate. They name the current tile
 //   paths, so a cached copy must not outlive them.
 // - /api/* and /sync: never touched.
-// - The first visit loads before the worker is in charge, so that page asks it ("keep" message) to keep
-//   the page and the static files it already loaded: one online visit is enough to open it offline.
+// - Pages that never reach the worker as page loads (the first visit, before it is in charge, and every
+//   in-app navigation) ask it ("keep" message) to keep them and the static files loaded so far: one
+//   online visit is enough to open a page offline.
 
 const VERSION = "__BUILD_ID__";
 const PAGES = `rota-pages-${VERSION}`;
@@ -87,7 +88,8 @@ async function keepVisited(urls) {
         return;
       }
       if (url.origin !== self.location.origin) return;
-      if (isKeptPage(url)) return keep(pages, url.pathname);
+      // A page it has is kept fresh by later visits (network first); not fetched again here.
+      if (isKeptPage(url)) return (await pages.match(url.origin + url.pathname)) ? undefined : keep(pages, url.pathname);
       if (!isStatic(url) || (await statics.match(url.href))) return;
       try {
         const res = await fetch(url.href);

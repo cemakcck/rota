@@ -69,6 +69,22 @@ test.describe("offline", () => {
     await expect(syncIndicator(ann.page)).toHaveText("Offline — no changes waiting");
   });
 
+  test("a trip opened from My trips opens offline afterwards", async ({ people }) => {
+    const ann = await people.signUp("Ann");
+    const tripId = await tripWith(ann);
+    // The usual path: My trips first, then the trip through its link (an in-app navigation).
+    await ann.page.goto("/en/trips");
+    await ann.page.getByRole("link", { name: /Lisbon weekend/ }).click();
+    await expect(ann.page).toHaveURL(new RegExp(`/en/t/${tripId}$`));
+    await expect(syncIndicator(ann.page)).toHaveText("Synced");
+    await expect.poll(() => ann.page.evaluate(async () => (await caches.match(location.pathname)) !== undefined)).toBe(true);
+
+    await ann.context.setOffline(true);
+    await ann.page.reload();
+    await expect(ann.page.getByRole("heading", { name: "Lisbon weekend" })).toBeVisible();
+    await expect(syncIndicator(ann.page)).toHaveText("Offline — no changes waiting");
+  });
+
   test("first open of an unknown trip while offline says connect once", async ({ people }) => {
     const ann = await people.signUp("Ann");
     await ann.page.goto("/en/trips");
