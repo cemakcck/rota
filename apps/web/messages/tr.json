@@ -358,7 +358,12 @@
     "openingHours": "Açılış saatleri",
     "hoursClosed": "Kapalı",
     "notKnown": "Bilinmiyor",
-    "customStay": "Özel…"
+    "customStay": "Özel…",
+    "addToDay": "Güne ekle…",
+    "addToDayFor": "{name} yerini bir güne ekle",
+    "scheduleDay": "Gün",
+    "scheduled": "{name}, {list} planına eklendi",
+    "scheduledAt": "{name}, {list} planına {time} için eklendi"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",
@@ -370,8 +375,6 @@
     "view": "Göster",
     "showList": "Liste",
     "showMap": "Harita",
-    "daysShown": "Haritada gösterilen gün",
-    "allDays": "Tüm günler",
     "fit": "Haritayı yerlere sığdır",
     "zoomIn": "Yakınlaştır",
     "zoomOut": "Uzaklaştır",

@@ -14,7 +14,8 @@ import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { SearchBar, type NewStop } from "./SearchBar";
 import { StopRow, type StopActions } from "./StopRow";
-import { Suggestions, type SuggestionActions } from "./Suggestions";
+import { IdeasView, type RowProps, type Schedule } from "./IdeasView";
+import type { SuggestionActions } from "./Suggestions";
 import { Approximate, useDuration } from "./TravelLeg";
 import { listDropId, plannedLists, type Filter, type ListId } from "./plan";
 import type { TripViewState } from "./view";
@@ -39,6 +40,8 @@ export type PlanActions = StopActions &
     setDay(dayId: string, patch: DayPatch): void;
     /** Adds a place to a day or Ideas, or as a suggestion. */
     add(stop: NewStop, to: ListId | "suggest"): void;
+    /** Puts an idea into a day at a time (or untimed), with its stay: one step. */
+    schedule: Schedule;
   };
 
 /** The day plan's views (the checklist has its own). */
@@ -115,21 +118,12 @@ function DayNote({ day, title, editable }: { day: DayView; title: string; editab
   );
 }
 
-type RowProps = {
-  visible: (p: PlaceView) => boolean;
-  warnings: Map<string, StopWarning>;
-  selectedId: string | null;
-  openId: string | null;
-  onOpen(id: string, open: boolean): void;
-  actions: StopActions | null;
-};
-
-/** A day's stops (or Ideas, without `day`) with connectors between them; also a drop target (its end). */
-function StopList({ day, places, travel, empty, rows }: { day?: DayView; places: PlaceView[]; travel?: Travel; empty: string; rows: RowProps }) {
+/** A day's stops with connectors between them; also a drop target (its end). */
+function StopList({ day, places, travel, empty, rows }: { day: DayView; places: PlaceView[]; travel?: Travel; empty: string; rows: RowProps }) {
   const t = useTranslations("trip");
-  const { setNodeRef, isOver } = useDroppable({ id: listDropId(day?.id ?? null), disabled: !rows.actions });
-  const timeline = day ? dayTimeline(day, travel?.legs ?? []) : [];
-  const colour = day ? dayColour(day.index) : "#78716c";
+  const { setNodeRef, isOver } = useDroppable({ id: listDropId(day.id), disabled: !rows.actions });
+  const timeline = dayTimeline(day, travel?.legs ?? []);
+  const colour = dayColour(day.index);
   return (
     <div ref={setNodeRef} className={`mx-5 min-w-0 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
       {places.length === 0 ? (
@@ -137,7 +131,7 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
       ) : (
         <ol className="grid min-w-0">
           {places.map((place, i) => {
-            const leg = day && i > 0 ? travel?.legs[i - 1] : undefined;
+            const leg = i > 0 ? travel?.legs[i - 1] : undefined;
             const entry = timeline[i];
             // A late arrival is only worth saying once the travel before it is known: not from a
             // straight-line guess while the route is still on its way.
@@ -145,11 +139,10 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
             const late = entry?.lateBy && !guessing ? { minutes: entry.lateBy, from: places[i - 1]?.name || t("unnamed") } : null;
             return (
               <Fragment key={place.id}>
-                {day && i > 0 && <Connector leg={leg} mode={day.travelMode} />}
-                {!day && i > 0 && <li aria-hidden="true" className="h-2 min-w-0" />}
+                {i > 0 && <Connector leg={leg} mode={day.travelMode} />}
                 <StopRow
                   place={place}
-                  number={day ? i + 1 : undefined}
+                  number={i + 1}
                   colour={colour}
                   timing={entry}
                   late={late}
@@ -172,7 +165,7 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
 /**
  * The plan column (spec §2): for a day, its header (walk/drive and travel, end time, Google Maps), one
  * search bar with the Filter button, and the stops as one-line rows with travel between them; for
- * Ideas, the ideas and the suggestions; for the whole trip, every day's header and stops, then Ideas.
+ * Ideas, Ideas & votes (IdeasView); for the whole trip, every day's header and stops, then Ideas & votes.
  */
 export function DayPlan({
   view,
@@ -188,6 +181,7 @@ export function DayPlan({
   onOpen,
   actions,
   stopActions,
+  onSchedule,
   full,
   near,
   listLabel,
@@ -214,6 +208,8 @@ export function DayPlan({
   actions: PlanActions | null;
   /** What rows can do (see usePlaceControls). */
   stopActions: StopActions | null;
+  /** Puts an idea into a day (see usePlaceControls); null while the user cannot edit. */
+  onSchedule: Schedule | null;
   full: boolean;
   near: { lat: number; lng: number } | null;
   listLabel: (list: ListId) => string;
@@ -263,18 +259,19 @@ export function DayPlan({
     );
   };
 
-  const ideasHeading = `${headingBase}-ideas`;
+  const days = view.days.map((d) => ({ id: d.id, label: listChoiceLabel(d.id), name: listLabel(d.id) }));
   const ideas = (extra?: ReactNode) => (
-    <>
-      <section aria-labelledby={ideasHeading} className="min-w-0 pb-3">
-        <h2 id={ideasHeading} className="px-5 pb-2.5 pt-4 font-serif text-[22px] font-semibold leading-tight">
-          {t("ideas")}
-        </h2>
-        {extra}
-        <StopList places={view.ideas} empty={t("ideasEmpty")} rows={rows} />
-      </section>
-      <Suggestions suggestions={view.suggestions} dismissed={view.dismissed} members={view.members} userId={userId} lists={choices} actions={actions} />
-    </>
+    <IdeasView
+      view={view}
+      travel={travel}
+      rows={rows}
+      search={extra}
+      suggestionActions={actions}
+      onSchedule={onSchedule}
+      userId={userId}
+      lists={choices}
+      dayChoices={days}
+    />
   );
 
   return (

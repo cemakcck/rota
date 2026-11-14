@@ -358,7 +358,12 @@
     "openingHours": "Opening hours",
     "hoursClosed": "Closed",
     "notKnown": "Not known",
-    "customStay": "Custom…"
+    "customStay": "Custom…",
+    "addToDay": "Add to day…",
+    "addToDayFor": "Add {name} to a day",
+    "scheduleDay": "Day",
+    "scheduled": "{name} added to {list}",
+    "scheduledAt": "{name} added to {list} at {time}"
   },
   "map": {
     "sheetHandle": "Resize the list",
@@ -370,8 +375,6 @@
     "view": "Show",
     "showList": "List",
     "showMap": "Map",
-    "daysShown": "Day shown on the map",
-    "allDays": "All days",
     "fit": "Fit the map to the places",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",

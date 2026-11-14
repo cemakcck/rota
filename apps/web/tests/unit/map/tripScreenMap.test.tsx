@@ -37,40 +37,42 @@ async function open() {
       <TripScreen tripId="t1" />
     </MapLoaderContext.Provider>,
   );
-  await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(2));
+  await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(1));
   return { doc, dayIds, tower, chora, map };
 }
 
 describe("trip screen map", () => {
   it("a pin selects its row and shows its day, and a row its pin", async () => {
     const { tower, chora, map } = await open();
-    const days = screen.getByRole("group", { name: "Day shown on the map" });
     const rail = screen.getByRole("navigation", { name: "Trip" });
-    // The map opens on the first day.
-    expect(within(days).getByRole("button", { name: "Day 1" }).getAttribute("aria-pressed")).toBe("true");
-    expect(map.state.route).toBeNull();
+    // The map follows the view (the rail chooses it): the first day, its pin only.
+    expect(screen.queryByRole("group", { name: "Day shown on the map" })).toBeNull();
+    expect(document.querySelectorAll("[data-pin]")).toHaveLength(1);
+    expect(map.state.routes).toEqual([]);
 
     fireEvent.click(pin(tower));
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
-    expect(pin(tower).className).toContain("outline-ink");
+    expect(pin(tower).dataset.selected).toBe("true");
+    // The pin opened the details panel; the map leaves room for it.
+    expect(screen.getByRole("region", { name: "Details for Galata Tower" })).toBeTruthy();
 
-    // A pin on another day shows that day (list, rail and map), its row selected.
+    // Another day on the rail: the map shows that day, fitted.
+    fireEvent.click(within(rail).getByRole("button", { name: /^Day 2 · / }));
+    expect(document.querySelectorAll("[data-pin]")).toHaveLength(1);
+    expect(map.state.fits.at(-1)).toEqual([28.9393, 41.0312, 28.9393, 41.0312]);
     fireEvent.click(pin(chora));
     expect(row("Chora Church").getAttribute("aria-current")).toBe("true");
-    expect(screen.queryByText("Galata Tower", { selector: "[data-testid=place-name]" })).toBeNull();
-    expect(pin(chora).className).toContain("outline-ink");
-    expect(within(days).getByRole("button", { name: "Day 2" }).getAttribute("aria-pressed")).toBe("true");
+    expect(pin(chora).dataset.selected).toBe("true");
     expect(within(rail).getByRole("button", { name: /^Day 2 · / }).getAttribute("aria-current")).toBe("true");
-    expect(map.state.fits.at(-1)).toEqual([28.9393, 41.0312, 28.9393, 41.0312]);
 
-    // All days on the map is the whole trip in the list too; clicking a row (not one of its buttons) selects it.
-    fireEvent.click(within(days).getByRole("button", { name: "All days" }));
-    expect(within(days).getByRole("button", { name: "All days" }).getAttribute("aria-pressed")).toBe("true");
+    // The whole trip: every pin on the map and every day in the list; clicking a row (not one of its buttons) selects it.
+    fireEvent.click(within(rail).getByRole("button", { name: "Whole trip on map" }));
     expect(window.location.search).toBe("?view=all");
-    fireEvent.click(screen.getByText("Galata Tower"));
+    expect(document.querySelectorAll("[data-pin]")).toHaveLength(2);
+    fireEvent.click(screen.getByText("Galata Tower", { selector: "[data-testid=place-name]" }).closest("li")!.querySelector("[data-testid=place-sub]")!);
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
     expect(row("Chora Church").getAttribute("aria-current")).toBeNull();
-    expect(pin(tower).className).toContain("outline-ink");
+    expect(pin(tower).dataset.selected).toBe("true");
     fireEvent.click(within(row("Chora Church")).getByTestId("place-time"));
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
   });
@@ -87,7 +89,7 @@ describe("trip screen map", () => {
 
     fake.userId = null;
     refresh();
-    await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(3));
+    await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(2));
     fireEvent.contextMenu(document.querySelector<HTMLElement>("[data-pin]")!.parentElement!, { clientX: 100, clientY: 90 });
     expect(screen.queryByRole("dialog")).toBeNull();
   });

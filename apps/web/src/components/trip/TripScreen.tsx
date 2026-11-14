@@ -239,6 +239,13 @@ function TripScreenFor({ tripId }: Props) {
         movePlace(doc, id, { dayId: to }, editor);
       }, editor),
     dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
+    // An idea into a day, at its time (or untimed) and with its stay: one transaction, one undo step.
+    schedule: (id, dayId, time, stayMinutes) =>
+      doc.transact(() => {
+        if (!movePlace(doc, id, { dayId }, editor)) return;
+        setPlaceTime(doc, id, time, editor);
+        updatePlace(doc, id, { stayMinutes }, editor);
+      }, editor),
     restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
   const controls = usePlaceControls(doc, view, actions);
@@ -284,7 +291,6 @@ function TripScreenFor({ tripId }: Props) {
   };
   const lists = plannedLists(view).map((l) => ({ id: l.id, label: labelIn(view, l.id) }));
 
-  const selectedDayId = shown.kind === "day" ? shown.dayId : null;
   // Selecting a place shows its list (its day, or Ideas), unless the whole trip is shown.
   const select = (id: string) => {
     setPicked(id);
@@ -423,6 +429,7 @@ function TripScreenFor({ tripId }: Props) {
                         onOpen={(id, open) => (open ? openDetails(id) : closeDetails())}
                         actions={actions}
                         stopActions={controls.stopActions}
+                        onSchedule={controls.schedule}
                         full={full}
                         near={centre}
                         listLabel={(list) => labelIn(view, list)}
@@ -436,9 +443,10 @@ function TripScreenFor({ tripId }: Props) {
                   <TripMap
                     view={view}
                     hiddenIds={hiddenIds}
-                    selectedDayId={selectedDayId}
+                    // The checklist has no places: the map shows the whole trip meanwhile.
+                    shown={shown.kind === "checklist" ? { kind: "all" } : shown}
                     selectedPlaceId={selectedPlaceId}
-                    onSelectDay={(id) => show(id === null ? { kind: "all" } : { kind: "day", dayId: id })}
+                    panel={details !== null}
                     onSelectPlace={selectPin}
                     routeGeometry={routeGeometry}
                     awareness={awareness}
@@ -451,7 +459,7 @@ function TripScreenFor({ tripId }: Props) {
                     sheet={phoneView === "map" ? snap : null}
                   />
                   {status.kind === "offline" && (
-                    <p className="pointer-events-none absolute left-3 top-14 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
+                    <p className="pointer-events-none absolute right-14 top-3 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
                       {tm("incompleteOffline")}
                     </p>
                   )}

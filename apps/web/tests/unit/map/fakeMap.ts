@@ -1,5 +1,5 @@
 import type { Bounds, Route } from "@/components/map/mapFeatures";
-import type { LngLat, LoadMap, MapView } from "@/components/map/engine";
+import type { LngLat, LoadMap, MapView, Padding } from "@/components/map/engine";
 
 /**
  * A stand-in for MapLibre (jsdom has no WebGL): a flat 800 × 600 view where 1° is 100 px, with the
@@ -9,8 +9,10 @@ export function fakeMap() {
   const state = {
     container: null as HTMLElement | null,
     start: null as { bounds: Bounds } | null,
-    route: null as Route | null,
+    routes: [] as Route[],
     fits: [] as Bounds[],
+    /** How each fit was asked for (padding, animated or not), in step with `fits`. */
+    fitOptions: [] as { padding: Padding; animate: boolean }[],
     centred: [] as LngLat[],
     removed: false,
     origin: { lng: 28, lat: 42 },
@@ -26,9 +28,12 @@ export function fakeMap() {
       lat: state.origin.lat - y / 100,
     }),
     size: () => ({ width: 800, height: 600 }),
-    fit: (bounds) => void state.fits.push(bounds),
+    fit: (bounds, options) => {
+      state.fits.push(bounds);
+      state.fitOptions.push(options);
+    },
     centre: (at) => void state.centred.push(at),
-    setRoute: (route) => void (state.route = route),
+    setRoutes: (routes) => void (state.routes = routes),
     addMarker(_at, element) {
       state.container!.appendChild(element);
       return { move: () => undefined, remove: () => element.remove() };

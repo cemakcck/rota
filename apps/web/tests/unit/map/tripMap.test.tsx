@@ -3,9 +3,9 @@ import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react
 import * as Y from "yjs";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 import { addPlace, initTrip, readTrip } from "@rota/trip";
-import { MapLoaderContext } from "@/components/map/engine";
+import { MAP_STYLE, MapLoaderContext } from "@/components/map/engine";
 import { DAY_COLOURS } from "@/components/map/mapFeatures";
-import { LONG_PRESS_MS, TripMap } from "@/components/map/TripMap";
+import { LONG_PRESS_MS, TripMap, type MapShown } from "@/components/map/TripMap";
 import { renderIntl } from "../components/helpers";
 import { fakeMap } from "./fakeMap";
 
@@ -60,9 +60,9 @@ function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}) {
   const props = {
     view,
     hiddenIds: new Set<string>(),
-    selectedDayId: dayIds[0] as string | null,
+    shown: { kind: "day", dayId: dayIds[0] } as MapShown,
     selectedPlaceId: null as string | null,
-    onSelectDay: vi.fn(),
+    panel: false,
     onSelectPlace: vi.fn(),
     awareness: null,
     userId: "u1",
@@ -96,49 +96,100 @@ function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}) {
 const pins = () => [...document.querySelectorAll<HTMLElement>("[data-pin]")];
 
 describe("TripMap", () => {
-  it("opens on the trip with its pins and the day's route, and is removed with the screen", async () => {
-    const { fake, unmount, tower, lokanta, loti } = setup();
-    await waitFor(() => expect(pins()).toHaveLength(3));
-    // Opened on the day's pins, then fitted again with room for the controls.
+  it("map uses the positron style", () => {
+    expect(MAP_STYLE).toBe("https://tiles.openfreemap.org/styles/positron");
+  });
+
+  it("opens on the day shown with its numbered pins and route, and is removed with the screen", async () => {
+    const { fake, unmount, tower, lokanta } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    // Opened on the day's pins, then fitted again with room for the controls (at once, no animation).
     expect(fake.state.start?.bounds).toEqual([28.9742, 41.0228, 28.9779, 41.0256]);
     expect(fake.state.fits).toEqual([[28.9742, 41.0228, 28.9779, 41.0256]]);
+    expect(fake.state.fitOptions[0].animate).toBe(false);
+    // Only that day's pins: Ideas are not on a day's map.
     expect(pins().map((p) => [p.dataset.pin, p.textContent])).toEqual([
       [tower, "1"],
       [lokanta, "2"],
-      [loti, ""],
     ]);
-    expect(pins()[0].style.background).toBe("rgb(30, 58, 138)");
-    expect(fake.state.route).toMatchObject({
-      colour: DAY_COLOURS[0],
-      approximate: true,
-    });
+    expect(pins()[0].querySelector<HTMLElement>("[data-pin-head]")!.style.background).toBe("rgb(30, 58, 138)");
+    expect(fake.state.routes).toEqual([expect.objectContaining({ colour: DAY_COLOURS[0], approximate: true })]);
     unmount();
     expect(fake.state.removed).toBe(true);
   });
 
-  it("a pin selects its place; selecting a day fits it; a place out of view is brought in", async () => {
-    const { fake, props, rerenderWith, dayIds, lokanta, loti } = setup();
+  it("follows the view: Ideas show idea pins, the whole trip everything, each change fitted", async () => {
+    const { fake, rerenderWith, loti } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    rerenderWith({ shown: { kind: "ideas" } });
+    expect(pins().map((p) => p.dataset.pin)).toEqual([loti]);
+    expect(pins()[0].dataset.idea).toBe("true");
+    expect(fake.state.routes).toEqual([]);
+    expect(fake.state.fits.at(-1)).toEqual([28.9338, 41.0536, 28.9338, 41.0536]);
+    expect(fake.state.fitOptions.at(-1)!.animate).toBe(true);
+    rerenderWith({ shown: { kind: "all" } });
+    expect(pins()).toHaveLength(3);
+    expect(fake.state.fits).toHaveLength(3);
+  });
+
+  it("fits without animation under reduced motion", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce") || query.includes("min-width"), media: query }) as MediaQueryList);
+    const { fake, rerenderWith } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    rerenderWith({ shown: { kind: "all" } });
+    expect(fake.state.fitOptions.map((o) => o.animate)).toEqual([false, false]);
+    vi.unstubAllGlobals();
+  });
+
+  it("selected pin is emphasised", async () => {
+    const { rerenderWith, tower, lokanta } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    const head = (id: string) => document.querySelector<HTMLElement>(`[data-pin="${id}"] [data-pin-head]`)!;
+    expect(head(tower).className).toContain("size-[34px]");
+    rerenderWith({ selectedPlaceId: tower });
+    expect(document.querySelector<HTMLElement>(`[data-pin="${tower}"]`)!.dataset.selected).toBe("true");
+    expect(head(tower).className).toContain("size-[42px]");
+    // A halo in the day's colour.
+    expect(head(tower).style.boxShadow).toContain("rgba(30, 58, 138, 0.25) 0px 0px 0px 5px");
+    expect(head(lokanta).className).toContain("size-[34px]");
+    expect(document.querySelector<HTMLElement>(`[data-pin="${lokanta}"]`)!.dataset.selected).toBeUndefined();
+  });
+
+  it("a pin selects its place, shows its name on hover, and a place out of view is brought in", async () => {
+    const { fake, props, rerenderWith, lokanta, loti } = setup({ shown: { kind: "all" } });
     await waitFor(() => expect(pins()).toHaveLength(3));
     fireEvent.click(pins()[1]);
     expect(props.onSelectPlace).toHaveBeenCalledWith(lokanta);
-    fireEvent.click(screen.getByRole("button", { name: "Day 2", pressed: false }));
-    expect(props.onSelectDay).toHaveBeenCalledWith(dayIds[1]);
-    expect(screen.getByRole("group", { name: "Day shown on the map" })).toBeTruthy();
+    // Hovering a pin shows a small name card.
+    expect(screen.queryByText("Karaköy Lokantası")).toBeNull();
+    fireEvent.pointerEnter(pins()[1]);
+    expect(screen.getByText("Karaköy Lokantası")).toBeTruthy();
+    fireEvent.pointerLeave(pins()[1]);
+    expect(screen.queryByText("Karaköy Lokantası")).toBeNull();
 
-    rerenderWith({ selectedDayId: null });
-    expect(fake.state.fits).toHaveLength(2);
     // Pierre Loti (lng 28.93, lat 41.05) is in this view; after panning away it is not.
-    rerenderWith({ selectedDayId: null, selectedPlaceId: loti });
+    rerenderWith({ shown: { kind: "all" }, selectedPlaceId: loti });
     expect(fake.state.centred).toHaveLength(0);
     act(() => fake.pan({ lng: 30, lat: 42 }));
-    rerenderWith({ selectedDayId: null, selectedPlaceId: null });
-    rerenderWith({ selectedDayId: null, selectedPlaceId: loti });
+    rerenderWith({ shown: { kind: "all" }, selectedPlaceId: null });
+    rerenderWith({ shown: { kind: "all" }, selectedPlaceId: loti });
     expect(fake.state.centred).toEqual([expect.objectContaining({ lat: 41.0536, lng: 28.9338 })]);
+  });
+
+  it("no day chips on the map, and fits leave room for the open details panel on wide screens", async () => {
+    const { fake, rerenderWith } = setup();
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    // The rail chooses the day; nothing focusable sits on the map's left edge, under the panel.
+    expect(screen.queryByRole("group", { name: "Day shown on the map" })).toBeNull();
+    expect(fake.state.fitOptions[0].padding.left).toBeLessThan(100);
+    rerenderWith({ panel: true });
+    fireEvent.click(screen.getByRole("button", { name: "Fit the map to the places" }));
+    expect(fake.state.fitOptions.at(-1)!.padding.left).toBeGreaterThanOrEqual(340);
   });
 
   it("right-click or a long-press adds a place there", async () => {
     const { props, dayIds } = setup();
-    await waitFor(() => expect(pins()).toHaveLength(3));
+    await waitFor(() => expect(pins()).toHaveLength(2));
     const surface = document.querySelector<HTMLElement>(".absolute.inset-0")!;
 
     // Right-click at (100, 90): lng 29, lat 41.1.
@@ -190,7 +241,7 @@ describe("TripMap", () => {
 
   it("without editing, the map adds nothing", async () => {
     setup({ add: null });
-    await waitFor(() => expect(pins()).toHaveLength(3));
+    await waitFor(() => expect(pins()).toHaveLength(2));
     fireEvent.contextMenu(document.querySelector<HTMLElement>(".absolute.inset-0")!, { clientX: 100, clientY: 90 });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -203,7 +254,7 @@ describe("TripMap", () => {
       cursor: null,
     });
     const { fake, unmount } = setup({ awareness });
-    await waitFor(() => expect(pins()).toHaveLength(3));
+    await waitFor(() => expect(pins()).toHaveLength(2));
     const surface = document.querySelector<HTMLElement>(".absolute.inset-0")!;
 
     fireEvent.pointerMove(surface, {

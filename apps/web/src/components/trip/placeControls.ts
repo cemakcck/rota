@@ -5,11 +5,12 @@ import { useTranslations } from "next-intl";
 import type * as Y from "yjs";
 import { readTrip, type PlaceView, type TripView } from "@rota/trip";
 import type { PlanActions } from "./DayPlan";
+import type { Schedule } from "./IdeasView";
 import { placeFocusId, type StopActions } from "./StopRow";
 import { plannedLists, type ListId } from "./plan";
 
 /**
- * What a stop's row and its details panel can do, wired to the plan: Move up/down and Alt+↑/↓ swap
+ * What a stop's row and its details panel can do, wired to the plan (and an idea's Add to day…): Move up/down and Alt+↑/↓ swap
  * with a neighbour, and this person's own reorders and time changes are said politely (`status`;
  * others' changes come from the Announcer); Move to… opens the Move dialog (`moving`), which closes
  * by itself when the place goes (deleted or un-planned elsewhere).
@@ -18,7 +19,13 @@ export function usePlaceControls(
   doc: Y.Doc,
   view: TripView,
   actions: PlanActions | null,
-): { stopActions: StopActions | null; status: string; moving: { list: ListId; place: PlaceView } | null; closeMove(): void } {
+): {
+  stopActions: StopActions | null;
+  schedule: Schedule | null;
+  status: string;
+  moving: { list: ListId; place: PlaceView } | null;
+  closeMove(): void;
+} {
   const t = useTranslations("trip");
   const [moving, setMoving] = useState<string | null>(null);
   const [status, setStatus] = useState("");
@@ -69,5 +76,18 @@ export function usePlaceControls(
     },
   };
 
-  return { stopActions, status, moving: movingPlace, closeMove: () => setMoving(null) };
+  // An idea put into a day: said politely (the view stays on Ideas, so it would otherwise go unseen).
+  const schedule: Schedule | null =
+    actions &&
+    ((id, dayId, time, stayMinutes) => {
+      const place = find(id)?.place;
+      actions.schedule(id, dayId, time, stayMinutes);
+      const index = view.days.findIndex((d) => d.id === dayId);
+      if (!place || index < 0) return;
+      const name = place.name || t("unnamed");
+      const list = t("day", { n: index + 1 });
+      setStatus(time === null ? t("scheduled", { name, list }) : t("scheduledAt", { name, list, time }));
+    });
+
+  return { stopActions, schedule, status, moving: movingPlace, closeMove: () => setMoving(null) };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { DEFAULT_STAY_MINUTES, estimateLeg, suggestTime, type Category, type DayView, type Leg } from "@rota/trip";
 import type { SearchResult } from "@/client/geocode";
@@ -17,7 +17,7 @@ type Candidate = Omit<NewStop, "time" | "stayMinutes">;
  * The time suggested for a new last stop of `day`: the last stop's end plus travel to the new place
  * (estimated when both have coordinates, else none); empty when nothing timed comes before.
  */
-function suggestedFor(day: DayView | undefined, legs: readonly (Leg | null)[], place: Candidate): string {
+export function suggestedFor(day: DayView | undefined, legs: readonly (Leg | null)[], place: { lat?: number; lng?: number }): string {
   if (!day) return "";
   const last = day.places.at(-1);
   const toNew =
@@ -26,6 +26,95 @@ function suggestedFor(day: DayView | undefined, legs: readonly (Leg | null)[], p
       : null;
   const all = [...day.places.slice(1).map((_, i) => legs[i] ?? null), toNew];
   return suggestTime(day, all, day.places.length) ?? "";
+}
+
+/**
+ * The time and stay fields of an add step (spec §2b): the time (when it goes into a day) prefilled with
+ * the suggestion, editable, may be left empty; the stay. `before` comes first in the row (a day choice).
+ */
+export function TimeStayFields({
+  id,
+  timeRef,
+  withTime,
+  time,
+  onTime,
+  invalid,
+  stay,
+  onStay,
+  before,
+}: {
+  id: string;
+  timeRef: RefObject<HTMLInputElement | null>;
+  withTime: boolean;
+  time: string;
+  onTime(value: string): void;
+  invalid: boolean;
+  stay: string;
+  onStay(value: string): void;
+  before?: ReactNode;
+}) {
+  const t = useTranslations("trip");
+  return (
+    <>
+      <div className="flex flex-wrap items-start gap-3">
+        {before}
+        {withTime && (
+          <div>
+            <label htmlFor={`${id}-time`} className="mb-1 block text-[13px] font-medium">
+              {t("time")}
+            </label>
+            <input
+              ref={timeRef}
+              id={`${id}-time`}
+              autoFocus={!before}
+              type="text"
+              inputMode="numeric"
+              placeholder="HH:MM"
+              maxLength={5}
+              aria-invalid={invalid || undefined}
+              aria-describedby={invalid ? `${id}-error` : `${id}-hint`}
+              className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
+              value={time}
+              onChange={(e) => onTime(e.target.value)}
+            />
+          </div>
+        )}
+        <div>
+          <label htmlFor={`${id}-stay`} className="mb-1 block text-[13px] font-medium">
+            {t("stayMinutes")}
+          </label>
+          <input
+            id={`${id}-stay`}
+            autoFocus={!withTime && !before}
+            type="number"
+            min={0}
+            max={1440}
+            step={5}
+            inputMode="numeric"
+            className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] tabular-nums"
+            value={stay}
+            onChange={(e) => onStay(e.target.value)}
+          />
+        </div>
+      </div>
+      {withTime &&
+        (invalid ? (
+          <p id={`${id}-error`} className={errorText}>
+            {t("timeInvalid")}
+          </p>
+        ) : (
+          <p id={`${id}-hint`} className={`${hint} !mt-0`}>
+            {t("timeHint")}
+          </p>
+        ))}
+    </>
+  );
+}
+
+/** A stay typed in an add step, in whole minutes (0–1440); `fallback` when it is empty or not a number. */
+export function stayFrom(stay: string, fallback: number): number {
+  const minutes = Number(stay);
+  return stay.trim() !== "" && Number.isFinite(minutes) ? Math.min(1440, Math.max(0, Math.round(minutes))) : fallback;
 }
 
 /**
@@ -56,8 +145,7 @@ function AddStep({
   const toDay = target.id !== null;
 
   function add(to: ListId | "suggest") {
-    const minutes = Number(stay);
-    const stayMinutes = stay.trim() !== "" && Number.isFinite(minutes) ? Math.min(1440, Math.max(0, Math.round(minutes))) : DEFAULT_STAY_MINUTES[place.category];
+    const stayMinutes = stayFrom(stay, DEFAULT_STAY_MINUTES[place.category]);
     // Only a stop in a day has a time; Ideas and suggestions are not scheduled.
     if (to === null || to === "suggest") return onAdd({ ...place, time: null, stayMinutes }, to);
     const parsed = parseTime(time);
@@ -92,59 +180,10 @@ function AddStep({
         {place.name}
         {place.address && <span className="ml-1.5 text-[12.5px] font-normal text-ink-2">{place.address}</span>}
       </p>
-      <div className="flex flex-wrap items-start gap-3">
-        {toDay && (
-          <div>
-            <label htmlFor={`${id}-time`} className="mb-1 block text-[13px] font-medium">
-              {t("time")}
-            </label>
-            <input
-              ref={timeRef}
-              id={`${id}-time`}
-              autoFocus
-              type="text"
-              inputMode="numeric"
-              placeholder="HH:MM"
-              maxLength={5}
-              aria-invalid={invalid || undefined}
-              aria-describedby={invalid ? `${id}-error` : `${id}-hint`}
-              className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
-              value={time}
-              onChange={(e) => {
-                setTime(e.target.value);
-                setInvalid(false);
-              }}
-            />
-          </div>
-        )}
-        <div>
-          <label htmlFor={`${id}-stay`} className="mb-1 block text-[13px] font-medium">
-            {t("stayMinutes")}
-          </label>
-          <input
-            id={`${id}-stay`}
-            autoFocus={!toDay}
-            type="number"
-            min={0}
-            max={1440}
-            step={5}
-            inputMode="numeric"
-            className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] tabular-nums"
-            value={stay}
-            onChange={(e) => setStay(e.target.value)}
-          />
-        </div>
-      </div>
-      {toDay &&
-        (invalid ? (
-          <p id={`${id}-error`} className={errorText}>
-            {t("timeInvalid")}
-          </p>
-        ) : (
-          <p id={`${id}-hint`} className={`${hint} !mt-0`}>
-            {t("timeHint")}
-          </p>
-        ))}
+      <TimeStayFields id={id} timeRef={timeRef} withTime={toDay} time={time} onTime={(v) => {
+          setTime(v);
+          setInvalid(false);
+        }} invalid={invalid} stay={stay} onStay={setStay} />
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={`${btnPrimary} ${btnSm}`}>
           {t("addToList", { list: target.label })}

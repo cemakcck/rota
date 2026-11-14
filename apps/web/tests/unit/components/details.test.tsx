@@ -280,6 +280,8 @@ describe("place details", () => {
   });
 
   it("pin click opens details", async () => {
+    // The whole trip, so both days' pins are on the map.
+    at("?view=all");
     const { doc, dayIds } = newTrip();
     const tower = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng: 28.9742 }, "u1");
     const chora = addPlace(doc, { name: "Chora Church", category: "museum", dayId: dayIds[1], lat: 41.0312, lng: 28.9393 }, "u1");
@@ -293,10 +295,10 @@ describe("place details", () => {
     fireEvent.click(document.querySelector<HTMLElement>(`[data-pin="${tower}"]`)!);
     expect(details("Galata Tower")).toBeTruthy();
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
-    // A pin on another day switches the panel and the view.
+    // A pin on another day switches the panel; the whole trip stays shown.
     fireEvent.click(document.querySelector<HTMLElement>(`[data-pin="${chora}"]`)!);
     expect(details("Chora Church")).toBeTruthy();
-    expect(window.location.search).toBe(`?view=day&day=${dayIds[1]}`);
+    expect(window.location.search).toBe("?view=all");
   });
 
   it("on phones the details are a modal sheet that keeps focus in it", async () => {

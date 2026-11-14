@@ -64,13 +64,13 @@ export function Suggestions({
 
   return (
     <section aria-labelledby={headingId} className="pb-2">
-      <div className="px-4 pb-2.5 pt-3.5">
+      <div className="px-5 pb-2.5 pt-3.5">
         <h2 id={headingId} tabIndex={-1} className="text-[15px] font-semibold tracking-[-0.01em] outline-none">
           {t("suggestions")}
         </h2>
         <p className="mt-0.5 text-[12.5px] text-ink-2">{t("suggestionsHelp")}</p>
       </div>
-      <div className="mx-3">
+      <div className="mx-5">
         {suggestions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t("suggestionsEmpty")}</p>
         ) : (

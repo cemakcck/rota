@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { placeNote, type PlacePatch, type PlaceView, type TimelineEntry } from "@rota/trip";
@@ -34,7 +34,7 @@ export const placeRowId = (id: string) => `place-row-${id}`;
 const placeTimeId = (id: string) => `place-time-${id}`;
 
 /** Clicks on the row's own controls (buttons, links, fields, the note) are theirs, not the row's. */
-const CONTROLS = "button, a, input, select, textarea, label, [contenteditable], [data-note-editor]";
+const CONTROLS = "button, a, input, select, textarea, label, form, [contenteditable], [data-note-editor]";
 
 const focusLater = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
@@ -203,6 +203,8 @@ export function StopRow({
   open,
   onOpen,
   actions,
+  trailing,
+  below,
 }: {
   place: PlaceView;
   /** Stop number within a day; none in Ideas. */
@@ -219,6 +221,10 @@ export function StopRow({
   open: boolean;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
+  /** In place of the time and stay (an idea's "Add to day…"). */
+  trailing?: ReactNode;
+  /** Under the row, inside it (an idea's add-to-day step). */
+  below?: ReactNode;
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
@@ -296,15 +302,18 @@ export function StopRow({
           {late && <WarnLine text={t("late", { minutes: late.minutes, place: late.from })} />}
           {warning && <HoursWarning {...warning} />}
         </div>
-        <When
-          place={place}
-          name={name}
-          timing={timing}
-          onSetTime={actions && ((time) => actions.setTime(place.id, time))}
-          editing={timeOpen}
-          setEditing={setTimeOpen}
-        />
+        {trailing ?? (
+          <When
+            place={place}
+            name={name}
+            timing={timing}
+            onSetTime={actions && ((time) => actions.setTime(place.id, time))}
+            editing={timeOpen}
+            setEditing={setTimeOpen}
+          />
+        )}
       </div>
+      {below}
 
     </li>
   );

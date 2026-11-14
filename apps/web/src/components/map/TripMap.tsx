@@ -6,12 +6,13 @@ import { useTranslations } from "next-intl";
 import type { Awareness } from "y-protocols/awareness";
 import type { TripView } from "@rota/trip";
 import { setMapCursor, stopMapCursor } from "@/client/presence";
-import { Icon } from "../trip/icons";
 import type { ListChoice } from "../trip/MoveDialog";
 import { AddHere, type NewMapPlace, type ReverseGeocode } from "./AddHere";
 import { PEEK_PX, type Snap } from "./BottomSheet";
 import { MapLoaderContext, type LngLat, type MapView, type Padding } from "./engine";
-import { dayColour, mapFeatures, type Pin } from "./mapFeatures";
+import { mapFeatures, type MapShown, type Pin } from "./mapFeatures";
+
+export type { MapShown };
 import { RemoteCursors } from "./RemoteCursors";
 
 /** How long a touch must rest on the map to add a place there. */
@@ -26,10 +27,11 @@ type Props = {
   view: TripView;
   /** Places the filters hide: not pinned. */
   hiddenIds: Set<string>;
-  /** The day whose route is drawn and whose pins the map fits; null for all days. */
-  selectedDayId: string | null;
+  /** What the map follows (the list column's view): a day, Ideas, or the whole trip. */
+  shown: MapShown;
   selectedPlaceId: string | null;
-  onSelectDay(id: string | null): void;
+  /** The details panel is open over the map's left edge (wide screens): fits keep the pins clear of it. */
+  panel: boolean;
   onSelectPlace(id: string): void;
   /** Road geometry per day, when known; else routes are straight lines. */
   routeGeometry?: Record<string, GeoJSON.LineString>;
@@ -45,26 +47,37 @@ type Props = {
   sheet: Snap | null;
 };
 
+/** How much of the map's left edge the details panel covers on wide screens (its 16 px inset and 340 px width). */
+export const PANEL_COVER_PX = 16 + 340;
+
 /**
- * The trip's map (spec §6): MapLibre with OpenFreeMap tiles, pins per day in the day's colour, the
- * selected day's route, friends' cursors. Fits the trip when it opens and the selected day when that
- * changes; a pin selects its place in the list and a place selected in the list is brought into view.
+ * The trip's map (spec §2): MapLibre with OpenFreeMap's muted Positron style, following the view the
+ * rail chose: a day's numbered teardrop pins and route in its colour, Ideas' small grey pins, or the
+ * whole trip; friends' cursors. Fits what is shown when it opens and whenever the view changes (at once
+ * under reduced motion); a pin selects its place and opens its details, and a place selected in the
+ * list is brought into view. No controls on its left edge, where the details panel opens.
  * Visual only: the list is the accessible source of truth, so pins are hidden from assistive technology.
  */
-export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSelectDay, onSelectPlace, routeGeometry, awareness, userId, add, sheet }: Props) {
-  const t = useTranslations("trip");
+export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSelectPlace, routeGeometry, awareness, userId, add, sheet }: Props) {
   const tm = useTranslations("map");
   const load = useContext(MapLoaderContext);
   const container = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapView | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [adding, setAdding] = useState<LngLat | null>(null);
-  const features = useMemo(() => mapFeatures(view, { selectedDayId, hiddenIds, routeGeometry }), [view, selectedDayId, hiddenIds, routeGeometry]);
+  const shownDayId = shown.kind === "day" ? shown.dayId : null;
+  const shownKey = shown.kind === "day" ? `day:${shown.dayId}` : shown.kind;
+  const features = useMemo(
+    () => mapFeatures(view, { shown: shownDayId !== null ? { kind: "day", dayId: shownDayId } : { kind: shownKey as "ideas" | "all" }, hiddenIds, routeGeometry }),
+    [view, shownKey, shownDayId, hiddenIds, routeGeometry],
+  );
 
-  // Room for the controls, and for the sheet where it covers the bottom of the map.
+  // Room for the controls, for the details panel over the left edge (wide screens), and for the sheet
+  // where it covers the bottom of the map (phones).
   const padding = (height: number): Padding => {
-    const covered = wide() || sheet === null || sheet === "full" ? 0 : sheet === "half" ? height / 2 : PEEK_PX;
-    return { top: 64, right: 56, bottom: 32 + covered, left: 32 };
+    const isWide = wide();
+    const covered = isWide || sheet === null || sheet === "full" ? 0 : sheet === "half" ? height / 2 : PEEK_PX;
+    return { top: 48, right: 56, bottom: 32 + covered, left: 32 + (isWide && panel ? PANEL_COVER_PX : 0) };
   };
 
   const start = useEffectEvent(() => ({
@@ -96,21 +109,21 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
     };
   }, [load]);
 
-  useEffect(() => map?.setRoute(features.route), [map, features.route]);
+  useEffect(() => map?.setRoutes(features.routes), [map, features.routes]);
 
-  // Fit the trip once the map is there (its container has its final size by then), and the selected
-  // day when it changes; otherwise bring a newly selected place into view if it is not.
-  const fitted = useRef<{ map: MapView; day: string | null } | null>(null);
+  // Fit what is shown once the map is there (its container has its final size by then), and again when
+  // the view changes; otherwise bring a newly selected place into view if it is not.
+  const fitted = useRef<{ map: MapView; view: string } | null>(null);
   const follow = useEffectEvent((m: MapView) => {
     const options = {
       padding: padding(m.size().height),
       animate: !reducedMotion(),
     };
     if (fitted.current?.map !== m) {
-      fitted.current = { map: m, day: selectedDayId };
+      fitted.current = { map: m, view: shownKey };
       m.fit(features.bounds, { ...options, animate: false });
-    } else if (fitted.current.day !== selectedDayId) {
-      fitted.current.day = selectedDayId;
+    } else if (fitted.current.view !== shownKey) {
+      fitted.current.view = shownKey;
       m.fit(features.bounds, options);
     } else {
       const pin = features.pins.find((p) => p.id === selectedPlaceId);
@@ -123,7 +136,7 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
   });
   useEffect(() => {
     if (map) follow(map);
-  }, [map, selectedDayId, selectedPlaceId]);
+  }, [map, shownKey, selectedPlaceId]);
 
   // This person's pointer, for friends' maps (mouse and pen; a finger on the map is panning).
   useEffect(() => {
@@ -166,7 +179,7 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
     if (map && awareness && userId && e.pointerType !== "touch") setMapCursor(awareness, round(map.unproject(local(e))));
   }
 
-  const selectedDay = view.days.find((d) => d.id === selectedDayId);
+
   return (
     <div
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#f1efe9]"
@@ -191,22 +204,6 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
       {map && <RemoteCursors map={map} awareness={awareness} userId={userId} />}
       {unavailable && <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-[13.5px] text-ink-2">{tm("unavailable")}</p>}
 
-      {view.days.length > 0 && (
-        <div role="group" aria-label={tm("daysShown")} className="absolute left-3 right-16 top-3 z-[3] flex gap-1.5 overflow-x-auto p-0.5">
-          {[null, ...view.days.map((d) => d.id)].map((id, i) => (
-            <button
-              key={id ?? ""}
-              type="button"
-              aria-pressed={selectedDayId === id}
-              onClick={() => onSelectDay(id)}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 text-[12.5px] font-medium text-ink-2 shadow-2 aria-pressed:bg-ink aria-pressed:text-white"
-            >
-              {id !== null && <span aria-hidden="true" className="size-2 rounded-full" style={{ background: dayColour(i - 1) }} />}
-              {id === null ? tm("allDays") : t("day", { n: i })}
-            </button>
-          ))}
-        </div>
-      )}
       {map && (
         <button
           type="button"
@@ -230,7 +227,7 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
         <AddHere
           at={adding}
           lists={add.lists}
-          defaultList={selectedDay?.id ?? null}
+          defaultList={view.days.some((d) => d.id === shownDayId) ? shownDayId : null}
           reverseGeocode={add.reverseGeocode}
           onClose={() => setAdding(null)}
           onAdd={(place) => {
@@ -248,9 +245,20 @@ const round = ({ lat, lng }: LngLat): LngLat => ({
   lng: Math.round(lng * 1e6) / 1e6,
 });
 
-/** One pin: a numbered dot in its day's colour, or a grey dot with the category's icon for Ideas. */
+/** "#1e3a8a" as rgba with the given alpha (a pin's halo). */
+const tint = (hex: string, alpha: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
+
+/**
+ * One pin: a teardrop in its day's colour with the stop number (about 34 px; 42 px with a halo when
+ * selected), or a small grey one for Ideas. Hovering shows a small card with the place's name.
+ */
 function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; selected: boolean; onSelect(id: string): void }) {
+  const t = useTranslations("trip");
   const [element] = useState(() => document.createElement("div"));
+  const [hover, setHover] = useState(false);
   const marker = useRef<ReturnType<MapView["addMarker"]> | null>(null);
   const at = useEffectEvent(() => ({ lat: pin.lat, lng: pin.lng }));
   useEffect(() => {
@@ -262,25 +270,45 @@ function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; s
     };
   }, [map, element]);
   useEffect(() => marker.current?.move({ lat: pin.lat, lng: pin.lng }), [pin.lat, pin.lng]);
-  // The selected pin above the rest, the selected day's above the others'.
-  const layer = selected ? "3" : pin.active ? "2" : "1";
+  // The selected (or hovered) pin above the rest, Ideas under the days' pins.
+  const layer = selected || hover ? "3" : pin.number === null ? "1" : "2";
   useEffect(() => {
     element.style.setProperty("z-index", layer);
   }, [element, layer]);
 
-  const size = selected ? "size-8 text-[13px]" : "size-[26px] text-[11.5px]";
+  const idea = pin.number === null;
+  const px = idea ? (selected ? 32 : 24) : selected ? 42 : 34;
+  const size = idea ? (selected ? "size-8" : "size-6") : selected ? "size-[42px]" : "size-[34px]";
+  const shadow = "0 3px 8px rgba(0, 0, 0, 0.25)";
   return createPortal(
     <div
       data-pin={pin.id}
+      data-selected={selected || undefined}
+      data-idea={idea || undefined}
       aria-hidden="true"
-      title={pin.name}
       onClick={() => onSelect(pin.id)}
-      className={`grid cursor-pointer place-items-center rounded-full border-2 border-white font-mono font-semibold text-white shadow-[0_2px_6px_rgba(28,27,25,.3)] ${size} ${
-        selected ? "outline-2 outline-offset-1 outline-ink" : ""
-      } ${pin.active ? "" : "opacity-45"}`}
-      style={{ background: pin.colour }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      className="relative flex cursor-pointer flex-col items-center"
     >
-      {pin.number ?? <Icon name={pin.category} size={14} />}
+      {hover && (
+        <span className="pointer-events-none absolute bottom-full mb-2 max-w-[220px] truncate whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-semibold text-ink shadow-2">
+          {pin.name || t("unnamed")}
+        </span>
+      )}
+      {/* A square with three round corners, turned so the sharp one points at the place. */}
+      <div
+        data-pin-head
+        className={`grid -rotate-45 place-items-center rounded-[50%_50%_50%_4px] border-[3px] border-white ${size}`}
+        style={{
+          background: pin.colour,
+          boxShadow: selected ? `0 0 0 5px ${tint(pin.colour, 0.25)}, ${shadow}` : shadow,
+          // The turned tip reaches below the square's box: this puts it on the coordinate.
+          marginBottom: Math.round(px * 0.21),
+        }}
+      >
+        {!idea && <span className={`rotate-45 font-semibold text-white ${selected ? "text-[15px]" : "text-[13px]"}`}>{pin.number}</span>}
+      </div>
     </div>,
     element,
   );

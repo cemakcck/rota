@@ -24,6 +24,9 @@ export const ISTANBUL = { lat: 41.0082, lng: 28.9784 };
 /** Half the side, in degrees, of the box shown around a destination (about a city). */
 export const CITY_PAD = 0.08;
 
+/** What the map follows: one day, Ideas, or the whole trip (the list column's view). */
+export type MapShown = { kind: "day"; dayId: string } | { kind: "ideas" } | { kind: "all" };
+
 export type Pin = {
   id: string;
   name: string;
@@ -35,8 +38,6 @@ export type Pin = {
   number: number | null;
   colour: string;
   category: Category;
-  /** False while another day is selected: still shown, but quieter. */
-  active: boolean;
 };
 
 export type Route = {
@@ -48,7 +49,7 @@ export type Route = {
 /** [west, south, east, north]. */
 export type Bounds = [number, number, number, number];
 
-export type MapFeatures = { pins: Pin[]; route: Route | null; bounds: Bounds };
+export type MapFeatures = { pins: Pin[]; routes: Route[]; bounds: Bounds };
 
 export const dayColour = (index: number) => DAY_COLOURS[index % DAY_COLOURS.length];
 
@@ -63,73 +64,48 @@ function boundsOf(points: { lat: number; lng: number }[]): Bounds {
 const around = ({ lat, lng }: { lat: number; lng: number }): Bounds => [lng - CITY_PAD, lat - CITY_PAD, lng + CITY_PAD, lat + CITY_PAD];
 
 /**
- * What the map shows (spec §6): pins for the planned places that have coordinates and pass the
- * filters, numbered per day in the day's colour, Ideas grey; the selected day's route, along roads when
- * `routeGeometry` has it, else straight between its consecutive pinned stops; and the area to fit (the
- * selected day's pins, else every pin, else the destination, else Istanbul).
+ * What the map shows (spec §2): it follows the view. A day: its pins (that have coordinates and pass
+ * the filters), numbered as in the list, in the day's colour, and its route, along roads when
+ * `routeGeometry` has it, else straight between its consecutive pinned stops. Ideas: the idea pins
+ * (grey, unnumbered). The whole trip: every day's pins and routes, and Ideas. The area to fit: the
+ * shown pins, else every pin of the trip, else the destination, else Istanbul.
  */
 export function mapFeatures(
   view: TripView,
   {
-    selectedDayId,
+    shown,
     hiddenIds,
     routeGeometry,
   }: {
-    selectedDayId: string | null;
+    shown: MapShown;
     hiddenIds: Set<string>;
     routeGeometry?: Record<string, GeoJSON.LineString>;
   },
 ): MapFeatures {
-  const shown = (p: PlaceView): p is PlaceView & { lat: number; lng: number } => pinned(p) && !hiddenIds.has(p.id);
-  const pins: Pin[] = [];
+  const visible = (p: PlaceView): p is PlaceView & { lat: number; lng: number } => pinned(p) && !hiddenIds.has(p.id);
+  const everyPin: Pin[] = [];
+  const routes: Route[] = [];
   for (const day of view.days) {
     const colour = dayColour(day.index);
+    const stops: Pin[] = [];
     day.places.forEach((p, i) => {
-      if (shown(p))
-        pins.push(
-          pinOf(p, {
-            dayId: day.id,
-            number: i + 1,
-            colour,
-            active: selectedDayId === null || selectedDayId === day.id,
-          }),
-        );
+      if (visible(p)) stops.push(pinOf(p, { dayId: day.id, number: i + 1, colour }));
     });
+    everyPin.push(...stops);
+    if (shown.kind === "all" || (shown.kind === "day" && shown.dayId === day.id)) {
+      const road = routeGeometry?.[day.id];
+      if (road) routes.push({ line: road, colour, approximate: false });
+      else if (stops.length >= 2) routes.push({ line: { type: "LineString", coordinates: stops.map((p) => [p.lng, p.lat]) }, colour, approximate: true });
+    }
   }
-  for (const p of view.ideas)
-    if (shown(p))
-      pins.push(
-        pinOf(p, {
-          dayId: null,
-          number: null,
-          colour: IDEAS_COLOUR,
-          active: selectedDayId === null,
-        }),
-      );
+  for (const p of view.ideas) if (visible(p)) everyPin.push(pinOf(p, { dayId: null, number: null, colour: IDEAS_COLOUR }));
 
-  const day = view.days.find((d) => d.id === selectedDayId);
-  const stops = day ? pins.filter((p) => p.dayId === day.id) : [];
-  const road = day && routeGeometry?.[day.id];
-  const route: Route | null = !day
-    ? null
-    : road
-      ? { line: road, colour: dayColour(day.index), approximate: false }
-      : stops.length >= 2
-        ? {
-            line: {
-              type: "LineString",
-              coordinates: stops.map((p) => [p.lng, p.lat]),
-            },
-            colour: dayColour(day.index),
-            approximate: true,
-          }
-        : null;
-
-  const bounds = stops.length > 0 ? boundsOf(stops) : pins.length > 0 ? boundsOf(pins) : around(view.destination ?? ISTANBUL);
-  return { pins, route, bounds };
+  const pins = everyPin.filter((p) => shown.kind === "all" || (shown.kind === "ideas" ? p.dayId === null : p.dayId === shown.dayId));
+  const bounds = pins.length > 0 ? boundsOf(pins) : everyPin.length > 0 ? boundsOf(everyPin) : around(view.destination ?? ISTANBUL);
+  return { pins, routes, bounds };
 }
 
-function pinOf(p: PlaceView & { lat: number; lng: number }, at: Pick<Pin, "dayId" | "number" | "colour" | "active">): Pin {
+function pinOf(p: PlaceView & { lat: number; lng: number }, at: Pick<Pin, "dayId" | "number" | "colour">): Pin {
   return {
     id: p.id,
     name: p.name,
