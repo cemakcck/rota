@@ -9,10 +9,15 @@ export type RunningServer = { url: string; close(): Promise<void> };
 
 /** One Node process, one port: Next.js serves pages and API; `/sync` is the Hocuspocus sync server. */
 export async function startServer({ port, dev }: { port: number; dev: boolean }): Promise<RunningServer> {
-  const app = next({ dev, dir: import.meta.dirname, port });
+  // On the first request it handles, Next adds its own "upgrade" listener to `httpServer` (or, when that
+  // is unset, to the server the request came in on). That listener runs Next's router on every upgrade,
+  // /sync included, and ends sockets whose path matches a page (/sync matches /[locale]) — killing the
+  // sync socket we had just accepted. So Next gets a server of its own that never listens: its listener
+  // lands there, and only upgrades that are not /sync are passed on to it (HMR in dev).
+  const nextUpgrades = createServer();
+  const app = next({ dev, dir: import.meta.dirname, port, httpServer: nextUpgrades });
   await app.prepare();
   const handle = app.getRequestHandler();
-  const handleUpgrade = app.getUpgradeHandler();
   const sync = serveSync(createSyncServer());
   const stopCleanup = startCleanup();
 
@@ -25,8 +30,9 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
       sync.handleUpgrade(req, socket, head);
       return;
     }
-    // Everything else (Next's HMR socket in dev) belongs to Next.
-    void handleUpgrade(req, socket, head);
+    // Everything else (Next's HMR socket in dev) belongs to Next. Its listener exists once it has
+    // served a request; before that there is nothing to upgrade to (HMR is opened by a served page).
+    if (!nextUpgrades.emit("upgrade", req, socket, head)) socket.destroy();
   });
 
   await new Promise<void>((resolve, reject) => {
