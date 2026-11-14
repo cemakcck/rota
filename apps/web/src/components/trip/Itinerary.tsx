@@ -10,6 +10,7 @@ import type { DayWeather } from "@/client/useWeather";
 import { MoveDialog } from "./MoveDialog";
 import { placeMoveId, type PlaceActions } from "./PlaceRow";
 import { DaySection } from "./DaySection";
+import { Suggestions, type SuggestionActions } from "./Suggestions";
 import { dropTarget, plannedLists, type ListId } from "./plan";
 
 /**
@@ -29,7 +30,7 @@ export const SILENT: Announcements = {
 export type ItineraryActions = PlaceActions & {
   move(id: string, to: { dayId: ListId } & Slot): boolean;
   setDay(dayId: string, patch: DayPatch): void;
-};
+} & SuggestionActions;
 
 /**
  * The days in order, then Ideas. Places move by dragging (pointer), or with the row's up/down buttons
@@ -46,6 +47,7 @@ export function Itinerary({
   selectedId,
   onSelect,
   actions,
+  userId,
 }: {
   view: TripView;
   visible: (p: PlaceView) => boolean;
@@ -61,6 +63,7 @@ export function Itinerary({
   selectedId: string | null;
   onSelect(id: string): void;
   actions: ItineraryActions | null;
+  userId: string | null;
 }) {
   const t = useTranslations("trip");
   const [moving, setMoving] = useState<string | null>(null);
@@ -76,6 +79,7 @@ export function Itinerary({
     }
     return null;
   };
+  const listChoiceLabel = (id: ListId) => (id === null ? t("ideas") : `${listLabel(id)} · ${dayDate(view.days.find((d) => d.id === id)!.date)}`);
   const movingPlace = find(moving);
 
   // Someone else deleted (or un-planned) the place while its Move dialog was open: the dialog closes
@@ -130,6 +134,15 @@ export function Itinerary({
         onDay={null}
       />
 
+      <Suggestions
+        suggestions={view.suggestions}
+        dismissed={view.dismissed}
+        members={view.members}
+        userId={userId}
+        lists={lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }))}
+        actions={actions}
+      />
+
       <DragOverlay dropAnimation={null}>
         {dragged && (
           <div className="rounded-xl border border-ink bg-surface px-3 py-2 text-[14px] font-semibold shadow-2 [overflow-wrap:anywhere]">{dragged.name || t("unnamed")}</div>
@@ -140,7 +153,7 @@ export function Itinerary({
         <MoveDialog
           place={movingPlace.place}
           current={movingPlace.list}
-          lists={lists.map((l) => ({ id: l.id, label: l.id === null ? t("ideas") : `${listLabel(l.id)} · ${dayDate(view.days.find((d) => d.id === l.id)!.date)}` }))}
+          lists={lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }))}
           onClose={() => {
             const id = movingPlace.place.id;
             setMoving(null);

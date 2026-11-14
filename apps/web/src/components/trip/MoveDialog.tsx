@@ -16,20 +16,25 @@ export type ListChoice = { id: ListId; label: string };
 export function MoveDialog({
   place,
   current,
+  accept = false,
   lists,
   onMove,
   onClose,
 }: {
   place: PlaceView;
-  current: ListId;
+  /** The list the place is in; none for a suggestion being accepted. */
+  current?: ListId;
+  /** Accepting a suggestion: the same picker, worded for that. */
+  accept?: boolean;
   lists: ListChoice[];
   onMove: (to: ListId) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("common");
-  const [choice, setChoice] = useState<ListId>(current);
+  const [choice, setChoice] = useState<ListId>(current === undefined ? (lists[0]?.id ?? null) : current);
   const name = place.name || t("unnamed");
+  const title = t(accept ? "acceptTitle" : "moveTitle", { name });
   const key = (id: ListId) => id ?? "ideas";
 
   // When the dialog goes away and its trigger went with it (the place was deleted elsewhere), focus
@@ -57,11 +62,11 @@ export function MoveDialog({
           // Focus goes back to the place's own button, which the caller focuses after the move.
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          <Dialog.Title className="text-[16px] font-semibold [overflow-wrap:anywhere]">{t("moveTitle", { name })}</Dialog.Title>
-          <Dialog.Description className="mt-1 text-ink-2">{t("moveHelp")}</Dialog.Description>
+          <Dialog.Title className="text-[16px] font-semibold [overflow-wrap:anywhere]">{title}</Dialog.Title>
+          <Dialog.Description className="mt-1 text-ink-2">{t(accept ? "acceptHelp" : "moveHelp")}</Dialog.Description>
           <form onSubmit={submit} className="mt-4">
             <fieldset className="grid gap-1.5">
-              <legend className="sr-only">{t("moveTitle", { name })}</legend>
+              <legend className="sr-only">{title}</legend>
               {lists.map((list) => (
                 <label
                   key={key(list.id)}
@@ -79,7 +84,7 @@ export function MoveDialog({
                 </button>
               </Dialog.Close>
               <button type="submit" className={`${btnPrimary} ${btnSm}`}>
-                {t("moveSubmit")}
+                {t(accept ? "acceptSubmit" : "moveSubmit")}
               </button>
             </div>
           </form>

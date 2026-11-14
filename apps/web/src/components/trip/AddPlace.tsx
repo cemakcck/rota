@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import type { Category } from "@rota/trip";
-import { btnPrimary, errorText, hint } from "../ui";
+import { btn, btnPrimary, errorText, hint } from "../ui";
 import type { ListId } from "./plan";
 import type { ListChoice } from "./MoveDialog";
 import { PlaceSearch } from "./PlaceSearch";
@@ -21,12 +21,15 @@ export function AddPlace({
   full,
   near,
   onAdd,
+  onSuggest,
 }: {
   lists: ListChoice[];
   full: boolean;
   /** Search results are biased towards the trip's area. */
   near: { lat: number; lng: number } | null;
   onAdd: (place: AddedPlace, to: ListId) => void;
+  /** Proposes the place to the group instead of planning it. */
+  onSuggest: (place: AddedPlace) => void;
 }) {
   const t = useTranslations("trip");
   const id = useId();
@@ -51,6 +54,17 @@ export function AddPlace({
       return nameRef.current?.focus();
     }
     add({ name, category: "other" });
+  }
+
+  function suggest() {
+    if (!name.trim()) {
+      setError(true);
+      return nameRef.current?.focus();
+    }
+    onSuggest({ name, category: "other" });
+    setName("");
+    setError(false);
+    nameRef.current?.focus();
   }
 
   return (
@@ -99,6 +113,14 @@ export function AddPlace({
           </span>
           <button type="submit" className={`${btnPrimary} h-10`} disabled={full}>
             {t("add")}
+          </button>
+        </div>
+        <div>
+          <span aria-hidden="true" className="mb-1 block text-[13px]">
+            &nbsp;
+          </span>
+          <button type="button" className={`${btn} h-10`} disabled={full} onClick={suggest}>
+            {t("suggest")}
           </button>
         </div>
       </div>

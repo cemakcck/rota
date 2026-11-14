@@ -14,6 +14,8 @@ import {
   moveChecklistItem,
   movePlace,
   setDay,
+  setPlaceStatus,
+  vote,
   setTripMeta,
   updateChecklistItem,
   updatePlace,
@@ -271,6 +273,15 @@ function TripScreenFor({ tripId }: Props) {
       setToast({ name: place.name || t("unnamed"), focus: placeFocusId(place.id), at: Date.now() });
     },
     setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
+    vote: (id, value) => vote(doc, id, editor, value),
+    // One transaction (one undo step, one announcement): planned, then into the chosen list.
+    accept: (id, to) =>
+      doc.transact(() => {
+        setPlaceStatus(doc, id, "planned", editor);
+        movePlace(doc, id, { dayId: to }, editor);
+      }, editor),
+    dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
+    restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
   const checklistActions: ChecklistActions | null = editor === null ? null : {
     add: (text) => addChecklistItem(doc, text, editor),
@@ -356,7 +367,15 @@ function TripScreenFor({ tripId }: Props) {
                 }}
               />
               <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
-                {editor !== null && <AddPlace lists={lists} full={full} near={centre} onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)} />}
+                {editor !== null && (
+                  <AddPlace
+                    lists={lists}
+                    full={full}
+                    near={centre}
+                    onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)}
+                    onSuggest={(place) => addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor)}
+                  />
+                )}
                 <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
                 <Itinerary
                   view={view}
@@ -369,6 +388,7 @@ function TripScreenFor({ tripId }: Props) {
                   selectedId={selectedPlaceId}
                   onSelect={select}
                   actions={actions}
+                  userId={editor}
                 />
               </div>
               <div role="tabpanel" id={`${tabsId}-checklist`} aria-labelledby={`${tabsId}-checklist-tab`} hidden={tab !== "checklist"}>
