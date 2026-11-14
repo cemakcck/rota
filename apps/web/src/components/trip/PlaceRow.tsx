@@ -26,6 +26,11 @@ export type PlaceActions = {
 export const placeFocusId = (id: string) => `place-edit-${id}`;
 /** The id of a place's Move to… button, where focus goes back to when the Move dialog closes. */
 export const placeMoveId = (id: string) => `place-move-${id}`;
+/** The id of a place's row, scrolled into view when its pin is tapped. */
+export const placeRowId = (id: string) => `place-row-${id}`;
+
+/** Clicks on the row's own controls (buttons, links, fields, the note) do not select it. */
+const CONTROLS = "button, a, input, select, textarea, label, [contenteditable], [data-note-editor]";
 
 const ghost = "grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-40";
 
@@ -67,6 +72,8 @@ export function PlaceRow({
   last,
   arrival,
   dimmed,
+  selected,
+  onSelect,
   members,
   actions,
 }: {
@@ -77,6 +84,9 @@ export function PlaceRow({
   last: boolean;
   arrival?: string;
   dimmed: boolean;
+  /** Selected here or by tapping its pin: highlighted, and shown on the map. */
+  selected: boolean;
+  onSelect(id: string): void;
   members: MemberView[];
   actions: PlaceActions | null;
 }) {
@@ -101,11 +111,17 @@ export function PlaceRow({
         setDragRef(node);
         setDropRef(node);
       }}
+      id={placeRowId(place.id)}
       data-dimmed={dimmed || undefined}
+      aria-current={selected || undefined}
       style={editingOutline(peer)}
+      // Pointer selection for the map; the list itself is the accessible view of the trip.
+      onClick={(e) => {
+        if (!(e.target instanceof Element && e.target.closest(CONTROLS))) onSelect(place.id);
+      }}
       // Dimmed by filters: a quieter row whose text keeps AA contrast (no opacity on text).
       className={`relative grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-xl border p-3 ${
-        isOver && !isDragging ? "border-ink shadow-[0_0_0_1px_var(--color-ink)]" : "border-line"
+        (isOver && !isDragging) || selected ? "border-ink shadow-[0_0_0_1px_var(--color-ink)]" : "border-line"
       } ${dimmed ? "bg-line-2 text-ink-2" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
     >
       {peer && <EditingTag peer={peer} />}

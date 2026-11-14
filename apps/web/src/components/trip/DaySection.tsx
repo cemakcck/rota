@@ -85,6 +85,8 @@ export function DaySection({
   places,
   timeline,
   visible,
+  selectedId,
+  onSelect,
   members,
   actions,
   onDay,
@@ -95,6 +97,8 @@ export function DaySection({
   places: PlaceView[];
   timeline?: TimelineEntry[];
   visible: (p: PlaceView) => boolean;
+  selectedId: string | null;
+  onSelect(id: string): void;
   members: MemberView[];
   actions: PlaceActions | null;
   onDay: ((patch: DayPatch) => void) | null;
@@ -126,6 +130,8 @@ export function DaySection({
                 last={i === places.length - 1}
                 arrival={arrivals.get(place.id)}
                 dimmed={!visible(place)}
+                selected={place.id === selectedId}
+                onSelect={onSelect}
                 members={members}
                 actions={actions}
               />

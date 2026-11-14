@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
+import { MapLoaderContext } from "@/components/map/engine";
+import { fakeMap } from "../map/fakeMap";
 import { renderIntl } from "./helpers";
 import { fake, newTrip, useFakeTrip } from "./tripHarness";
 
@@ -23,22 +25,20 @@ const row = (name: string) => screen.getByText(name, { selector: "[data-testid=p
 const hidden = (name: string) => within(row(name)).queryByText("Hidden by filters") !== null;
 
 describe("filters", () => {
-  it("category filter dims places and reports how many are hidden", () => {
+  it("category filter dims places and reports how many are hidden", async () => {
     const { doc, dayIds } = newTrip();
-    addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
-    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0] }, "u1");
-    addPlace(doc, { name: "Istanbul Modern", category: "museum", dayId: null }, "u1");
-    let mapVisible: string[] = [];
+    const lokanta = addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0], lat: 41.0228, lng: 28.9779 }, "u1");
+    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], lat: 41.0317, lng: 28.9752 }, "u1");
+    addPlace(doc, { name: "Istanbul Modern", category: "museum", dayId: null, lat: 41.0267, lng: 28.9836 }, "u1");
+    const map = fakeMap();
     renderIntl(
-      <TripScreen
-        tripId="t1"
-        mapSlot={({ visible }) => {
-          mapVisible = [...fake.view.days.flatMap((d) => d.places), ...fake.view.ideas].filter(visible).map((p) => p.name);
-          return null;
-        }}
-      />,
+      <MapLoaderContext.Provider value={map.load}>
+        <TripScreen tripId="t1" />
+      </MapLoaderContext.Provider>,
     );
+    const pinned = () => [...document.querySelectorAll<HTMLElement>("[data-pin]")].map((p) => p.dataset.pin);
     expect(screen.getByRole("region", { name: "Map" })).toBeTruthy();
+    await waitFor(() => expect(pinned()).toHaveLength(3));
     expect(screen.queryByText(/hidden by filters/)).toBeNull();
 
     const filters = screen.getByRole("group", { name: "Category" });
@@ -52,7 +52,8 @@ describe("filters", () => {
     expect(row("Pera Museum").dataset.dimmed).toBe("true");
     expect(row("Karaköy Lokantası").dataset.dimmed).toBeUndefined();
     expect(screen.getByText("2 places hidden by filters")).toBeTruthy();
-    expect(mapVisible).toEqual(["Karaköy Lokantası"]);
+    // Filtered places leave the map.
+    expect(pinned()).toEqual([lokanta]);
 
     fireEvent.click(within(filters).getByRole("button", { name: "Museum" }));
     expect(screen.queryByText(/hidden by filters/)).toBeNull();

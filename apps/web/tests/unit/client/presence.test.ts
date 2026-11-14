@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
-import { MAP_CURSOR_MS, peers, setEditing, setMapCursor } from "@/client/presence";
+import { MAP_CURSOR_MS, peers, setEditing, setMapCursor, stopMapCursor } from "@/client/presence";
 
 const open: Awareness[] = [];
 function connection(state?: Record<string, unknown>): Awareness {
@@ -102,5 +102,29 @@ describe("presence", () => {
     setMapCursor(me, { lat: 40, lng: 28 });
     expect(published.at(-1)).toEqual({ lat: 40, lng: 28 });
     expect(published).toHaveLength(4);
+  });
+
+  it("a pending map cursor is dropped when the map closes or presence ends", () => {
+    vi.useFakeTimers({ now: 0 });
+    const me = connection({ user: { id: "u1", name: "Ann", colour: "#2563eb" }, editing: null, cursor: null });
+    // (Awareness keeps a timer of its own.)
+    const base = vi.getTimerCount();
+    setMapCursor(me, { lat: 41, lng: 29 });
+    setMapCursor(me, { lat: 41.1, lng: 29 });
+    expect(vi.getTimerCount()).toBe(base + 1);
+
+    // The map unmounts: the pending move is dropped and the cursor cleared at once.
+    stopMapCursor(me);
+    expect(vi.getTimerCount()).toBe(base);
+    expect(me.getLocalState()?.cursor).toBeNull();
+    // A later move starts afresh and goes out at once.
+    setMapCursor(me, { lat: 40, lng: 28 });
+    expect(me.getLocalState()?.cursor).toEqual({ lat: 40, lng: 28 });
+
+    // The connection's presence is destroyed with a move pending: nothing fires afterwards.
+    setMapCursor(me, { lat: 40.1, lng: 28 });
+    expect(vi.getTimerCount()).toBe(base + 1);
+    me.destroy();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -38,6 +38,8 @@ export function Itinerary({
   legsFor,
   listLabel,
   dayDate,
+  selectedId,
+  onSelect,
   actions,
 }: {
   view: TripView;
@@ -45,6 +47,9 @@ export function Itinerary({
   legsFor: (dayId: string) => (Leg | null)[];
   listLabel: (list: ListId) => string;
   dayDate: (date: string) => string;
+  /** The place selected in the list or on the map. */
+  selectedId: string | null;
+  onSelect(id: string): void;
   actions: ItineraryActions | null;
 }) {
   const t = useTranslations("trip");
@@ -94,12 +99,23 @@ export function Itinerary({
           places={day.places}
           timeline={dayTimeline(day, legsFor(day.id))}
           visible={visible}
+          selectedId={selectedId}
+          onSelect={onSelect}
           members={view.members}
           actions={rowActions}
           onDay={actions && ((patch) => actions.setDay(day.id, patch))}
         />
       ))}
-      <DaySection title={t("ideas")} places={view.ideas} visible={visible} members={view.members} actions={rowActions} onDay={null} />
+      <DaySection
+        title={t("ideas")}
+        places={view.ideas}
+        visible={visible}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        members={view.members}
+        actions={rowActions}
+        onDay={null}
+      />
 
       <DragOverlay dropAnimation={null}>
         {dragged && (

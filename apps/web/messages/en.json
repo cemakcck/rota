@@ -302,6 +302,28 @@
     "checklistFull": "The checklist is full",
     "checklistFullHelp": "It holds up to {max} items. Delete some to add more."
   },
+  "map": {
+    "sheetHandle": "Resize the list",
+    "sheet": {
+      "peek": "List minimised",
+      "half": "List half open",
+      "full": "List fully open"
+    },
+    "view": "Show",
+    "showList": "List",
+    "showMap": "Map",
+    "daysShown": "Day shown on the map",
+    "allDays": "All days",
+    "fit": "Fit the map to the places",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "attribution": "Map credits",
+    "unavailable": "The map can't be shown on this device. Everything is in the list.",
+    "addHere": "Add a place here",
+    "addHereHelp": "Right-click or long-press the map to add a place there.",
+    "lookingUp": "Looking up the address…",
+    "add": "Add"
+  },
   "categories": {
     "food": "Food",
     "drinks": "Drinks",

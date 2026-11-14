@@ -302,6 +302,28 @@
     "checklistFull": "Kontrol listesi dolu",
     "checklistFullHelp": "En fazla {max} madde alır. Yenilerini eklemek için birkaçını silin."
   },
+  "map": {
+    "sheetHandle": "Listeyi yeniden boyutlandır",
+    "sheet": {
+      "peek": "Liste küçültüldü",
+      "half": "Liste yarıya kadar açık",
+      "full": "Liste tamamen açık"
+    },
+    "view": "Göster",
+    "showList": "Liste",
+    "showMap": "Harita",
+    "daysShown": "Haritada gösterilen gün",
+    "allDays": "Tüm günler",
+    "fit": "Haritayı yerlere sığdır",
+    "zoomIn": "Yakınlaştır",
+    "zoomOut": "Uzaklaştır",
+    "attribution": "Harita kaynakları",
+    "unavailable": "Harita bu cihazda gösterilemiyor. Her şey listede.",
+    "addHere": "Buraya bir yer ekle",
+    "addHereHelp": "Oraya bir yer eklemek için haritaya sağ tıklayın veya uzun basın.",
+    "lookingUp": "Adres aranıyor…",
+    "add": "Ekle"
+  },
   "categories": {
     "food": "Yemek",
     "drinks": "İçki",

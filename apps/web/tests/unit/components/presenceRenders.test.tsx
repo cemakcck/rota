@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
+import { MapLoaderContext } from "@/components/map/engine";
+import { fakeMap } from "../map/fakeMap";
 import { renderIntl } from "./helpers";
 import { fake, newTrip, presencePeer, useFakeTrip } from "./tripHarness";
 
@@ -54,5 +56,26 @@ describe("presence renders", () => {
     peer.set({ user: deniz, editing: tower, cursor: null });
     expect(rowRenders.count).toBeGreaterThan(0);
     expect(screen.getByText("Deniz is editing")).toBeTruthy();
+  });
+
+  it("friends' map cursors move on the map without re-rendering the screen", async () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng: 28.9742 }, "u1");
+    addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0], lat: 41.0228, lng: 28.9779 }, "u1");
+    const map = fakeMap();
+    renderIntl(
+      <MapLoaderContext.Provider value={map.load}>
+        <TripScreen tripId="t1" />
+      </MapLoaderContext.Provider>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(2));
+    const peer = presencePeer();
+    peer.set({ user: deniz, editing: null, cursor: null });
+    rowRenders.count = 0;
+
+    peer.set({ user: deniz, editing: null, cursor: { lat: 41.5, lng: 29.5 } });
+    peer.set({ user: deniz, editing: null, cursor: { lat: 41.51, lng: 29.5 } });
+    expect(document.querySelector('[data-cursor="u2"]')?.textContent).toBe("Deniz");
+    expect(rowRenders.count).toBe(0);
   });
 });

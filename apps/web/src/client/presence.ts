@@ -44,7 +44,11 @@ const throttles = new WeakMap<Awareness, Throttle>();
  */
 export function setMapCursor(awareness: Awareness, cursor: MapCursor | null): void {
   let throttle = throttles.get(awareness);
-  if (!throttle) throttles.set(awareness, (throttle = { last: -Infinity, timer: null, next: null }));
+  if (!throttle) {
+    throttles.set(awareness, (throttle = { last: -Infinity, timer: null, next: null }));
+    // A move still waiting when presence ends must not fire on a destroyed awareness.
+    awareness.once("destroy", () => dropThrottle(awareness));
+  }
   const t = throttle;
   t.next = cursor;
   if (t.timer !== null) return;
@@ -56,6 +60,18 @@ export function setMapCursor(awareness: Awareness, cursor: MapCursor | null): vo
   const wait = t.last + MAP_CURSOR_MS - Date.now();
   if (wait <= 0) flush();
   else t.timer = setTimeout(flush, wait);
+}
+
+function dropThrottle(awareness: Awareness): void {
+  const t = throttles.get(awareness);
+  if (t?.timer != null) clearTimeout(t.timer);
+  throttles.delete(awareness);
+}
+
+/** The map is gone (unmounted): any pending move is dropped and the cursor cleared at once. */
+export function stopMapCursor(awareness: Awareness): void {
+  dropThrottle(awareness);
+  if (awareness.getLocalState()?.cursor) awareness.setLocalStateField("cursor", null);
 }
 
 const isString = (v: unknown): v is string => typeof v === "string";

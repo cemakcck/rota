@@ -27,6 +27,9 @@ import { forgetTrip } from "@/client/myTrips";
 import { setUser, usePeers } from "@/client/presence";
 import { useTrip } from "@/client/sync/useTrip";
 import { useRouter } from "@/i18n/navigation";
+import type { ReverseGeocode } from "../map/AddHere";
+import { BottomSheet, type Snap } from "../map/BottomSheet";
+import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
 import { AddPlace } from "./AddPlace";
 import { Announcer } from "./Announcer";
@@ -35,21 +38,20 @@ import { ClosedNotice } from "./ClosedNotice";
 import { Filters } from "./Filters";
 import { Header } from "./Header";
 import { Itinerary, type ItineraryActions } from "./Itinerary";
-import { placeFocusId } from "./PlaceRow";
+import { placeFocusId, placeRowId } from "./PlaceRow";
 import { CollabContext, Presence, type Collab } from "./Presence";
 import { estimatedLegs, NO_FILTER, passes, plannedLists, type ListId } from "./plan";
 import { TripSettingsScreen } from "./TripSettingsScreen";
 import { UndoToast } from "./UndoToast";
 
-/** What the map (Task 12) gets: the trip, and which places the filters leave visible. */
-export type MapSlot = (ctx: { view: TripView; visible: (p: PlaceView) => boolean }) => ReactNode;
-
 type Props = {
   tripId: string;
-  /** Renders inside the region named "Map". Empty until the map exists. */
-  mapSlot?: MapSlot;
   /** Travel legs between a day's consecutive stops, for arrival times. Defaults to straight-line estimates. */
   legsFor?: (dayId: string) => (Leg | null)[];
+  /** Road geometry of each day's route, when known. Defaults to straight lines between stops. */
+  routeGeometry?: Record<string, GeoJSON.LineString>;
+  /** A name for a point on the map, to prefill a place added there. */
+  reverseGeocode?: ReverseGeocode;
 };
 
 /** Per-person undo for the signed-in user; null while the user is unknown. Re-renders when the stacks change. */
@@ -124,8 +126,9 @@ export function TripScreen(props: Props) {
   return <TripScreenFor key={userId ?? ""} {...props} />;
 }
 
-function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
+function TripScreenFor({ tripId, legsFor, routeGeometry, reverseGeocode }: Props) {
   const t = useTranslations("trip");
+  const tm = useTranslations("map");
   const locale = useLocale();
   const router = useRouter();
   const { doc, view, status, ready, closed, firstOpenOffline, awareness, userId } = useTrip(tripId);
@@ -134,6 +137,12 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
   const undo = useUndo(doc, editor);
   const [filter, setFilter] = useState(NO_FILTER);
   const [tab, setTab] = useState<Tab>("plan");
+  // The map's day (undefined until one is picked: then the first), and the place selected in the list or on the map.
+  const [pickedDay, setPickedDay] = useState<string | null | undefined>(undefined);
+  const [picked, setPicked] = useState<string | null>(null);
+  // Phones: the full-screen map under the list's sheet, or the list alone.
+  const [phoneView, setPhoneView] = useState<"map" | "list">("map");
+  const [snap, setSnap] = useState<Snap>("half");
   const tabsId = useId();
   // What was deleted, and the element its Undo puts focus back on.
   const [toast, setToast] = useState<{ name: string; focus: string; at: number } | null>(null);
@@ -184,7 +193,7 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
 
   const full = useMemo(() => isTripFull(view, Y.encodeStateAsUpdate(doc).byteLength), [view, doc]);
   const visible = useCallback((p: PlaceView) => passes(filter, p), [filter]);
-  const hidden = plannedLists(view).reduce((n, l) => n + l.places.filter((p) => !visible(p)).length, 0);
+  const hiddenIds = useMemo(() => new Set(plannedLists(view).flatMap((l) => l.places.filter((p) => !visible(p)).map((p) => p.id))), [view, visible]);
   const legs =
     legsFor ??
     ((dayId: string) => {
@@ -262,9 +271,27 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
   const done = view.checklist.filter((i) => i.done).length;
   const lists = plannedLists(view).map((l) => ({ id: l.id, label: labelIn(view, l.id) }));
 
+  // Selection, shared by the list and the map. A day or place removed meanwhile is no longer selected.
+  const selectedDayId = pickedDay === undefined ? (view.days[0]?.id ?? null) : view.days.some((d) => d.id === pickedDay) ? pickedDay : null;
+  const listOf = (id: string) => plannedLists(view).find((l) => l.places.some((p) => p.id === id));
+  const selectedPlaceId = picked !== null && listOf(picked) ? picked : null;
+  const select = (id: string) => {
+    setPicked(id);
+    const day = listOf(id)?.id;
+    if (day) setPickedDay(day);
+  };
+  // A pin: its row is selected and brought into view (the sheet comes up if it was down).
+  const selectPin = (id: string) => {
+    select(id);
+    setTab("plan");
+    if (snap === "peek") setSnap("half");
+    const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    requestAnimationFrame(() => document.getElementById(placeRowId(id))?.scrollIntoView?.({ block: "nearest", behavior }));
+  };
+
   return (
     <CollabContext.Provider value={collab}>
-      <div className="flex min-h-dvh flex-col lg:h-dvh">
+      <div className="flex h-dvh flex-col">
         <Header
           view={view}
           status={status}
@@ -274,37 +301,82 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
           presence={<Presence self={userId ? (self ?? { id: userId, name: "", colour: "" }) : null} peers={peers} members={view.members} />}
         />
         {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
-        <div className="grid flex-1 lg:min-h-0 lg:grid-cols-[440px_minmax(0,1fr)]">
-          <main id="main" tabIndex={-1} aria-label={t("plan")} className="min-w-0 pb-24 outline-none lg:overflow-y-auto lg:border-r lg:border-line">
-            <Tabs
-              id={tabsId}
-              tab={tab}
-              onTab={setTab}
-              labels={{
-                plan: t("plan"),
-                checklist: (
-                  <>
-                    {t("checklist")}
-                    {view.checklist.length > 0 && (
-                      <span className="rounded-md bg-line-2 px-1.5 font-mono text-[11.5px]">
-                        {done}/{view.checklist.length}
-                      </span>
-                    )}
-                  </>
-                ),
-              }}
+        <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
+          {(["list", "map"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={phoneView === v}
+              onClick={() => setPhoneView(v)}
+              className="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-medium text-ink-2 aria-pressed:bg-ink aria-pressed:text-white"
+            >
+              {v === "list" ? tm("showList") : tm("showMap")}
+            </button>
+          ))}
+        </div>
+        <div className="relative grid min-h-0 flex-1 lg:grid-cols-[420px_minmax(0,1fr)]">
+          <BottomSheet off={phoneView === "list"} snap={snap} onSnap={setSnap}>
+            <main
+              id="main"
+              tabIndex={-1}
+              aria-label={t("plan")}
+              className="min-h-0 min-w-0 overflow-y-auto pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
+            >
+              <Tabs
+                id={tabsId}
+                tab={tab}
+                onTab={setTab}
+                labels={{
+                  plan: t("plan"),
+                  checklist: (
+                    <>
+                      {t("checklist")}
+                      {view.checklist.length > 0 && (
+                        <span className="rounded-md bg-line-2 px-1.5 font-mono text-[11.5px]">
+                          {done}/{view.checklist.length}
+                        </span>
+                      )}
+                    </>
+                  ),
+                }}
+              />
+              <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
+                {editor !== null && <AddPlace lists={lists} full={full} onAdd={(name, dayId) => addPlace(doc, { name, category: "other", dayId }, editor)} />}
+                <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
+                <Itinerary
+                  view={view}
+                  visible={visible}
+                  legsFor={legs}
+                  listLabel={(list) => labelIn(view, list)}
+                  dayDate={dayDate}
+                  selectedId={selectedPlaceId}
+                  onSelect={select}
+                  actions={actions}
+                />
+              </div>
+              <div role="tabpanel" id={`${tabsId}-checklist`} aria-labelledby={`${tabsId}-checklist-tab`} hidden={tab !== "checklist"}>
+                <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
+              </div>
+            </main>
+          </BottomSheet>
+          <section aria-label={t("map")} className={`min-h-0 max-lg:absolute max-lg:inset-0 ${phoneView === "list" ? "max-lg:hidden" : ""}`}>
+            <TripMap
+              view={view}
+              hiddenIds={hiddenIds}
+              selectedDayId={selectedDayId}
+              selectedPlaceId={selectedPlaceId}
+              onSelectDay={setPickedDay}
+              onSelectPlace={selectPin}
+              routeGeometry={routeGeometry}
+              awareness={awareness}
+              userId={userId}
+              add={
+                editor === null || full
+                  ? null
+                  : { lists, reverseGeocode, onAdd: ({ name, category, dayId, lat, lng }) => select(addPlace(doc, { name, category, dayId, lat, lng }, editor)) }
+              }
+              sheet={phoneView === "map" ? snap : null}
             />
-            <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
-              {editor !== null && <AddPlace lists={lists} full={full} onAdd={(name, dayId) => addPlace(doc, { name, category: "other", dayId }, editor)} />}
-              <Filters view={view} filter={filter} hidden={hidden} onChange={setFilter} />
-              <Itinerary view={view} visible={visible} legsFor={legs} listLabel={(list) => labelIn(view, list)} dayDate={dayDate} actions={actions} />
-            </div>
-            <div role="tabpanel" id={`${tabsId}-checklist`} aria-labelledby={`${tabsId}-checklist-tab`} hidden={tab !== "checklist"}>
-              <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
-            </div>
-          </main>
-          <section aria-label={t("map")} className="hidden bg-[#f1efe9] lg:block">
-            {mapSlot?.({ view, visible })}
           </section>
         </div>
         {toast && undo && (
