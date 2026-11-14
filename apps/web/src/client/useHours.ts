@@ -27,25 +27,30 @@ export function useHours(
   locale: Locale,
 ): { warnings: Map<string, StopWarning>; open: Map<string, StopHours> } {
   const ids = useMemo(() => [...new Set(view.days.flatMap((d) => d.places.flatMap((p) => (p.osmId ? [p.osmId] : []))))], [view.days]);
-  // Re-renders as hours arrive.
-  const { get } = useRemote(hours, ids);
-  const warnings = new Map<string, StopWarning>();
-  const open = new Map<string, StopHours>();
-  for (const day of view.days) {
-    const timeline = dayTimeline(day, legsFor(day.id));
-    day.places.forEach((place, i) => {
-      const tag = place.osmId ? get(place.osmId) : null;
-      if (!tag || !day.date) return;
-      const times = openingTimes(tag, day.date);
-      if (times) open.set(place.id, times);
-      const { arrive, leave } = timeline[i];
-      if (arrive === null || leave === null) {
-        if (closedAllDay(tag, day.date)) warnings.set(place.id, { warning: { kind: "closed-day" }, date: day.date, arrive: null });
-        return;
-      }
-      const warning = hoursWarning(tag, day.date, arrive, leave, locale);
-      if (warning) warnings.set(place.id, { warning, date: day.date, arrive });
-    });
-  }
-  return { warnings, open };
+  // Re-renders as hours arrive; `version` changes with each answer.
+  const { get, version } = useRemote(hours, ids);
+  // Parsing opening_hours is not cheap: only again when the days, their legs or the fetched hours change.
+  return useMemo(() => {
+    const warnings = new Map<string, StopWarning>();
+    const open = new Map<string, StopHours>();
+    for (const day of view.days) {
+      const timeline = dayTimeline(day, legsFor(day.id));
+      day.places.forEach((place, i) => {
+        const tag = place.osmId ? get(place.osmId) : null;
+        if (!tag || !day.date) return;
+        const times = openingTimes(tag, day.date);
+        if (times) open.set(place.id, times);
+        const { arrive, leave } = timeline[i];
+        if (arrive === null || leave === null) {
+          if (closedAllDay(tag, day.date)) warnings.set(place.id, { warning: { kind: "closed-day" }, date: day.date, arrive: null });
+          return;
+        }
+        const warning = hoursWarning(tag, day.date, arrive, leave, locale);
+        if (warning) warnings.set(place.id, { warning, date: day.date, arrive });
+      });
+    }
+    return { warnings, open };
+    // `get` is the shared cache's (stable) reader; `version` stands for its answers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is what changes when `get` has new answers
+  }, [view.days, legsFor, locale, get, version]);
 }
