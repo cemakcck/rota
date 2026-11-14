@@ -71,7 +71,7 @@ describe("trip screen map", () => {
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
     expect(row("Chora Church").getAttribute("aria-current")).toBeNull();
     expect(pin(tower).className).toContain("outline-ink");
-    fireEvent.click(within(row("Chora Church")).getByRole("button", { name: "Edit Chora Church" }));
+    fireEvent.click(within(row("Chora Church")).getByTestId("place-time"));
     expect(row("Galata Tower").getAttribute("aria-current")).toBe("true");
   });
 

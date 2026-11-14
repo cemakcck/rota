@@ -16,6 +16,7 @@ import {
   movePlace,
   setDay,
   setPlaceStatus,
+  setPlaceTime,
   vote,
   setTripMeta,
   updateChecklistItem,
@@ -39,16 +40,14 @@ import { SideBySide } from "../demo/SideBySide";
 import { BottomSheet, type Snap } from "../map/BottomSheet";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
-import { AddPlace } from "./AddPlace";
 import { Announcer } from "./Announcer";
 import { Checklist, checkFocusId, type ChecklistActions } from "./Checklist";
 import { ClosedNotice } from "./ClosedNotice";
+import { DayPlan, SILENT, type PlanActions } from "./DayPlan";
 import { DemoBox } from "./DemoBox";
-import { Filters } from "./Filters";
-import { Itinerary, SILENT, type ItineraryActions, type ItineraryScope } from "./Itinerary";
-import { placeFocusId, placeRowId } from "./PlaceRow";
 import { CollabContext, Presence, type Collab } from "./Presence";
-import { NO_FILTER, dropTarget, passes, plannedLists, tripCentre, type ListId } from "./plan";
+import { NO_FILTER, dropPlace, passes, plannedLists, tripCentre, type ListId } from "./plan";
+import { placeFocusId, placeRowId } from "./StopRow";
 import { Rail } from "./Rail";
 import { TripHeader } from "./TripHeader";
 import { TripSettingsScreen } from "./TripSettingsScreen";
@@ -213,17 +212,16 @@ function TripScreenFor({ tripId }: Props) {
       </main>
     );
 
-  const actions: ItineraryActions | null = editor === null ? null : {
+  const actions: PlanActions | null = editor === null ? null : {
     save: (id, edit) => updatePlace(doc, id, edit, editor),
-    setStay: (id, stayMinutes) => updatePlace(doc, id, { stayMinutes }, editor),
-    nudge(id, by) {
-      const list = plannedLists(view).find((l) => l.places.some((p) => p.id === id));
-      if (!list) return;
-      const neighbour = list.places[list.places.findIndex((p) => p.id === id) + by];
-      if (neighbour) movePlace(doc, id, by < 0 ? { dayId: list.id, beforeId: neighbour.id } : { dayId: list.id, afterId: neighbour.id }, editor);
-    },
+    setTime: (id, time) => void setPlaceTime(doc, id, time, editor),
+    // Set by the plan (it knows the neighbours and says what happened).
+    nudge: () => undefined,
     openMove: () => undefined,
-    move: (id, to) => movePlace(doc, id, to, editor),
+    // Every move from the plan (drag, Alt+arrows, Move to…) re-times a timed stop for its new slot (spec §2b).
+    move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
+    add: ({ time, ...place }, to) =>
+      void (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor) : addPlace(doc, { ...place, dayId: to, time }, editor)),
     remove(place) {
       // Its own undo step, so the toast's Undo restores just the place.
       undo?.stopCapturing();
@@ -272,13 +270,9 @@ function TripScreenFor({ tripId }: Props) {
     requestAnimationFrame(() => document.getElementById(placeRowId(id))?.scrollIntoView?.({ block: "nearest", behavior }));
   };
 
-  // The list column: one day, Ideas & votes or the whole trip (the itinerary), or the checklist.
-  const scope: ItineraryScope | null = shown.kind === "day" ? { dayId: shown.dayId } : shown.kind === "checklist" ? null : shown.kind;
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
-    if (!actions || !over) return;
-    const to = dropTarget(view, String(active.id), String(over.id));
-    if (to) actions.move(String(active.id), to);
+    if (editor !== null && over) dropPlace(doc, view, String(active.id), String(over.id), editor);
   };
   const dragged = dragging === null ? undefined : listOf(dragging)?.places.find((p) => p.id === dragging);
 
@@ -334,37 +328,29 @@ function TripScreenFor({ tripId }: Props) {
                     id="main"
                     tabIndex={-1}
                     aria-label={shown.kind === "checklist" ? t("checklist") : t("plan")}
-                    className="min-h-0 min-w-0 overflow-y-auto pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
+                    className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
                   >
-                    {scope === null ? (
+                    {shown.kind === "checklist" ? (
                       <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
                     ) : (
-                      <>
-                        {editor !== null && (
-                          <AddPlace
-                            lists={lists}
-                            full={full}
-                            near={centre}
-                            onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)}
-                            onSuggest={(place) => addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor)}
-                          />
-                        )}
-                        <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
-                        <Itinerary
-                          view={view}
-                          scope={scope}
-                          visible={visible}
-                          travel={travel}
-                          warnings={warnings}
-                          weather={weather}
-                          listLabel={(list) => labelIn(view, list)}
-                          dayDate={dayDate}
-                          selectedId={selectedPlaceId}
-                          onSelect={select}
-                          actions={actions}
-                          userId={editor}
-                        />
-                      </>
+                      <DayPlan
+                        view={view}
+                        shown={shown}
+                        travel={travel}
+                        warnings={warnings}
+                        filter={filter}
+                        onFilter={setFilter}
+                        hidden={hiddenIds.size}
+                        visible={visible}
+                        selectedId={selectedPlaceId}
+                        onSelect={select}
+                        actions={actions}
+                        full={full}
+                        near={centre}
+                        listLabel={(list) => labelIn(view, list)}
+                        dayDate={dayDate}
+                        userId={editor}
+                      />
                     )}
                   </main>
                 </BottomSheet>

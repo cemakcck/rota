@@ -33,7 +33,7 @@ describe("place search", () => {
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
 
-    const box = screen.getByRole("combobox", { name: "Place name" });
+    const box = screen.getByRole("combobox", { name: "Add a place to Day 1…" });
     expect(box.getAttribute("aria-expanded")).toBe("false");
     fireEvent.change(box, { target: { value: "Galata" } });
     const list = await screen.findByRole("listbox");
@@ -53,6 +53,10 @@ describe("place search", () => {
     fireEvent.keyDown(box, { key: "ArrowUp" });
     fireEvent.keyDown(box, { key: "ArrowDown" });
     fireEvent.keyDown(box, { key: "Enter" });
+    // The pick opens the add step (time, stay); Enter there adds it to the day.
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(fake.view.days[0].places).toHaveLength(0);
+    fireEvent.keyDown(screen.getByLabelText("Time"), { key: "Enter" });
 
     expect(fake.view.days[0].places).toHaveLength(1);
     expect(fake.view.days[0].places[0]).toMatchObject({
@@ -76,11 +80,12 @@ describe("place search", () => {
     const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     try {
       renderIntl(<TripScreen tripId="t1" />);
-      const box = screen.getByRole("combobox", { name: "Place name" });
+      const box = screen.getByRole("combobox", { name: "Add a place to Day 1…" });
       fireEvent.change(box, { target: { value: "Galata" } });
       expect(await screen.findByText("Search needs a connection — add it by name instead")).toBeTruthy();
       expect(fn).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      fireEvent.keyDown(box, { key: "Enter" });
+      fireEvent.click(screen.getByRole("button", { name: "Add to Day 1" }));
       expect(fake.view.days[0].places[0]).toMatchObject({ name: "Galata", lat: null, osmId: null });
     } finally {
       online.mockRestore();

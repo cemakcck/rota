@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
-import { addPlace, createUndo, dayUrls, deletePlace, movePlace, placeUrl, setPlaceTime, updatePlace } from "@rota/trip";
+import { addPlace, createUndo, deletePlace, movePlace, placeUrl, setPlaceTime, updatePlace } from "@rota/trip";
 import { renderIntl } from "./helpers";
 import { fake, newTrip, remoteEdit, remotePeer, useFakeTrip } from "./tripHarness";
 
@@ -23,39 +23,45 @@ import { TripScreen } from "@/components/trip/TripScreen";
 
 // The whole trip in the list column: these cover every day and Ideas at once.
 beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=all"));
-import { dropTarget, listDropId, placeDropId } from "@/components/trip/plan";
+import { dropPlace, dropTarget, listDropId, placeDropId } from "@/components/trip/plan";
 
 afterEach(cleanup);
 
 const day = (n: number) => screen.getByRole("region", { name: new RegExp(`^Day ${n}\\b`) });
 const names = (region: HTMLElement) => within(region).queryAllByTestId("place-name").map((e) => e.textContent);
 const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
+/** Opens a stop (click on its name): its editor, note and actions show under the row. */
+const open = (name: string) => fireEvent.click(within(row(name)).getByRole("button", { name }));
 
-describe("itinerary", () => {
+describe("stops", () => {
   it("adds, edits category and tags, deletes a place, and Undo restores it", () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
 
-    const form = screen.getByRole("form", { name: "Add a place" });
-    fireEvent.change(within(form).getByLabelText("Place name"), { target: { value: "  Galata Tower " } });
-    fireEvent.change(within(form).getByLabelText("Add to"), { target: { value: fake.view.days[0].id } });
-    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+    const search = screen.getByRole("combobox", { name: "Add a place to Day 1…" });
+    fireEvent.change(search, { target: { value: "  Galata Tower " } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Add to Day 1" }));
     expect(names(day(1))).toEqual(["Galata Tower"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Tower" }));
+    open("Galata Tower");
+    expect(within(row("Galata Tower")).getByRole("button", { name: "Galata Tower" }).getAttribute("aria-expanded")).toBe("true");
     const editor = screen.getByRole("form", { name: "Edit Galata Tower" });
     fireEvent.click(within(editor).getByRole("radio", { name: "Museum" }));
     const tags = within(editor).getByLabelText("Tags");
     fireEvent.change(tags, { target: { value: "views" } });
     fireEvent.keyDown(tags, { key: "Enter" });
     fireEvent.change(tags, { target: { value: "sunset, Views" } });
+    fireEvent.change(within(editor).getByLabelText("Stay (minutes)"), { target: { value: "90" } });
     fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
 
-    expect(fake.view.days[0].places[0]).toMatchObject({ name: "Galata Tower", category: "museum", tags: ["views", "sunset"] });
+    expect(fake.view.days[0].places[0]).toMatchObject({ name: "Galata Tower", category: "museum", tags: ["views", "sunset"], stayMinutes: 90 });
     expect(screen.queryByRole("form", { name: "Edit Galata Tower" })).toBeNull();
     expect(within(row("Galata Tower")).getByRole("img", { name: "Museum" })).toBeTruthy();
-    expect(within(row("Galata Tower")).getByText("sunset")).toBeTruthy();
+    expect(within(row("Galata Tower")).getByText("Museum · views, sunset")).toBeTruthy();
+    expect(within(row("Galata Tower")).getByText("1 h 30 min")).toBeTruthy();
 
+    open("Galata Tower");
     fireEvent.click(screen.getByRole("button", { name: "Delete Galata Tower" }));
     expect(names(day(1))).toEqual([]);
     expect(screen.getByText("Galata Tower deleted.")).toBeTruthy();
@@ -67,22 +73,13 @@ describe("itinerary", () => {
     expect(screen.queryByText("Galata Tower deleted.")).toBeNull();
   });
 
-  it("keyboard move via Move to… and up/down buttons", () => {
+  it("keyboard move via Move to…", () => {
     const { doc, dayIds } = newTrip();
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
     addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
 
-    const up = screen.getByRole("button", { name: "Move Karaköy Lokantası up" });
-    fireEvent.click(up);
-    expect(names(day(1))).toEqual(["Karaköy Lokantası", "Galata Tower"]);
-    // At the top it stays focusable (aria-disabled), so focus is not lost.
-    expect(up.getAttribute("aria-disabled")).toBe("true");
-    fireEvent.click(up);
-    expect(names(day(1))).toEqual(["Karaköy Lokantası", "Galata Tower"]);
-    fireEvent.click(screen.getByRole("button", { name: "Move Karaköy Lokantası down" }));
-    expect(names(day(1))).toEqual(["Galata Tower", "Karaköy Lokantası"]);
-
+    open("Galata Tower");
     fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
     const dialog = screen.getByRole("dialog", { name: "Move Galata Tower" });
     fireEvent.click(within(dialog).getByRole("radio", { name: /^Day 2/ }));
@@ -97,10 +94,26 @@ describe("itinerary", () => {
     expect(names(screen.getByRole("region", { name: "Ideas" }))).toEqual(["Galata Tower"]);
   });
 
+  it("a timed stop moved to another day is re-timed for its new place there", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], time: "15:00" }, "u1");
+    addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 45, dayId: dayIds[1], time: "08:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    open("Galata Tower");
+    fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("radio", { name: /^Day 2/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Move" }));
+    expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
+      ["Breakfast", "08:00"],
+      ["Galata Tower", "08:45"],
+    ]);
+  });
+
   it("remote delete while the Move dialog is open closes it", () => {
     const { doc, dayIds } = newTrip();
     const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
+    open("Galata Tower");
     fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
     expect(screen.getByRole("dialog", { name: "Move Galata Tower" })).toBeTruthy();
     remoteEdit("u2", (d, origin) => deletePlace(d, id, origin));
@@ -123,6 +136,7 @@ describe("itinerary", () => {
 
     // A remote edit that is not structural, and my own moves, are not announced.
     remoteEdit("u2", (d, origin) => updatePlace(d, id, { tags: ["views"] }, origin));
+    open("Galata Tower");
     fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("radio", { name: "Ideas" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Move" }));
@@ -134,70 +148,25 @@ describe("itinerary", () => {
     expect(live.textContent).toBe("Deniz added Çiya Sofrası to Day 2");
   });
 
-  it("a 120-character Turkish place name wraps without overflow", () => {
-    const { doc, dayIds } = newTrip();
-    const long = "Şişli'deki ığdır usulü çağ kebabı yapan küçük dükkânın üst katındaki gün batımı terası ".repeat(3).slice(0, 120);
-    expect(long).toHaveLength(120);
-    addPlace(doc, { name: long, category: "food", dayId: dayIds[0] }, "u1");
-    renderIntl(<TripScreen tripId="t1" />, "tr");
-    const name = screen.getByTestId("place-name");
-    expect(name.textContent).toBe(long.trim());
-    expect(name.className).toContain("[overflow-wrap:anywhere]");
-    // Every box between the name and the row may shrink below its content's width.
-    for (let el = name.parentElement; el && el.tagName !== "LI"; el = el.parentElement) expect(el.className).toContain("min-w-0");
-    expect(name.closest("li")!.className).toContain("min-w-0");
-  });
-
   it("set times show as set and estimated times follow stays", () => {
     const { doc, dayIds } = newTrip();
     addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 30, dayId: dayIds[0] }, "u1");
     const galata = addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0], time: "07:00" }, "u1");
     addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
+    const time = (name: string) => within(row(name)).getByTestId("place-time").textContent;
     // No default start: an untimed stop before any set time has no time.
     expect(screen.queryByLabelText(/^Start time/)).toBeNull();
-    expect(within(row("Breakfast")).queryByText(/\d\d:\d\d/)).toBeNull();
-    expect(within(row("Galata Tower")).getByText("07:00")).toBeTruthy();
-    expect(within(row("Karaköy Lokantası")).getByText("around 08:00")).toBeTruthy();
+    expect(time("Breakfast")).toBe("Set a time");
+    expect(time("Galata Tower")).toBe("07:00");
+    expect(time("Karaköy Lokantası")).toBe("≈ estimated, 08:00");
 
-    const stay = screen.getByLabelText("Stay at Galata Tower, in minutes");
-    fireEvent.change(stay, { target: { value: "90" } });
-    fireEvent.blur(stay);
-    expect(within(row("Karaköy Lokantası")).getByText("around 08:30")).toBeTruthy();
+    remoteEdit("u2", (d, origin) => updatePlace(d, galata, { stayMinutes: 90 }, origin));
+    expect(time("Karaköy Lokantası")).toBe("≈ estimated, 08:30");
 
     remoteEdit("u2", (d, origin) => setPlaceTime(d, galata, "10:15", origin));
-    expect(within(row("Galata Tower")).getByText("10:15")).toBeTruthy();
-    expect(within(row("Karaköy Lokantası")).getByText("around 11:45")).toBeTruthy();
-  });
-
-  it("stay fields keep focus and the typed value through saves and remote updates", () => {
-    const { doc, dayIds } = newTrip();
-    const id = addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0] }, "u1");
-    addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
-    renderIntl(<TripScreen tripId="t1" />);
-
-    const stay = screen.getByLabelText("Stay at Galata Tower, in minutes") as HTMLInputElement;
-    stay.focus();
-    fireEvent.change(stay, { target: { value: "90" } });
-    fireEvent.keyDown(stay, { key: "Enter" });
-    expect(fake.view.days[0].places[0].stayMinutes).toBe(90);
-    expect(document.activeElement).toBe(stay);
-
-    // Half-typed, then someone else changes the same stay: the field keeps what is being typed.
-    fireEvent.change(stay, { target: { value: "12" } });
-    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 30 }, origin));
-    expect(document.activeElement).toBe(stay);
-    expect(stay.value).toBe("12");
-    fireEvent.blur(stay);
-    expect(fake.view.days[0].places[0].stayMinutes).toBe(12);
-
-    // Not focused: the field shows changes made elsewhere; focusing without typing never reverts them.
-    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 45 }, origin));
-    expect(stay.value).toBe("45");
-    stay.focus();
-    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 50 }, origin));
-    fireEvent.blur(stay);
-    expect(fake.view.days[0].places[0].stayMinutes).toBe(50);
+    expect(time("Galata Tower")).toBe("10:15");
+    expect(time("Karaköy Lokantası")).toBe("≈ estimated, 11:45");
   });
 
   it("drag and drop adds no screen reader output of its own", () => {
@@ -242,6 +211,7 @@ describe("itinerary", () => {
     const { doc, dayIds } = newTrip();
     addPlace(doc, { name: "Galata Tower", category: "sight", lat: 41.0256, lng: 28.9744, dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
+    open("Galata Tower");
     const link = within(row("Galata Tower")).getByRole("link", { name: /^Open in Google Maps/ });
     expect(link.getAttribute("href")).toBe(placeUrl(fake.view.days[0].places[0]));
     expect(link.getAttribute("href")).toBe("https://www.google.com/maps/search/?api=1&query=41.0256,28.9744");
@@ -251,26 +221,18 @@ describe("itinerary", () => {
     expect(link.textContent).toContain("Galata Tower");
   });
 
-  it("a day with 12 stops shows two Google Maps buttons", () => {
-    const { doc, dayIds } = newTrip();
-    for (let i = 0; i < 12; i++) addPlace(doc, { name: `Stop ${i + 1}`, category: "sight", lat: 41 + i / 100, lng: 29, dayId: dayIds[0] }, "u1");
-    renderIntl(<TripScreen tripId="t1" />);
-    const links = within(day(1)).getAllByRole("link", { name: /Open day in Google Maps/ });
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(dayUrls(fake.view.days[0], "walk"));
-    expect(links.map((l) => l.textContent)).toEqual([expect.stringContaining("part 1 of 2"), expect.stringContaining("part 2 of 2")]);
-    for (const l of links) expect(l.getAttribute("target")).toBe("_blank");
-    // Day 2 has no stops, so no directions.
-    expect(within(day(2)).queryByRole("link", { name: /Open day in Google Maps/ })).toBeNull();
-  });
-
   it("an unknown user sees the trip read-only", () => {
     const { doc, dayIds } = newTrip();
-    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], time: "10:00" }, "u1");
     fake.userId = null;
     renderIntl(<TripScreen tripId="t1" />);
     expect(screen.getByText("Galata Tower")).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /time for Galata Tower/ })).toBeNull();
+    expect(within(row("Galata Tower")).getByTestId("place-time").textContent).toBe("10:00");
+    open("Galata Tower");
     expect(screen.queryByRole("button", { name: "Delete Galata Tower" })).toBeNull();
-    expect(screen.queryByRole("form", { name: "Add a place" })).toBeNull();
+    expect(screen.queryByRole("form", { name: "Edit Galata Tower" })).toBeNull();
     expect(screen.getByText(/Editing is off/)).toBeTruthy();
   });
 
@@ -283,7 +245,7 @@ describe("itinerary", () => {
     expect(dropTarget(view, a, placeDropId(a))).toBeNull();
     expect(dropTarget(view, b, listDropId(dayIds[1]))).toEqual({ dayId: dayIds[1] });
     expect(dropTarget(view, b, listDropId(null))).toEqual({ dayId: null });
-    movePlace(doc, a, dropTarget(fake.view, a, placeDropId(b))!, "u1");
+    expect(dropPlace(doc, fake.view, a, placeDropId(b), "u1")).toBe(true);
     expect(fake.view.days[0].places.map((p) => p.id)).toEqual([b, a, c]);
   });
 });

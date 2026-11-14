@@ -106,9 +106,10 @@ describe("suggestions", () => {
   it("Suggest adds a suggestion instead of a planned place", () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
-    const form = screen.getByRole("form", { name: "Add a place" });
-    fireEvent.change(within(form).getByLabelText("Place name"), { target: { value: "Pierre Loti Hill" } });
-    fireEvent.click(within(form).getByRole("button", { name: "Suggest" }));
+    const search = screen.getByRole("combobox", { name: /^Add a place to/ });
+    fireEvent.change(search, { target: { value: "Pierre Loti Hill" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    fireEvent.click(within(screen.getByRole("form", { name: "Add Pierre Loti Hill" })).getByRole("button", { name: "Suggest" }));
     expect(fake.view.suggestions.map((p) => p.name)).toEqual(["Pierre Loti Hill"]);
     expect(fake.view.ideas).toEqual([]);
   });

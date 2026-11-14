@@ -76,18 +76,19 @@ export async function openTrip(page: Page, tripId: string): Promise<void> {
 
 export const syncIndicator = (page: Page) => page.getByRole("banner").getByText(/^(Synced|Syncing…|Offline — .*)$/);
 
-/** Adds a place by name, to Day 1 unless another list is named. */
+/** Adds a place by name (no time), to Day 1 (the day shown) unless another list ("Ideas") is named. */
 export async function addPlace(page: Page, name: string, list = "Day 1"): Promise<void> {
-  await page.getByRole("combobox", { name: "Place name" }).fill(name);
-  await page.getByLabel("Add to").selectOption({ label: list });
-  await page.getByRole("form", { name: "Add a place" }).getByRole("button", { name: "Add", exact: true }).click();
+  const search = page.getByRole("combobox", { name: /^Add a place to / });
+  await search.fill(name);
+  await search.press("Enter");
+  const step = page.getByRole("form", { name: `Add ${name}` });
+  await step.getByLabel("Time").fill("");
+  await step.getByRole("button", { name: `Add to ${list}`, exact: true }).click();
 }
 
-/** The names of the places planned on day `n`, in order. */
+/** The names of the places planned on day `n`, in order (the day must be shown). */
 export async function dayPlaces(page: Page, n: number): Promise<string[]> {
-  const links = page.getByRole("region", { name: new RegExp(`^Day ${n}\\b`) }).getByRole("link", { name: /^Open in Google Maps — / });
-  const names = await links.evaluateAll((els) => els.map((el) => el.textContent ?? ""));
-  return names.map((text) => text.replace(/^.*Open in Google Maps\s*— /, "").replace(/ \(opens in a new tab\)$/, "").trim());
+  return page.getByRole("region", { name: new RegExp(`^Day ${n}\\b`) }).getByTestId("place-name").allTextContents();
 }
 
 /** Starts a demo for this context's browser, as the landing page does, and returns the trip id. */

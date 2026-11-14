@@ -79,7 +79,7 @@ describe("header", () => {
     refresh();
     expect(undo).toHaveProperty("disabled", false);
 
-    fireEvent.keyDown(screen.getByLabelText("Place name"), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("combobox", { name: /^Add a place to/ }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
 
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
@@ -99,6 +99,8 @@ describe("header", () => {
     updatePlace(doc, id, { name: "Galata Kulesi" }, "u1");
     refresh();
 
+    // The note is with the place's editor until the details panel (Task 3).
+    fireEvent.click(screen.getByRole("button", { name: "Galata Kulesi" }));
     fireEvent.click(screen.getByRole("button", { name: "Add a note to Galata Kulesi" }));
     fireEvent.keyDown(screen.getByRole("button", { name: "Bold" }), { key: "z", ctrlKey: true });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Note for Galata Kulesi" }), { key: "z", ctrlKey: true });
@@ -123,7 +125,7 @@ describe("header", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     vi.unstubAllGlobals();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Kulesi" }));
+    fireEvent.click(screen.getByRole("button", { name: "Galata Kulesi" }));
     fireEvent.keyDown(screen.getByRole("button", { name: "Save" }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

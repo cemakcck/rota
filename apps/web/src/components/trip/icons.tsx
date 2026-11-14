@@ -82,6 +82,7 @@ const PATHS = {
       <path d="m20 20-4.3-4.3" />
     </>
   ),
+  filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   warn: <path d="M10.3 4.2 2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0zM12 9.5v4.5M12 17.2v.1" />,
   sun: (
     <>
@@ -137,6 +138,29 @@ export function CategoryIcon({ category, label, small = false }: { category: Cat
       className={`grid shrink-0 place-items-center rounded-[9px] bg-line-2 text-ink-2 ${small ? "size-6" : "size-8"}`}
     >
       <Icon name={category} size={small ? 14 : 17} />
+    </span>
+  );
+}
+
+const GLYPHS: Record<Category, string> = {
+  food: "🍴",
+  drinks: "🍸",
+  cafe: "☕",
+  museum: "🏛",
+  sight: "📷",
+  nightlife: "🌙",
+  shopping: "🛍",
+  nature: "🌳",
+  gym: "🏋",
+  stay: "🛏",
+  other: "📍",
+};
+
+/** A category as the emoji-style glyph rows use (spec §3), named for screen readers. */
+export function CategoryGlyph({ category, label }: { category: Category; label: string }) {
+  return (
+    <span role="img" aria-label={label} title={label} className="shrink-0 text-[14px] leading-none">
+      {GLYPHS[category]}
     </span>
   );
 }

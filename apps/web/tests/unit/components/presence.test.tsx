@@ -29,9 +29,14 @@ describe("presence", () => {
     renderIntl(<TripScreen tripId="t1" />);
     expect(fake.awareness.getLocalState()).toMatchObject({ user: { id: "u1", name: "Ann", colour: "#2563eb" }, editing: null, cursor: null });
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Tower" }));
+    // Opening the place (its editor) and editing its time both count as editing it.
+    fireEvent.click(screen.getByRole("button", { name: "Galata Tower" }));
     expect(fake.awareness.getLocalState()?.editing).toBe(id);
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Tower" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fake.awareness.getLocalState()?.editing).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Set a time for Galata Tower" }));
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for Galata Tower" }), { key: "Escape" });
     expect(fake.awareness.getLocalState()?.editing).toBeNull();
   });
 

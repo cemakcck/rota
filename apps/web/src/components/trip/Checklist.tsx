@@ -8,7 +8,7 @@ import { Avatar } from "../Avatar";
 import { btnPrimary, hint, input } from "../ui";
 import { CommitInput } from "./CommitInput";
 import { Icon } from "./icons";
-import { SILENT } from "./Itinerary";
+import { SILENT } from "./DayPlan";
 
 /** What a member can do to the checklist; absent while the user is unknown (read-only). */
 export type ChecklistActions = {

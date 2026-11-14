@@ -45,10 +45,12 @@ describe("travel times", () => {
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
     expect(await within(day1()).findByText("12 min walk · 950 m")).toBeTruthy();
-    expect(within(day1()).queryByText(/≈/)).toBeNull();
+    // Routed: neither the leg nor the day's total is marked as an estimate.
+    expect(within(day1()).getByTestId("travel-leg").textContent).not.toMatch(/≈/);
+    expect(within(day1()).getByTestId("travel-total").textContent).toBe("12 min travel");
     expect(within(day1()).getByText("12 min travel")).toBeTruthy();
     // The second stop's estimated arrival follows the routed leg: set at 09:00, a 45 min stay, then 12 min.
-    expect(within(day1()).getByText("around 09:57")).toBeTruthy();
+    expect(within(day1()).getAllByTestId("place-time").map((t) => t.textContent)).toEqual(["09:00", "≈ estimated, 09:57"]);
   });
 
   it("a trip with five routed days gets road legs for every day, one request at a time", async () => {

@@ -1,4 +1,5 @@
-import type { Category, PlaceView, Slot, TripView } from "@rota/trip";
+import type * as Y from "yjs";
+import { movePlace, type Category, type PlaceView, type Slot, type TripView } from "@rota/trip";
 
 /** Where a planned place lives: a day id, or null for Ideas. */
 export type ListId = string | null;
@@ -37,6 +38,15 @@ export function dropTarget(view: TripView, activeId: string, overId: string): ({
     return active >= 0 && active < over ? { dayId: list.id, afterId: overPlace } : { dayId: list.id, beforeId: overPlace };
   }
   return null;
+}
+
+/**
+ * A drop of a dragged place: moved to where `dropTarget` says, a timed stop re-timed for its new slot
+ * (spec §2b), as one undo step. False when the drop lands nowhere (on itself, on a day that is gone).
+ */
+export function dropPlace(doc: Y.Doc, view: TripView, activeId: string, overId: string, origin: string): boolean {
+  const to = dropTarget(view, activeId, overId);
+  return to !== null && movePlace(doc, activeId, to, origin, { retime: true });
 }
 
 export type Filter = { categories: Category[]; tag: string | null };
@@ -96,4 +106,18 @@ export function tripCentre(view: TripView): { lat: number; lng: number } | null 
   const pins = plannedLists(view).flatMap((l) => l.places.filter((p) => p.lat !== null && p.lng !== null)) as { lat: number; lng: number }[];
   if (pins.length === 0) return null;
   return { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length };
+}
+
+/**
+ * A time as typed: "9:30", "09.30", "0930" or "9" become "09:30"/"09:00"; empty text is "" (no time);
+ * anything else (25:00, words) is null.
+ */
+export function parseTime(text: string): string | null {
+  const s = text.trim();
+  if (s === "") return "";
+  const m = /^(\d{1,2})(?:[:.]?(\d{2}))?$/.exec(s);
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2] ?? "0")];
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }

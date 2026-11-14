@@ -23,6 +23,10 @@ type Props = {
   describedBy?: string;
   placeholder?: string;
   maxLength?: number;
+  /** Enter with no result chosen (the typed text is what to add). */
+  onEnter?(): void;
+  /** Replaces the field's own look (the day plan's search bar draws its own box). */
+  inputClassName?: string;
 };
 
 /**
@@ -30,7 +34,22 @@ type Props = {
  * our proxy) 300 ms after typing stops. Arrow keys move through the results and Enter picks one; text
  * that is not picked stays plain text, so a place can always be added by name, including offline.
  */
-export function PlaceSearch({ id, label, value, onValueChange, onPick, near = null, inputRef, disabled, invalid, describedBy, placeholder, maxLength = 200 }: Props) {
+export function PlaceSearch({
+  id,
+  label,
+  value,
+  onValueChange,
+  onPick,
+  near = null,
+  inputRef,
+  disabled,
+  invalid,
+  describedBy,
+  placeholder,
+  maxLength = 200,
+  onEnter,
+  inputClassName,
+}: Props) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const locale = useLocale();
@@ -85,6 +104,12 @@ export function PlaceSearch({ id, label, value, onValueChange, onPick, near = nu
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && onEnter && !(open && active >= 0)) {
+      e.preventDefault();
+      cancel();
+      close();
+      return onEnter();
+    }
     if (!results || results.length === 0) return;
     const n = results.length;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -112,7 +137,7 @@ export function PlaceSearch({ id, label, value, onValueChange, onPick, near = nu
         aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
         aria-invalid={invalid || undefined}
         aria-describedby={[describedBy, message && statusId].filter(Boolean).join(" ") || undefined}
-        className={input}
+        className={inputClassName ?? input}
         value={value}
         maxLength={maxLength}
         disabled={disabled}
