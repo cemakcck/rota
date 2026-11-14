@@ -185,7 +185,8 @@ export function TripMap({ view, hiddenIds, selectedDayId, selectedPlaceId, onSel
         if (lastPointer.current !== "touch") setAdding(map.unproject(local(e)));
       }}
     >
-      <div ref={container} className="absolute inset-0" />
+      {/* Sized as well as placed: maplibre-gl.css makes the map container `position: relative`. */}
+      <div ref={container} className="absolute inset-0 h-full w-full" />
       {map && features.pins.map((pin) => <PinMarker key={pin.id} map={map} pin={pin} selected={pin.id === selectedPlaceId} onSelect={onSelectPlace} />)}
       {map && <RemoteCursors map={map} awareness={awareness} userId={userId} />}
       {unavailable && <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-[13.5px] text-ink-2">{tm("unavailable")}</p>}

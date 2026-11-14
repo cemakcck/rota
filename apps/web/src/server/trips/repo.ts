@@ -252,3 +252,13 @@ export async function mirrorProfile(userId: string): Promise<void> {
     }
   }
 }
+
+/** Takes the demo trip's one run of the scripted friend: true the first time only, atomically. */
+export async function markFriendRan(tripId: string): Promise<boolean> {
+  const marked = await db
+    .update(trips)
+    .set({ friendRanAt: sql`now()` })
+    .where(and(eq(trips.id, tripId), isNull(trips.friendRanAt)))
+    .returning({ id: trips.id });
+  return marked.length > 0;
+}

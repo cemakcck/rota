@@ -109,12 +109,21 @@ async function discard(userIds: string[], tripId: string | undefined): Promise<v
 export async function friendToken(tripId: string, requesterId: string): Promise<{ token: string; user: MemberView }> {
   const [trip] = await db.select({ ownerId: trips.ownerId, isDemo: trips.isDemo }).from(trips).where(eq(trips.id, tripId));
   if (!trip || !trip.isDemo || trip.ownerId !== requesterId) throw new HttpError(404, "not_found");
-  const [deniz] = await db
+  return demoUserToken(tripId, "Deniz");
+}
+
+/**
+ * A fresh bearer session for one of a demo trip's friends (Deniz or Selin): a demo user of that name,
+ * on the friends' email domain, who is still a member. 404 if there is none. Callers decide who may ask.
+ */
+export async function demoUserToken(tripId: string, name: "Deniz" | "Selin"): Promise<{ token: string; user: MemberView }> {
+  const [friend] = await db
     .select({ id: user.id, name: user.name, colour: user.colour, email: user.email })
     .from(tripMembers)
+    .innerJoin(trips, eq(trips.id, tripMembers.tripId))
     .innerJoin(user, eq(user.id, tripMembers.userId))
-    .where(and(eq(tripMembers.tripId, tripId), isNull(tripMembers.removedAt), eq(user.name, "Deniz"), eq(user.isDemo, true)));
-  if (!deniz?.email.endsWith(`@${DEMO_FRIEND_DOMAIN}`)) throw new HttpError(404, "not_found");
-  const session = await (await auth.$context).internalAdapter.createSession(deniz.id);
-  return { token: session.token, user: { id: deniz.id, name: deniz.name, colour: deniz.colour } };
+    .where(and(eq(tripMembers.tripId, tripId), eq(trips.isDemo, true), isNull(tripMembers.removedAt), eq(user.name, name), eq(user.isDemo, true)));
+  if (!friend?.email.endsWith(`@${DEMO_FRIEND_DOMAIN}`)) throw new HttpError(404, "not_found");
+  const session = await (await auth.$context).internalAdapter.createSession(friend.id);
+  return { token: session.token, user: { id: friend.id, name: friend.name, colour: friend.colour } };
 }

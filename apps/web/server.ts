@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import next from "next";
 import { startCleanup } from "./src/server/cleanup";
+import { startFriends, stopFriends } from "./src/server/friend";
 import { createSyncServer, serveSync } from "./src/server/sync";
 
 export type RunningServer = { url: string; close(): Promise<void> };
@@ -40,10 +41,14 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
     server.listen(port, resolve);
   });
   const { port: actual } = server.address() as AddressInfo;
+  const url = `http://localhost:${actual}`;
+  // The scripted friend of demo trips connects to this server's own /sync.
+  startFriends(url);
 
   return {
-    url: `http://localhost:${actual}`,
+    url,
     async close() {
+      stopFriends();
       stopCleanup();
       await sync.close();
       server.closeAllConnections();

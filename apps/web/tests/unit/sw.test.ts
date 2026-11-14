@@ -9,7 +9,7 @@ const SOURCE = readFileSync(`${import.meta.dirname}/../../src/sw/sw.js`, "utf8")
 const ORIGIN = "https://rota.test";
 
 type FakeRequest = { url: string; method: string; mode: string };
-type Event = { request?: FakeRequest; respondWith: (r: Promise<Response>) => void; waitUntil: (p: Promise<unknown>) => void };
+type Event = { request?: FakeRequest; data?: unknown; respondWith: (r: Promise<Response>) => void; waitUntil: (p: Promise<unknown>) => void };
 
 /** An ordered Cache: keys come back in insertion order, as the Cache API specifies. */
 class FakeCache {
@@ -71,10 +71,10 @@ function loadSw({ build = "build-1", caches = fakeCaches() } = {}) {
   new Function("self", "caches", "fetch", SOURCE.replaceAll("__BUILD_ID__", build))(self, caches, fetch);
 
   /** Fires an event; resolves with what was passed to respondWith (undefined if nothing) after waitUntil settles. */
-  async function fire(type: string, request?: FakeRequest): Promise<Response | undefined> {
+  async function fire(type: string, request?: FakeRequest, data?: unknown): Promise<Response | undefined> {
     let responded: Promise<Response> | undefined;
     const waits: Promise<unknown>[] = [];
-    handlers[type]({ request, respondWith: (r) => (responded = r), waitUntil: (p) => waits.push(p) });
+    handlers[type]({ request, data, respondWith: (r) => (responded = r), waitUntil: (p) => waits.push(p) });
     const res = await responded;
     await Promise.all(waits);
     return res;
@@ -111,6 +111,38 @@ describe("service worker", () => {
     // Never visited: the offline page.
     const unknown = await sw.fire("fetch", sw.get("/en/t/trip-2", "navigate"));
     expect(await unknown!.text()).toBe(`network ${ORIGIN}/offline.html`);
+  });
+
+  it("the page that installed the worker is kept when it asks, with the static files it loaded", async () => {
+    const sw = loadSw();
+    await sw.fire("install");
+    await sw.fire("activate");
+    sw.fetch.mockClear();
+    // The first visit loaded before the worker was in charge, so none of it went through it.
+    const urls = [
+      `${ORIGIN}/en/t/trip-1`,
+      `${ORIGIN}/_next/static/chunks/app.js`,
+      `${ORIGIN}/maplibre-gl-worker.mjs?v=6`,
+      `${ORIGIN}/api/trips`,
+      `${ORIGIN}/en/profile`,
+      "https://elsewhere.test/_next/static/chunks/x.js",
+    ];
+    await sw.fire("message", undefined, { type: "keep", urls });
+    expect(sw.fetch.mock.calls.map(([input]) => new URL(typeof input === "string" ? input : input.url, ORIGIN).href).sort()).toEqual(
+      [`${ORIGIN}/en/t/trip-1`, `${ORIGIN}/_next/static/chunks/app.js`, `${ORIGIN}/maplibre-gl-worker.mjs?v=6`].sort(),
+    );
+
+    sw.network.online = false;
+    expect(await (await sw.fire("fetch", sw.get("/en/t/trip-1", "navigate")))!.text()).toBe(`network ${ORIGIN}/en/t/trip-1`);
+    expect(await (await sw.fire("fetch", sw.get("/_next/static/chunks/app.js")))!.text()).toBe(`network ${ORIGIN}/_next/static/chunks/app.js`);
+    expect(await (await sw.fire("fetch", sw.get("/maplibre-gl-worker.mjs?v=6")))!.text()).toBe(`network ${ORIGIN}/maplibre-gl-worker.mjs?v=6`);
+  });
+
+  it("other messages are ignored", async () => {
+    const sw = loadSw();
+    sw.fetch.mockClear();
+    for (const data of [undefined, "keep", { type: "other", urls: [`${ORIGIN}/en/t/trip-1`] }, { type: "keep", urls: "nope" }]) await sw.fire("message", undefined, data);
+    expect(sw.fetch).not.toHaveBeenCalled();
   });
 
   it("tile cache evicts beyond 2000 entries", async () => {
@@ -195,14 +227,35 @@ describe("service worker", () => {
 describe("service worker registration", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("registers /sw.js for the whole site in production only", () => {
+  afterEach(() => Reflect.deleteProperty(navigator, "serviceWorker"));
+
+  /** A registration whose worker becomes active at once, recording what the page posts to it. */
+  function fakeServiceWorker() {
+    const postMessage = vi.fn();
     const register = vi.fn(async () => ({}));
-    Object.defineProperty(navigator, "serviceWorker", { value: { register }, configurable: true });
+    Object.defineProperty(navigator, "serviceWorker", {
+      value: { register, ready: Promise.resolve({ active: { postMessage } }), addEventListener: vi.fn() },
+      configurable: true,
+    });
+    return { register, postMessage };
+  }
+
+  it("registers /sw.js for the whole site in production only", () => {
+    const { register } = fakeServiceWorker();
     registerSw();
     expect(register).not.toHaveBeenCalled();
     vi.stubEnv("NODE_ENV", "production");
     registerSw();
     expect(register).toHaveBeenCalledWith("/sw.js", { scope: "/" });
-    Reflect.deleteProperty(navigator, "serviceWorker");
+  });
+
+  it("asks the worker to keep this page and the app's static files it loaded before the worker was in charge", async () => {
+    const { postMessage } = fakeServiceWorker();
+    const entries = [`${location.origin}/_next/static/chunks/app.js`, `${location.origin}/maplibre-gl-worker.mjs?v=6`, `${location.origin}/api/trips`, "https://tiles.openfreemap.org/styles/liberty"];
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue(entries.map((name) => ({ name })) as PerformanceEntryList);
+    vi.stubEnv("NODE_ENV", "production");
+    registerSw();
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalled());
+    expect(postMessage).toHaveBeenCalledWith({ type: "keep", urls: [location.href, entries[0], entries[1]] });
   });
 });

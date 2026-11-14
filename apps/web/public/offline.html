@@ -20,5 +20,28 @@
       <h1 lang="tr">Çevrimdışısınız</h1>
       <p lang="tr">Bu sayfa bu cihazda kayıtlı değil. Daha önce açtığınız geziler çevrimdışı da açılır. <a href="/tr/trips">Gezilerimi aç</a></p>
     </main>
+    <script>
+      // The service worker serves this page for any page not saved here. For a trip never opened on this
+      // device, say what the trip screen says (spec §10), in the trip's language.
+      (function () {
+        var match = /^\/(en|tr)\/t\/[^/]+$/.exec(location.pathname);
+        if (!match) return;
+        var text = {
+          en: ["Connect once to download this trip", "This trip is not on this device yet. It opens as soon as you are online, and works offline after that.", "Open my trips", "/en/trips"],
+          tr: ["Bu geziyi indirmek için bir kez bağlanın", "Bu gezi henüz bu cihazda yok. Çevrimiçi olduğunuzda açılır, sonra çevrimdışı da çalışır.", "Gezilerimi aç", "/tr/trips"],
+        }[match[1]];
+        document.documentElement.lang = match[1];
+        document.title = text[0] + " · Rota";
+        var main = document.querySelector("main");
+        main.replaceChildren();
+        var heading = main.appendChild(document.createElement("h1"));
+        heading.textContent = text[0];
+        var help = main.appendChild(document.createElement("p"));
+        help.textContent = text[1] + " ";
+        var link = help.appendChild(document.createElement("a"));
+        link.href = text[3];
+        link.textContent = text[2];
+      })();
+    </script>
   </body>
 </html>

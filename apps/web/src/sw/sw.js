@@ -10,6 +10,8 @@
 // - OpenFreeMap style, TileJSON, glyphs and sprites: stale while revalidate. They name the current tile
 //   paths, so a cached copy must not outlive them.
 // - /api/* and /sync: never touched.
+// - The first visit loads before the worker is in charge, so that page asks it ("keep" message) to keep
+//   the page and the static files it already loaded: one online visit is enough to open it offline.
 
 const VERSION = "__BUILD_ID__";
 const PAGES = `rota-pages-${VERSION}`;
@@ -46,6 +48,9 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+const isStatic = (url) => url.pathname.startsWith("/_next/static/") || url.pathname === "/maplibre-gl-worker.mjs" || url.pathname.startsWith("/icons/");
+const isKeptPage = (url) => TRIP_PAGE.test(url.pathname) || PRECACHE.includes(url.pathname);
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -54,8 +59,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin === self.location.origin) {
     if (url.pathname === "/sync" || url.pathname === "/api" || url.pathname.startsWith("/api/")) return;
     if (request.mode === "navigate") return event.respondWith(page(request, url));
-    if (url.pathname.startsWith("/_next/static/") || url.pathname === "/maplibre-gl-worker.mjs" || url.pathname.startsWith("/icons/"))
-      return event.respondWith(cacheFirst(STATIC, request, event));
+    if (isStatic(url)) return event.respondWith(cacheFirst(STATIC, request, event));
     return;
   }
   if (url.hostname !== TILE_HOST) return;
@@ -63,6 +67,37 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.endsWith(".pbf") && !url.pathname.startsWith("/fonts/")) event.respondWith(cacheFirst(TILES, request, event));
   else event.respondWith(staleWhileRevalidate(MAP, request, event));
 });
+
+// { type: "keep", urls }: the page and static files a page loaded before this worker was in charge.
+self.addEventListener("message", (event) => {
+  const { data } = event;
+  if (data?.type !== "keep" || !Array.isArray(data.urls)) return;
+  event.waitUntil(keepVisited(data.urls));
+});
+
+async function keepVisited(urls) {
+  const pages = await caches.open(PAGES);
+  const statics = await caches.open(STATIC);
+  await Promise.all(
+    urls.map(async (href) => {
+      let url;
+      try {
+        url = new URL(href);
+      } catch {
+        return;
+      }
+      if (url.origin !== self.location.origin) return;
+      if (isKeptPage(url)) return keep(pages, url.pathname);
+      if (!isStatic(url) || (await statics.match(url.href))) return;
+      try {
+        const res = await fetch(url.href);
+        if (res.ok) await statics.put(url.href, res);
+      } catch {
+        // Offline already: kept on a later visit instead.
+      }
+    }),
+  );
+}
 
 /** Fetches `path` into `cache` if the server answers it; failures are ignored. */
 async function keep(cache, path) {
@@ -81,7 +116,7 @@ async function page(request, url) {
   const key = url.origin + url.pathname;
   try {
     const res = await fetch(request);
-    if (res.ok && !res.redirected && (TRIP_PAGE.test(url.pathname) || PRECACHE.includes(url.pathname))) {
+    if (res.ok && !res.redirected && isKeptPage(url)) {
       const cache = await caches.open(PAGES);
       await cache.put(key, res.clone());
     }

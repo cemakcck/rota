@@ -58,9 +58,10 @@ export function RemoteCursors({ map, awareness, userId }: { map: MapView; awaren
               strokeLinejoin="round"
             />
           </svg>
+          {/* Dark text on white, ringed in their colour: legible whatever the colour (WCAG 1.4.3). */}
           <span
-            className="absolute left-3 top-[18px] max-w-40 truncate whitespace-nowrap rounded-full px-2 text-[11px] font-semibold leading-5 text-white"
-            style={{ background: peer.user.colour || FALLBACK }}
+            className="absolute left-3 top-[18px] max-w-40 truncate whitespace-nowrap rounded-full border-2 bg-surface px-1.5 text-[11px] font-semibold leading-4 text-ink"
+            style={{ borderColor: peer.user.colour || FALLBACK }}
           >
             {peer.user.name}
           </span>

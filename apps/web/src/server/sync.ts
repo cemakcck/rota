@@ -8,7 +8,8 @@ import * as Y from "yjs";
 import { SHARES, isTripId } from "@rota/trip";
 import { getSessionFromRequest } from "./auth";
 import { db } from "./db/client";
-import { tripMembers, tripTombstones } from "./db/schema";
+import { tripMembers, tripTombstones, trips } from "./db/schema";
+import { scheduleFriend } from "./friend";
 import { toHeaders } from "./ipHash";
 import { HttpError } from "./httpError";
 import { requireMember } from "./trips/access";
@@ -70,6 +71,12 @@ async function whyNotMember(userId: string, tripId: string): Promise<Reason> {
     .from(tripMembers)
     .where(and(eq(tripMembers.tripId, tripId), eq(tripMembers.userId, userId), isNotNull(tripMembers.removedAt)));
   return removed ? "removed" : "not-found";
+}
+
+/** A demo trip's owner opening it brings the scripted friend, the first time only (friend.ts). */
+async function friendFor(userId: string, tripId: string): Promise<void> {
+  const [trip] = await db.select({ ownerId: trips.ownerId, isDemo: trips.isDemo, friendRanAt: trips.friendRanAt }).from(trips).where(eq(trips.id, tripId));
+  if (trip?.isDemo && trip.ownerId === userId && !trip.friendRanAt) scheduleFriend(tripId);
 }
 
 const liveConnections = (document: Document | undefined) => document?.getConnections().length ?? 0;
@@ -138,6 +145,7 @@ export function createSyncServer(): Hocuspocus<Context> {
         return;
       }
       touch(context.userId);
+      friendFor(context.userId, connection.document.name).catch((err) => console.error("[sync] could not schedule the friend", err));
     },
 
     async beforeHandleMessage({ connection }) {
