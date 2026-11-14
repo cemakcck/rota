@@ -347,7 +347,8 @@
     "hoursOnly": "{h} sa",
     "planHint": "Sıralamak için sürükleyin ya da Alt+↑/↓ kullanın · ayrıntılar için bir yere tıklayın",
     "delete": "Sil",
-    "reorderedToAt": "{name} şimdi {time}, {total} durak içinde {position}. sırada"
+    "reorderedToAt": "{name} şimdi {time}, {total} durak içinde {position}. sırada",
+    "timeCleared": "{name} için belirlenmiş saat yok"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

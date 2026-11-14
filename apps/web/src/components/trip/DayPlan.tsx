@@ -259,7 +259,9 @@ export function DayPlan({
     openMove: setMoving,
     setTime(id, time) {
       actions.setTime(id, time);
-      sayWhere(id);
+      if (time !== null) return sayWhere(id);
+      const place = find(id)?.place;
+      if (place) setStatus(t("timeCleared", { name: place.name || t("unnamed") }));
     },
     nudge(id, by) {
       const list = find(id);

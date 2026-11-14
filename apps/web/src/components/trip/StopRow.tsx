@@ -84,7 +84,8 @@ function TimeInput({ place, name, initial, onDone }: { place: PlaceView; name: s
           finish();
         }
       }}
-      onBlur={commit}
+      // Leaving the field untouched changes nothing (a prefilled estimate is not pinned); Enter confirms it.
+      onBlur={() => (draft === initial ? finish() : commit())}
       // Selecting text in the field is not a drag of the row.
       onPointerDown={(e) => e.stopPropagation()}
     />

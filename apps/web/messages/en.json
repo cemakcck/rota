@@ -347,7 +347,8 @@
     "hoursOnly": "{h} h",
     "planHint": "Drag or Alt+↑/↓ to reorder · click a place for details",
     "delete": "Delete",
-    "reorderedToAt": "{name} now at {time}, position {position} of {total}"
+    "reorderedToAt": "{name} now at {time}, position {position} of {total}",
+    "timeCleared": "{name} has no set time"
   },
   "map": {
     "sheetHandle": "Resize the list",

@@ -538,4 +538,20 @@ describe("day plan", () => {
     renderIntl(<TripScreen tripId="t1" />);
     expect(within(row("Lunch")).getByText("You'd arrive ≈ 60 min late (from Unnamed place)")).toBeTruthy();
   });
+  it("leaving an untouched estimate does not pin it; clearing a time is announced", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", stayMinutes: 60, dayId: dayIds[0], time: "09:00" }, "u1");
+    addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Set a time for B, estimated 10:00" }));
+    fireEvent.blur(screen.getByRole("textbox", { name: "Time for B" }));
+    expect(screen.queryByRole("textbox", { name: "Time for B" })).toBeNull();
+    expect(fake.view.days[0].places[1].time).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change the time for A, now 09:00" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Time for A" }), { target: { value: "" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for A" }), { key: "Enter" });
+    expect(fake.view.days[0].places[0].time).toBeNull();
+    expect(screen.getByTestId("plan-status").textContent).toBe("A has no set time");
+  });
 });
