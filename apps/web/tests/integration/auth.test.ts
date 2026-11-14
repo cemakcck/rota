@@ -1,8 +1,12 @@
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { MEMBER_COLOURS } from "@rota/trip";
+import { POST as authRoute } from "@/app/api/auth/[...all]/route";
 import { auth, getSessionFromRequest } from "@/server/auth";
+import { db } from "@/server/db/client";
+import { session } from "@/server/db/schema";
 import * as email from "@/server/email";
 
 const ORIGIN = "http://localhost:3400";
@@ -113,5 +117,44 @@ describe("password reset email", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("the client IP Better Auth sees (its rate limiter and sessions)", () => {
+  /** Signs up through the app's auth route and returns the IP Better Auth resolved for the request. */
+  async function resolvedIp(headers: Record<string, string>): Promise<string | null> {
+    const res = await authRoute(
+      new Request(`${ORIGIN}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: ORIGIN, ...headers },
+        body: JSON.stringify({ email: uniqueEmail(), password: "correct-horse-1", name: "Ayşe", colour: MEMBER_COLOURS[0] }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const { user } = (await res.json()) as { user: { id: string } };
+    const [row] = await db.select({ ip: session.ipAddress }).from(session).where(eq(session.userId, user.id));
+    return row.ip;
+  }
+
+  it("is the trusted end of a multi-entry X-Forwarded-For, like clientIp (one proxy hop by default)", async () => {
+    const client = randomIp();
+    expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}` })).toBe(client);
+  });
+
+  it("follows TRUSTED_PROXY_HOPS", async () => {
+    const client = randomIp();
+    const before = process.env.TRUSTED_PROXY_HOPS;
+    process.env.TRUSTED_PROXY_HOPS = "2";
+    try {
+      expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}, 10.0.0.1` })).toBe(client);
+    } finally {
+      if (before === undefined) delete process.env.TRUSTED_PROXY_HOPS;
+      else process.env.TRUSTED_PROXY_HOPS = before;
+    }
+  });
+
+  it("cannot be forged with the internal header", async () => {
+    const client = randomIp();
+    expect(await resolvedIp({ "x-forwarded-for": client, "x-rota-client-ip": "198.51.100.7" })).toBe(client);
   });
 });

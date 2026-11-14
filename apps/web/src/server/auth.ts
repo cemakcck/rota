@@ -13,9 +13,18 @@ import { hit } from "./rateLimit";
 const SIGN_UPS_PER_IP_PER_DAY = 20;
 const DAY_SEC = 86_400;
 
+/**
+ * Set by `authHandler` to the address `clientIp` picks (the trusted end of X-Forwarded-For, per
+ * TRUSTED_PROXY_HOPS), so Better Auth's own rate limiter and session records use the same client IP
+ * as the rest of the app. Read on its own, a multi-entry X-Forwarded-For gives Better Auth no IP at
+ * all, and everyone would share one rate-limit bucket.
+ */
+const CLIENT_IP_HEADER = "x-rota-client-ip";
+
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
+  advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: {
     enabled: true,
@@ -60,6 +69,15 @@ export const auth = betterAuth({
   },
   plugins: [bearer()],
 });
+
+/** The /api/auth route: Better Auth's handler, told the client IP. A client-sent copy of the header is dropped. */
+export function authHandler(req: Request): Promise<Response> {
+  const headers = new Headers(req.headers);
+  headers.delete(CLIENT_IP_HEADER);
+  const ip = clientIp(req);
+  if (ip !== "unknown") headers.set(CLIENT_IP_HEADER, ip);
+  return auth.handler(new Request(req, { headers }));
+}
 
 /**
  * The session for a request carrying a cookie or `Authorization: Bearer`. Takes a Fetch `Request`
