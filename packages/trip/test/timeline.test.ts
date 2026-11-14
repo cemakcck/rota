@@ -36,6 +36,13 @@ describe("dayTimeline", () => {
     expect(dayTimeline(day([p("a", 60, "09:00"), p("b", 60, "10:25")]), [leg(25)])[1].lateBy).toBeNull();
   });
 
+  it("arriving less than 5 minutes after the set time is not late (ruling F2)", () => {
+    // a ends 10:00; reachable 10:04 or 10:05, b set at 10:00.
+    expect(dayTimeline(day([p("a", 60, "09:00"), p("b", 60, "10:00")]), [leg(4)])[1].lateBy).toBeNull();
+    expect(dayTimeline(day([p("a", 60, "09:00"), p("b", 60, "10:00")]), [{ ...leg(4), seconds: 4 * 60 + 59 }])[1].lateBy).toBeNull();
+    expect(dayTimeline(day([p("a", 60, "09:00"), p("b", 60, "10:00")]), [leg(5)])[1].lateBy).toBe(5);
+  });
+
   it("a day running past midnight reports overflowDays", () => {
     const t = dayTimeline(day([p("a", 120, "22:00"), p("b", 60), p("c", 1500)]), [leg(30), null]);
     expect(t[0]).toMatchObject({ arrive: "22:00", leave: "00:00", overflowDays: 1 });
@@ -59,9 +66,21 @@ describe("suggestTime", () => {
     expect(suggestTime(day([]), [], 0)).toBeNull();
   });
 
+  it("suggestTime rounds up to the next 5 minutes (ruling F2)", () => {
+    const a = day([p("a", 60, "09:00")]);
+    expect(suggestTime(a, [leg(12)], 1)).toBe("10:15");
+    expect(suggestTime(a, [leg(10)], 1)).toBe("10:10");
+    expect(suggestTime(a, [leg(11)], 1)).toBe("10:15");
+    // A routed leg with seconds: still up, never down.
+    expect(suggestTime(a, [{ ...leg(10), seconds: 10 * 60 + 1 }], 1)).toBe("10:15");
+    expect(suggestTime(a, [{ ...leg(14), seconds: 14 * 60 + 59 }], 1)).toBe("10:15");
+  });
+
   it("suggestTime is null when the suggestion would pass midnight (no wrap)", () => {
     expect(suggestTime(day([p("a", 90, "22:00")]), [leg(30)], 1)).toBeNull(); // 24:00
-    expect(suggestTime(day([p("a", 90, "22:00")]), [leg(29)], 1)).toBe("23:59");
+    // 23:59 rounds up to 24:00: none.
+    expect(suggestTime(day([p("a", 90, "22:00")]), [leg(29)], 1)).toBeNull();
+    expect(suggestTime(day([p("a", 90, "22:00")]), [leg(25)], 1)).toBe("23:55");
     expect(suggestTime(day([p("a", 600, "20:00"), p("b", 30)]), [leg(10)], 2)).toBeNull();
   });
 });
