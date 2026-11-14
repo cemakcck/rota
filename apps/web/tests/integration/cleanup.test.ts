@@ -4,7 +4,7 @@ import { newTripId } from "@rota/trip";
 import { cleanUp, startCleanup } from "@/server/cleanup";
 import { db } from "@/server/db/client";
 import { DEMO_FRIEND_DOMAIN } from "@/server/demo";
-import { tripInvites, tripMembers, tripTombstones, trips, user } from "@/server/db/schema";
+import { rateLimits, tripInvites, tripMembers, tripTombstones, trips, user } from "@/server/db/schema";
 import { createLinkInvite } from "@/server/trips/invites";
 import { addMember, createTrip, transferOwnership } from "@/server/trips/repo";
 import { NEW_TRIP, insertUser } from "./helpers";
@@ -171,5 +171,17 @@ describe("cleanup", () => {
     expect(await userExists(idle.id)).toBe(false);
     expect(await tripExists(idle.tripId)).toBe(true);
     expect(await userExists(joined)).toBe(true);
+  });
+
+  it("prunes rate-limit windows older than a day", async () => {
+    const key = `prune:${newTripId()}`;
+    const HOUR = 3_600_000;
+    await db.insert(rateLimits).values([
+      { key, windowStart: new Date(Date.now() - 25 * HOUR), count: 3 },
+      { key, windowStart: new Date(Date.now() - 23 * HOUR), count: 1 },
+    ]);
+    await cleanUp();
+    const left = await db.select().from(rateLimits).where(eq(rateLimits.key, key));
+    expect(left.map((r) => r.count)).toEqual([1]);
   });
 });

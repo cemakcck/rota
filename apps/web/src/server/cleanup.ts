@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, like, lt, ne, notExists, notLike, sql } from 
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./db/client";
 import { DEMO_FRIEND_DOMAIN } from "./demo";
-import { tripMembers, tripTombstones, trips, user } from "./db/schema";
+import { rateLimits, tripMembers, tripTombstones, trips, user } from "./db/schema";
 import { deleteTrip } from "./trips/repo";
 
 const DEMO_IDLE_DAYS = 7;
@@ -55,7 +55,7 @@ async function deleteDemoVisitor(id: string): Promise<void> {
 /**
  * Deletes demo visitors idle for 7 days (their trips tombstoned first) together with the demo
  * friends on those trips, and tombstones past 30 days. Friends never act, so their own activity
- * says nothing: their lifetime follows the visitor's.
+ * says nothing: their lifetime follows the visitor's. Also drops rate-limit windows past a day.
  */
 export async function cleanUp(): Promise<void> {
   const idle = await db
@@ -87,6 +87,8 @@ export async function cleanUp(): Promise<void> {
     ),
   );
   await db.delete(tripTombstones).where(lt(tripTombstones.deletedAt, sql`now() - make_interval(days => ${TOMBSTONE_DAYS})`));
+  // The longest rate-limit window is a day, so a window that started over a day ago has ended.
+  await db.delete(rateLimits).where(lt(rateLimits.windowStart, sql`now() - interval '1 day'`));
 }
 
 /** Runs housekeeping every `intervalMs`. Failures are logged and the next run tries again. Returns a stop function. */

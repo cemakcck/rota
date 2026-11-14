@@ -4,7 +4,8 @@ import { rateLimits } from "./db/schema";
 
 /**
  * Fixed-window counter in one upsert-returning statement. `now` is injectable so tests can step
- * into the next window without waiting.
+ * into the next window without waiting. Windows are at most a day long: the hourly cleanup drops
+ * rows whose window started more than a day ago.
  */
 export async function hit(
   key: string,
