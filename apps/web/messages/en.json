@@ -345,8 +345,9 @@
     "reorderedTo": "{name} moved to position {position} of {total}",
     "filter": "Filter",
     "hoursOnly": "{h} h",
-    "planHint": "Drag to reorder · click a place for details",
-    "delete": "Delete"
+    "planHint": "Drag or Alt+↑/↓ to reorder · click a place for details",
+    "delete": "Delete",
+    "reorderedToAt": "{name} now at {time}, position {position} of {total}"
   },
   "map": {
     "sheetHandle": "Resize the list",

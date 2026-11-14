@@ -3,7 +3,7 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { useDroppable, type Announcements } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
-import { dayNote, dayTimeline, dayUrls, type DayPatch, type DayView, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import { dayNote, dayTimeline, dayUrls, readTrip, type DayPatch, type DayView, type PlaceView, type Slot, type TripView } from "@rota/trip";
 import type { StopWarning } from "@/client/useHours";
 import type { Travel } from "@/client/useTravel";
 import { dayColour } from "../map/mapFeatures";
@@ -127,6 +127,7 @@ type RowProps = {
 
 /** A day's stops (or Ideas, without `day`) with connectors between them; also a drop target (its end). */
 function StopList({ day, places, travel, empty, rows }: { day?: DayView; places: PlaceView[]; travel?: Travel; empty: string; rows: RowProps }) {
+  const t = useTranslations("trip");
   const { setNodeRef, isOver } = useDroppable({ id: listDropId(day?.id ?? null), disabled: !rows.actions });
   const timeline = day ? dayTimeline(day, travel?.legs ?? []) : [];
   const colour = day ? dayColour(day.index) : "#78716c";
@@ -142,7 +143,7 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
             // A late arrival is only worth saying once the travel before it is known: not from a
             // straight-line guess while the route is still on its way.
             const guessing = leg?.approximate && travel?.loading;
-            const late = entry?.lateBy && !guessing ? { minutes: entry.lateBy, from: places[i - 1]?.name ?? "" } : null;
+            const late = entry?.lateBy && !guessing ? { minutes: entry.lateBy, from: places[i - 1]?.name || t("unnamed") } : null;
             return (
               <Fragment key={place.id}>
                 {day && i > 0 && <Connector leg={leg} mode={day.travelMode} />}
@@ -159,6 +160,8 @@ function StopList({ day, places, travel, empty, rows }: { day?: DayView; places:
                   open={place.id === rows.openId}
                   onOpen={rows.onOpen}
                   actions={rows.actions}
+                  first={i === 0}
+                  last={i === places.length - 1}
                 />
               </Fragment>
             );
@@ -221,6 +224,7 @@ export function DayPlan({
   const [openId, setOpenId] = useState<string | null>(null);
   // What this person's own keyboard reorder did, said politely (others' changes come from the Announcer).
   const [status, setStatus] = useState("");
+  const collab = useCollab();
 
   const lists = plannedLists(view);
   const find = (id: string | null) => {
@@ -239,9 +243,24 @@ export function DayPlan({
   const listChoiceLabel = (id: ListId) => (id === null ? t("ideas") : `${listLabel(id)} · ${dayDate(view.days.find((d) => d.id === id)!.date)}`);
   const choices = lists.map((l) => ({ id: l.id, label: listChoiceLabel(l.id) }));
 
+  // After this person's own reorder or time change: where the stop is now, and its time if it has one.
+  const sayWhere = (id: string) => {
+    if (!collab) return;
+    const list = plannedLists(readTrip(collab.doc)).find((l) => l.places.some((p) => p.id === id));
+    if (!list) return;
+    const position = list.places.findIndex((p) => p.id === id) + 1;
+    const place = list.places[position - 1];
+    const name = place.name || t("unnamed");
+    const total = list.places.length;
+    setStatus(place.time === null || list.id === null ? t("reorderedTo", { name, position, total }) : t("reorderedToAt", { name, time: place.time, position, total }));
+  };
   const stopActions: StopActions | null = actions && {
     ...actions,
     openMove: setMoving,
+    setTime(id, time) {
+      actions.setTime(id, time);
+      sayWhere(id);
+    },
     nudge(id, by) {
       const list = find(id);
       const places = lists.find((l) => l.id === list?.list)?.places ?? [];
@@ -249,8 +268,10 @@ export function DayPlan({
       const neighbour = places[at + by];
       if (!list || !neighbour) return;
       if (!actions.move(id, by < 0 ? { dayId: list.list, beforeId: neighbour.id } : { dayId: list.list, afterId: neighbour.id })) return;
-      setStatus(t("reorderedTo", { name: list.place.name || t("unnamed"), position: at + by + 1, total: places.length }));
-      requestAnimationFrame(() => document.getElementById(placeFocusId(id))?.focus());
+      sayWhere(id);
+      // Focus stays on what was used (the name with Alt+arrows, or the Move up/down button).
+      const was = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+      requestAnimationFrame(() => (was?.isConnected ? was : document.getElementById(placeFocusId(id)))?.focus());
     },
   };
   const rows: RowProps = {

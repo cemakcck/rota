@@ -258,7 +258,7 @@ export function SearchBar({
         </p>
       ) : (
         // The map's own way in (TripMap's AddHere) has no visible control, so it is named here.
-        <p id={`${id}-help`} className="sr-only">
+        <p id={`${id}-help`} className="mx-5 -mt-1.5 mb-2 text-[12px] text-ink-2">
           {tm("addHereHelp")}
         </p>
       )}

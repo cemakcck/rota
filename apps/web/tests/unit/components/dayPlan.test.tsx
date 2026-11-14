@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import * as Y from "yjs";
 import { addPlace, createUndo, dayUrls, setPlaceTime } from "@rota/trip";
 import { MapLoaderContext } from "@/components/map/engine";
 import { fakeMap } from "../map/fakeMap";
@@ -441,5 +442,100 @@ describe("day plan", () => {
       expect(names(day(n))).toEqual([`Stop on day ${n}`]);
     }
     expect(names(screen.getByRole("region", { name: "Ideas" }))).toEqual(["Maybe"]);
+  });
+  it("the map's add-here hint is visible under the search", () => {
+    newTrip();
+    renderIntl(<TripScreen tripId="t1" />);
+    const hint = screen.getByText("Right-click or long-press the map to add a place there.");
+    expect(hint.className).not.toContain("sr-only");
+    expect(search().getAttribute("aria-describedby")).toContain(hint.id);
+  });
+
+  it("an open stop's Move up/down buttons reorder, re-time and announce", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", stayMinutes: 60, dayId: dayIds[0], time: "09:00" }, "u1");
+    addPlace(doc, { name: "B", category: "sight", stayMinutes: 30, dayId: dayIds[0], time: "10:00" }, "u1");
+    addPlace(doc, { name: "C", category: "sight", stayMinutes: 30, dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    expect(screen.getByText(/Alt\+↑\/↓/)).toBeTruthy();
+    const status = screen.getByTestId("plan-status");
+
+    fireEvent.click(within(row("C")).getByRole("button", { name: "C" }));
+    expect(screen.getByRole("button", { name: "Move C down" }).getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Move C up" }));
+    expect(names(day(1))).toEqual(["A", "C", "B"]);
+    expect(status.textContent).toBe("C moved to position 2 of 3");
+
+    fireEvent.click(within(row("B")).getByRole("button", { name: "B" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move B up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move B up" }));
+    expect(names(day(1))).toEqual(["B", "A", "C"]);
+    // Re-timed for its new slot (never before the timed stop now after it).
+    expect(fake.view.days[0].places[0].time).toBe("09:00");
+    expect(status.textContent).toBe("B now at 09:00, position 1 of 3");
+    expect(screen.getByRole("button", { name: "Move B up" }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("changing a time says where the stop went and when", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
+    addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0], time: "10:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Change the time for B, now 10:00" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Time for B" }), { target: { value: "08:30" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for B" }), { key: "Enter" });
+    expect(screen.getByTestId("plan-status").textContent).toBe("B now at 08:30, position 1 of 2");
+  });
+
+  it("an invalid inline time says why and stays open", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Change the time for A, now 09:00" }));
+    const input = screen.getByRole("textbox", { name: "Time for A" });
+    fireEvent.change(input, { target: { value: "25:00" } });
+    fireEvent.blur(input);
+    expect(screen.getByRole("textbox", { name: "Time for A" })).toBe(input);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    const message = screen.getByText("Enter a time like 09:30, or leave it empty.");
+    expect(input.getAttribute("aria-describedby")).toBe(message.id);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("textbox", { name: "Time for A" })).toBeTruthy();
+    expect(fake.view.days[0].places[0].time).toBe("09:00");
+  });
+
+  it("setting the time of an estimated stop starts from the estimate", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", stayMinutes: 60, dayId: dayIds[0], time: "09:00" }, "u1");
+    addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Set a time for B, estimated 10:00" }));
+    const input = screen.getByRole("textbox", { name: "Time for B" }) as HTMLInputElement;
+    expect(input.value).toBe("10:00");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(fake.view.days[0].places[1].time).toBe("10:00");
+  });
+
+  it("finishing a time edit keeps telling others the open place is being edited", () => {
+    const { doc, dayIds } = newTrip();
+    const id = addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(within(row("A")).getByRole("button", { name: "A" }));
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
+    fireEvent.click(screen.getByRole("button", { name: "Change the time for A, now 09:00" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Time for A" }), { target: { value: "09:30" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for A" }), { key: "Enter" });
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fake.awareness.getLocalState()?.editing).toBeNull();
+  });
+
+  it("a late line names an unnamed previous stop", () => {
+    const { doc, dayIds } = newTrip();
+    const first = addPlace(doc, { name: "Temp", category: "sight", stayMinutes: 120, dayId: dayIds[0], time: "09:00" }, "u1");
+    addPlace(doc, { name: "Lunch", category: "food", dayId: dayIds[0], time: "10:00" }, "u1");
+    (doc.getMap("places").get(first) as Y.Map<unknown>).set("name", "");
+    renderIntl(<TripScreen tripId="t1" />);
+    expect(within(row("Lunch")).getByText("You'd arrive ≈ 60 min late (from Unnamed place)")).toBeTruthy();
   });
 });

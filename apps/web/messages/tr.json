@@ -345,8 +345,9 @@
     "reorderedTo": "{name}, {total} durak içinde {position}. sıraya taşındı",
     "filter": "Filtre",
     "hoursOnly": "{h} sa",
-    "planHint": "Sıralamak için sürükleyin · ayrıntılar için bir yere tıklayın",
-    "delete": "Sil"
+    "planHint": "Sıralamak için sürükleyin ya da Alt+↑/↓ kullanın · ayrıntılar için bir yere tıklayın",
+    "delete": "Sil",
+    "reorderedToAt": "{name} şimdi {time}, {total} durak içinde {position}. sırada"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

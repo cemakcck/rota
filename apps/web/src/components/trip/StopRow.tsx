@@ -40,9 +40,10 @@ const CONTROLS = "button, a, input, select, textarea, label, [contenteditable], 
 const focusLater = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
 /** The stop's time, edited in place: Enter or leaving the field saves, Escape cancels, empty clears. */
-function TimeInput({ place, name, onDone }: { place: PlaceView; name: string; onDone: (time?: string | null) => void }) {
+function TimeInput({ place, name, initial, onDone }: { place: PlaceView; name: string; initial: string; onDone: (time?: string | null) => void }) {
   const t = useTranslations("trip");
-  const [draft, setDraft] = useState(place.time ?? "");
+  const errorId = `${placeTimeId(place.id)}-error`;
+  const [draft, setDraft] = useState(initial);
   const [invalid, setInvalid] = useState(false);
   const done = useRef(false);
   const finish = (time?: string | null) => {
@@ -50,12 +51,14 @@ function TimeInput({ place, name, onDone }: { place: PlaceView; name: string; on
     done.current = true;
     onDone(time);
   };
-  const commit = (cancelIfInvalid: boolean) => {
+  // Something that is not a time is never dropped silently: the field stays, saying why.
+  const commit = () => {
     const time = parseTime(draft);
-    if (time === null) return cancelIfInvalid ? finish() : setInvalid(true);
+    if (time === null) return setInvalid(true);
     finish(time === "" ? null : time);
   };
   return (
+    <>
     <input
       autoFocus
       type="text"
@@ -64,6 +67,7 @@ function TimeInput({ place, name, onDone }: { place: PlaceView; name: string; on
       maxLength={5}
       aria-label={t("timeFor", { name })}
       aria-invalid={invalid || undefined}
+      aria-describedby={invalid ? errorId : undefined}
       className="h-7 w-[68px] rounded-md border border-ink-2 bg-surface px-1.5 text-right text-[13px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
       value={draft}
       onChange={(e) => {
@@ -73,26 +77,45 @@ function TimeInput({ place, name, onDone }: { place: PlaceView; name: string; on
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          commit(false);
+          commit();
         } else if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
           finish();
         }
       }}
-      onBlur={() => commit(true)}
+      onBlur={commit}
       // Selecting text in the field is not a drag of the row.
       onPointerDown={(e) => e.stopPropagation()}
     />
+    {invalid && (
+      <p id={errorId} className="w-36 text-right text-[12px] font-medium leading-snug text-danger">
+        {t("timeInvalid")}
+      </p>
+    )}
+    </>
   );
 }
 
 /** The right-hand column: the set time (bold), an estimate ("≈ 11:20", muted) or "Set a time"; then the stay. */
-function When({ place, name, timing, onSetTime }: { place: PlaceView; name: string; timing?: TimelineEntry; onSetTime: ((time: string | null) => void) | null }) {
+function When({
+  place,
+  name,
+  timing,
+  onSetTime,
+  editing,
+  setEditing,
+}: {
+  place: PlaceView;
+  name: string;
+  timing?: TimelineEntry;
+  onSetTime: ((time: string | null) => void) | null;
+  /** The time field is open (the row publishes that it is being edited). */
+  editing: boolean;
+  setEditing(editing: boolean): void;
+}) {
   const t = useTranslations("trip");
   const stay = useStay();
-  const [editing, setEditing] = useState(false);
-  usePublishEditing(place.id, editing);
   const arrive = timing?.arrive ?? null;
   const estimated = arrive !== null && timing!.estimated;
   const shown = arrive === null ? null : estimated ? (
@@ -111,6 +134,8 @@ function When({ place, name, timing, onSetTime }: { place: PlaceView; name: stri
       <TimeInput
         place={place}
         name={name}
+        // An estimate is where the time starts: confirming it sets it.
+        initial={place.time ?? arrive ?? ""}
         onDone={(value) => {
           setEditing(false);
           if (value !== undefined && value !== place.time) onSetTime(value);
@@ -177,6 +202,8 @@ export function StopRow({
   open,
   onOpen,
   actions,
+  first,
+  last,
 }: {
   place: PlaceView;
   /** Stop number within a day; none in Ideas. */
@@ -193,16 +220,21 @@ export function StopRow({
   open: boolean;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
+  /** First / last in its list (Move up / Move down stay focusable but do nothing there). */
+  first: boolean;
+  last: boolean;
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const [noteOpen, setNoteOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
   const name = place.name || t("unnamed");
   const collab = useCollab();
   const note = collab && noteOrNull(() => placeNote(collab.doc, place.id));
   const hasNote = note !== null && noteFirstLine(note) !== "";
   const peer = useEditingPeer(place.id);
-  usePublishEditing(place.id, actions !== null && (open || noteOpen));
+  // One publisher per place: the editor, its note and the time field together.
+  usePublishEditing(place.id, actions !== null && (open || noteOpen || timeOpen));
   const { setNodeRef: setDragRef, listeners, isDragging } = useDraggable({ id: place.id, disabled: !actions });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: placeDropId(place.id), disabled: !actions });
 
@@ -273,7 +305,14 @@ export function StopRow({
           {late && <WarnLine text={t("late", { minutes: late.minutes, place: late.from })} />}
           {warning && <HoursWarning {...warning} />}
         </div>
-        <When place={place} name={name} timing={timing} onSetTime={actions && ((time) => actions.setTime(place.id, time))} />
+        <When
+          place={place}
+          name={name}
+          timing={timing}
+          onSetTime={actions && ((time) => actions.setTime(place.id, time))}
+          editing={timeOpen}
+          setEditing={setTimeOpen}
+        />
       </div>
 
       {open && (
@@ -297,6 +336,13 @@ export function StopRow({
             </a>
             {actions && (
               <>
+                {/* The single-pointer way to reorder (WCAG 2.5.7), besides dragging and Alt+↑/↓. */}
+                <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveUpFor", { name })} aria-disabled={first || undefined} onClick={() => !first && actions.nudge(place.id, -1)}>
+                  <Icon name="up" size={14} />
+                </button>
+                <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveDownFor", { name })} aria-disabled={last || undefined} onClick={() => !last && actions.nudge(place.id, 1)}>
+                  <Icon name="down" size={14} />
+                </button>
                 <button type="button" id={placeMoveId(place.id)} className={`${btn} ${btnSm}`} aria-haspopup="dialog" onClick={() => actions.openMove(place.id)}>
                   <Icon name="move" size={14} />
                   <span aria-hidden="true">{t("moveSubmit")}</span>
