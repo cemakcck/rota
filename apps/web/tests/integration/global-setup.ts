@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { migrateDb } from "../../src/server/db/client";
 
 const BASE = process.env.TEST_DATABASE_URL ?? "postgres://rota:rota@localhost:5434/rota_test";
 
@@ -17,5 +18,5 @@ export default async function setup() {
   } finally {
     await admin.end();
   }
-  // Task 4 hook: run the Drizzle migrations against `BASE` here.
+  await migrateDb(BASE);
 }

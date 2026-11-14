@@ -9,15 +9,20 @@
     "build": "next build",
     "start": "NODE_ENV=production tsx server.ts",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts"
   },
   "dependencies": {
     "@rota/trip": "*",
+    "better-auth": "^1.7.23",
+    "drizzle-orm": "^0.45.4",
     "next": "16.4.5",
     "next-intl": "^4.14.9",
     "postgres": "^4.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "resend": "^6.38.1",
     "tsx": "^4.23.15"
   },
   "devDependencies": {
@@ -27,6 +32,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.2.1",
+    "drizzle-kit": "^0.31.11",
     "jsdom": "^31.0.0",
     "tailwindcss": "^4"
   }
