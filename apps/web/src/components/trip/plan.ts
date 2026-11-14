@@ -1,4 +1,4 @@
-import { estimateLeg, type Category, type DayView, type Leg, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import type { Category, PlaceView, Slot, TripView } from "@rota/trip";
 
 /** Where a planned place lives: a day id, or null for Ideas. */
 export type ListId = string | null;
@@ -30,15 +30,6 @@ export function dropTarget(view: TripView, activeId: string, overId: string): ({
     return active >= 0 && active < over ? { dayId: list.id, afterId: overPlace } : { dayId: list.id, beforeId: overPlace };
   }
   return null;
-}
-
-/** Straight-line travel estimates between a day's consecutive stops (null where a stop has no coordinates). */
-export function estimatedLegs(day: DayView): (Leg | null)[] {
-  return day.places.slice(1).map((to, i) => {
-    const from = day.places[i];
-    if (from.lat === null || from.lng === null || to.lat === null || to.lng === null) return null;
-    return estimateLeg({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }, day.travelMode);
-  });
 }
 
 export type Filter = { categories: Category[]; tag: string | null };
@@ -90,4 +81,12 @@ export function structuralChanges(before: TripView, after: TripView): Change[] {
   const [beforeOrder, afterOrder] = [order(before), order(after)];
   for (const [list, ids] of afterOrder) if (beforeOrder.has(list) && beforeOrder.get(list) !== ids) changes.push({ kind: "reordered", list });
   return changes;
+}
+
+/** The trip's destination, else the centre of its pinned places (planned and ideas), else null. */
+export function tripCentre(view: TripView): { lat: number; lng: number } | null {
+  if (view.destination) return { lat: view.destination.lat, lng: view.destination.lng };
+  const pins = plannedLists(view).flatMap((l) => l.places.filter((p) => p.lat !== null && p.lng !== null)) as { lat: number; lng: number }[];
+  if (pins.length === 0) return null;
+  return { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length };
 }

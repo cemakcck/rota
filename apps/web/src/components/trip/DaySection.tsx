@@ -1,9 +1,12 @@
 "use client";
 
-import { useId, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { dayNote, dayUrls, type DayPatch, type DayView, type MemberView, type PlaceView, type TimelineEntry } from "@rota/trip";
+import type { StopWarning } from "@/client/useHours";
+import type { Travel } from "@/client/useTravel";
+import type { DayWeather } from "@/client/useWeather";
 import { btn, btnSm } from "../ui";
 import { CommitInput } from "./CommitInput";
 import { GoogleMapsPin, Icon } from "./icons";
@@ -11,13 +14,16 @@ import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { PlaceRow, type PlaceActions } from "./PlaceRow";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { listDropId } from "./plan";
+import { Approximate, TravelLeg, useDuration } from "./TravelLeg";
+import { WeatherChip } from "./WeatherChip";
 
 const segment = "inline-flex h-[26px] items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2";
 
-/** A day's start time, travel mode and Google Maps directions (one link per part of a long day). */
-function DayControls({ day, title, onDay }: { day: DayView; title: string; onDay: ((patch: DayPatch) => void) | null }) {
+/** A day's start time, travel mode and total, and Google Maps directions (one link per part of a long day). */
+function DayControls({ day, title, travel, onDay }: { day: DayView; title: string; travel?: Travel; onDay: ((patch: DayPatch) => void) | null }) {
   const t = useTranslations("trip");
   const id = useId();
+  const duration = useDuration();
   const urls = dayUrls(day, day.travelMode);
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2.5 text-[12.5px] text-ink-2">
@@ -49,6 +55,12 @@ function DayControls({ day, title, onDay }: { day: DayView; title: string; onDay
           </button>
         ))}
       </div>
+      {travel && travel.totalSeconds > 0 && (
+        <span data-testid="travel-total" className="font-mono text-[12px]">
+          {travel.anyApproximate && <Approximate />}
+          {t("travelTotal", { duration: duration(travel.totalSeconds) })}
+        </span>
+      )}
       {urls.map((url, i) => (
         <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`${btn} ${btnSm}`}>
           <GoogleMapsPin />
@@ -84,6 +96,9 @@ export function DaySection({
   subtitle,
   places,
   timeline,
+  travel,
+  warnings,
+  weather,
   visible,
   selectedId,
   onSelect,
@@ -96,6 +111,10 @@ export function DaySection({
   subtitle?: string;
   places: PlaceView[];
   timeline?: TimelineEntry[];
+  travel?: Travel;
+  /** Opening-hours warnings by place id. */
+  warnings?: Map<string, StopWarning>;
+  weather?: DayWeather;
   visible: (p: PlaceView) => boolean;
   selectedId: string | null;
   onSelect(id: string): void;
@@ -109,33 +128,46 @@ export function DaySection({
   const arrivals = new Map(timeline?.map((e) => [e.placeId, e.arrive]));
   return (
     <section aria-labelledby={headingId} className="pb-2">
-      <h2 id={headingId} className="flex flex-wrap items-baseline gap-x-2 px-4 pb-2.5 pt-3.5 text-[15px] font-semibold tracking-[-0.01em]">
-        {title}
-        {subtitle && " "}
-        {subtitle && <span className="text-[13px] font-normal text-ink-2">{subtitle}</span>}
-      </h2>
-      {day && <DayControls day={day} title={title} onDay={onDay} />}
+      <div className="flex flex-wrap items-center gap-x-2 px-4 pb-2.5 pt-3.5">
+        <h2 id={headingId} className="flex flex-wrap items-baseline gap-x-2 text-[15px] font-semibold tracking-[-0.01em]">
+          {title}
+          {subtitle && " "}
+          {subtitle && <span className="text-[13px] font-normal text-ink-2">{subtitle}</span>}
+        </h2>
+        {weather && (
+          <span className="ml-auto">
+            <WeatherChip weather={weather} />
+          </span>
+        )}
+      </div>
+      {day && <DayControls day={day} title={title} travel={travel} onDay={onDay} />}
       {day && <DayNote day={day} title={title} editable={onDay !== null} />}
       <div ref={setNodeRef} className={`mx-3 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
         {places.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{day ? t("dayEmpty") : t("ideasEmpty")}</p>
         ) : (
           <ol className="grid gap-2">
-            {places.map((place, i) => (
-              <PlaceRow
-                key={place.id}
-                place={place}
-                number={day ? i + 1 : undefined}
-                first={i === 0}
-                last={i === places.length - 1}
-                arrival={arrivals.get(place.id)}
-                dimmed={!visible(place)}
-                selected={place.id === selectedId}
-                onSelect={onSelect}
-                members={members}
-                actions={actions}
-              />
-            ))}
+            {places.map((place, i) => {
+              const leg = day && i > 0 ? travel?.legs[i - 1] : null;
+              return (
+                <Fragment key={place.id}>
+                  {leg && <TravelLeg leg={leg} mode={day!.travelMode} />}
+                  <PlaceRow
+                    place={place}
+                    number={day ? i + 1 : undefined}
+                    first={i === 0}
+                    last={i === places.length - 1}
+                    arrival={arrivals.get(place.id)}
+                    warning={warnings?.get(place.id)}
+                    dimmed={!visible(place)}
+                    selected={place.id === selectedId}
+                    onSelect={onSelect}
+                    members={members}
+                    actions={actions}
+                  />
+                </Fragment>
+              );
+            })}
           </ol>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { afterAll, afterEach, beforeAll, describe } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { startServer, type RunningServer } from "../../server";
 import { closeProviders, liveServerTests, watchForSecondYjs } from "./liveServer";
 
@@ -29,4 +29,11 @@ describe("startServer (production build)", () => {
   });
 
   liveServerTests(() => ({ server, yjs }));
+
+  it("serves MapLibre's worker from this origin", async () => {
+    const res = await fetch(`${server.url}/maplibre-gl-worker.mjs`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/javascript/);
+    expect((await res.text()).length).toBeGreaterThan(1000);
+  });
 });

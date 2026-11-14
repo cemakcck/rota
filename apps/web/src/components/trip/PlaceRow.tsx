@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { placeNote, placeUrl, type MemberView, type PlaceView } from "@rota/trip";
+import type { StopWarning } from "@/client/useHours";
 import { btn, btnSm } from "../ui";
 import { CommitInput } from "./CommitInput";
+import { HoursWarning } from "./HoursWarning";
 import { CategoryIcon, GoogleMapsPin, Icon } from "./icons";
 import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { PlaceEditor, type PlaceEdit } from "./PlaceEditor";
@@ -71,6 +73,7 @@ export function PlaceRow({
   first,
   last,
   arrival,
+  warning,
   dimmed,
   selected,
   onSelect,
@@ -83,6 +86,8 @@ export function PlaceRow({
   first: boolean;
   last: boolean;
   arrival?: string;
+  /** An opening-hours warning for the stop's estimated visit. */
+  warning?: StopWarning;
   dimmed: boolean;
   /** Selected here or by tapping its pin: highlighted, and shown on the map. */
   selected: boolean;
@@ -166,6 +171,11 @@ export function PlaceRow({
         )}
       </div>
 
+      {warning && (
+        <div className="col-span-full min-w-0">
+          <HoursWarning {...warning} />
+        </div>
+      )}
       {note && (
         <div className="col-span-full min-w-0">
           <NoteEditor fragment={note} awareness={collab?.awareness ?? null} name={name} editable={actions !== null} onOpenChange={setNoteOpen} />

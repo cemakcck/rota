@@ -17,17 +17,21 @@ import {
   setTripMeta,
   updateChecklistItem,
   updatePlace,
-  type Leg,
+  type Locale,
   type PlaceView,
   type TripView,
   type Undo,
 } from "@rota/trip";
 import { useUserId } from "@/client/authClient";
+import type { DayWeather } from "@/client/useWeather";
 import { forgetTrip } from "@/client/myTrips";
 import { setUser, usePeers } from "@/client/presence";
 import { useTrip } from "@/client/sync/useTrip";
+import { reverseGeocode } from "@/client/geocode";
+import { useHours } from "@/client/useHours";
+import { useTravels } from "@/client/useTravel";
+import { useWeather } from "@/client/useWeather";
 import { useRouter } from "@/i18n/navigation";
-import type { ReverseGeocode } from "../map/AddHere";
 import { BottomSheet, type Snap } from "../map/BottomSheet";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
@@ -40,19 +44,12 @@ import { Header } from "./Header";
 import { Itinerary, type ItineraryActions } from "./Itinerary";
 import { placeFocusId, placeRowId } from "./PlaceRow";
 import { CollabContext, Presence, type Collab } from "./Presence";
-import { estimatedLegs, NO_FILTER, passes, plannedLists, type ListId } from "./plan";
+import { NO_FILTER, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { TripSettingsScreen } from "./TripSettingsScreen";
 import { UndoToast } from "./UndoToast";
+import { WeatherChip } from "./WeatherChip";
 
-type Props = {
-  tripId: string;
-  /** Travel legs between a day's consecutive stops, for arrival times. Defaults to straight-line estimates. */
-  legsFor?: (dayId: string) => (Leg | null)[];
-  /** Road geometry of each day's route, when known. Defaults to straight lines between stops. */
-  routeGeometry?: Record<string, GeoJSON.LineString>;
-  /** A name for a point on the map, to prefill a place added there. */
-  reverseGeocode?: ReverseGeocode;
-};
+type Props = { tripId: string };
 
 /** Per-person undo for the signed-in user; null while the user is unknown. Re-renders when the stacks change. */
 function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
@@ -120,13 +117,29 @@ function Tabs({ id, tab, onTab, labels }: { id: string; tab: Tab; onTab: (tab: T
   );
 }
 
+/**
+ * The header's weather strip: each day with a forecast, or when the first forecast appears. Hidden on
+ * small screens, where each day's own chip shows it.
+ */
+function WeatherStrip({ view, weather }: { view: TripView; weather: Record<string, DayWeather> }) {
+  const tw = useTranslations("weather");
+  const days = view.days.filter((d) => weather[d.date] && "forecast" in weather[d.date]);
+  const next = view.days.map((d) => weather[d.date]).find((w) => w && "from" in w);
+  if (days.length === 0 && !next) return null;
+  return (
+    <div role="group" aria-label={tw("label")} className="hidden gap-1.5 md:flex">
+      {days.length > 0 ? days.map((d) => <WeatherChip key={d.id} weather={weather[d.date]} day={d.date} />) : next && <WeatherChip weather={next} />}
+    </div>
+  );
+}
+
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
 export function TripScreen(props: Props) {
   const userId = useUserId();
   return <TripScreenFor key={userId ?? ""} {...props} />;
 }
 
-function TripScreenFor({ tripId, legsFor, routeGeometry, reverseGeocode }: Props) {
+function TripScreenFor({ tripId }: Props) {
   const t = useTranslations("trip");
   const tm = useTranslations("map");
   const locale = useLocale();
@@ -194,12 +207,13 @@ function TripScreenFor({ tripId, legsFor, routeGeometry, reverseGeocode }: Props
   const full = useMemo(() => isTripFull(view, Y.encodeStateAsUpdate(doc).byteLength), [view, doc]);
   const visible = useCallback((p: PlaceView) => passes(filter, p), [filter]);
   const hiddenIds = useMemo(() => new Set(plannedLists(view).flatMap((l) => l.places.filter((p) => !visible(p)).map((p) => p.id))), [view, visible]);
-  const legs =
-    legsFor ??
-    ((dayId: string) => {
-      const day = view.days.find((d) => d.id === dayId);
-      return day ? estimatedLegs(day) : [];
-    });
+  // Travel times and road routes, opening hours and weather, through our proxies (estimates offline).
+  const travel = useTravels(view);
+  const legsFor = useCallback((dayId: string) => travel[dayId]?.legs ?? [], [travel]);
+  const warnings = useHours(view, legsFor, locale as Locale);
+  const weather = useWeather(view);
+  const routeGeometry = useMemo(() => Object.fromEntries(Object.entries(travel).flatMap(([id, d]) => (d.geometry ? [[id, d.geometry]] : []))), [travel]);
+  const centre = useMemo(() => tripCentre(view), [view]);
 
   const labelIn = useCallback(
     (v: TripView, list: ListId) => {
@@ -299,6 +313,7 @@ function TripScreenFor({ tripId, legsFor, routeGeometry, reverseGeocode }: Props
           onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
           settings={<TripSettingsScreen tripId={tripId} />}
           presence={<Presence self={userId ? (self ?? { id: userId, name: "", colour: "" }) : null} peers={peers} members={view.members} />}
+          weather={<WeatherStrip view={view} weather={weather} />}
         />
         {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
         <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
@@ -341,12 +356,14 @@ function TripScreenFor({ tripId, legsFor, routeGeometry, reverseGeocode }: Props
                 }}
               />
               <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
-                {editor !== null && <AddPlace lists={lists} full={full} onAdd={(name, dayId) => addPlace(doc, { name, category: "other", dayId }, editor)} />}
+                {editor !== null && <AddPlace lists={lists} full={full} near={centre} onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)} />}
                 <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
                 <Itinerary
                   view={view}
                   visible={visible}
-                  legsFor={legs}
+                  travel={travel}
+                  warnings={warnings}
+                  weather={weather}
                   listLabel={(list) => labelIn(view, list)}
                   dayDate={dayDate}
                   selectedId={selectedPlaceId}

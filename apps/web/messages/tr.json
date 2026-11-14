@@ -300,7 +300,20 @@
     "assignItem": "Kim yapacak: {text}",
     "anyone": "Herhangi biri",
     "checklistFull": "Kontrol listesi dolu",
-    "checklistFullHelp": "En fazla {max} madde alır. Yenilerini eklemek için birkaçını silin."
+    "checklistFullHelp": "En fazla {max} madde alır. Yenilerini eklemek için birkaçını silin.",
+    "searchPlaceholder": "Yer ara ya da bir ad yaz",
+    "searchResults": "{count, plural, =0 {Yer bulunamadı} other {# yer bulundu}}",
+    "searchOffline": "Arama için bağlantı gerekiyor — yeri adıyla ekleyin",
+    "searchUnavailable": "Arama şu anda kullanılamıyor — yeri adıyla ekleyin",
+    "minutesShort": "{m} dk",
+    "hoursShort": "{h} sa {m} dk",
+    "legWalk": "{duration} yürüme",
+    "legDrive": "{duration} araçla",
+    "estimated": "tahmini",
+    "travelTotal": "{duration} yolda",
+    "hoursClosedDay": "{weekday} günleri kapalı",
+    "hoursOpensLater": "Açılış {at} — varışınız yaklaşık {arrive}",
+    "hoursClosesBefore": "Kapanış {at} — varışınız yaklaşık {arrive}"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",
@@ -336,5 +349,23 @@
     "gym": "Spor salonu",
     "stay": "Konaklama",
     "other": "Diğer"
+  },
+  "weather": {
+    "label": "Hava durumu",
+    "forecastFrom": "Tahmin {date} tarihinden itibaren",
+    "summary": "{condition}, en yüksek {max}°, en düşük {min}°",
+    "summaryRain": "{condition}, en yüksek {max}°, en düşük {min}°, %{rain} yağış olasılığı",
+    "onDay": "{day}: {summary}",
+    "conditions": {
+      "clear": "Açık",
+      "partly": "Parçalı bulutlu",
+      "cloudy": "Bulutlu",
+      "fog": "Sisli",
+      "drizzle": "Çisenti",
+      "rain": "Yağmurlu",
+      "showers": "Sağanak",
+      "snow": "Karlı",
+      "storm": "Gök gürültülü fırtına"
+    }
   }
 }

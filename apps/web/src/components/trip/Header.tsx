@@ -93,6 +93,7 @@ export function Header({
   onRename,
   settings,
   presence,
+  weather,
 }: {
   view: TripView;
   status: SyncStatus;
@@ -101,6 +102,8 @@ export function Header({
   settings: ReactNode;
   /** Avatars of who is here now. */
   presence: ReactNode;
+  /** The trip's weather strip. */
+  weather?: ReactNode;
 }) {
   const t = useTranslations("trip");
   const locale = useLocale();
@@ -119,6 +122,7 @@ export function Header({
         <TripName name={view.name} onRename={onRename} />
         <p className="text-[12.5px] text-ink-2">{t("dates", { range: dateRange(locale, view.startDate, view.days.length), count: view.days.length })}</p>
       </div>
+      {weather}
       <div className="ml-auto flex items-center gap-1.5">
         <SyncIndicator status={status} />
         {presence}

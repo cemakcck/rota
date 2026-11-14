@@ -300,7 +300,20 @@
     "assignItem": "Who does {text}",
     "anyone": "Anyone",
     "checklistFull": "The checklist is full",
-    "checklistFullHelp": "It holds up to {max} items. Delete some to add more."
+    "checklistFullHelp": "It holds up to {max} items. Delete some to add more.",
+    "searchPlaceholder": "Search places or type a name",
+    "searchResults": "{count, plural, =0 {No places found} one {# place found} other {# places found}}",
+    "searchOffline": "Search needs a connection — add it by name instead",
+    "searchUnavailable": "Search isn't available right now — add it by name instead",
+    "minutesShort": "{m} min",
+    "hoursShort": "{h} h {m} min",
+    "legWalk": "{duration} walk",
+    "legDrive": "{duration} drive",
+    "estimated": "estimated",
+    "travelTotal": "{duration} travel",
+    "hoursClosedDay": "Closed on {weekday}s",
+    "hoursOpensLater": "Opens at {at} — you arrive around {arrive}",
+    "hoursClosesBefore": "Closes at {at} — you arrive around {arrive}"
   },
   "map": {
     "sheetHandle": "Resize the list",
@@ -336,5 +349,23 @@
     "gym": "Gym",
     "stay": "Stay",
     "other": "Other"
+  },
+  "weather": {
+    "label": "Weather",
+    "forecastFrom": "Forecast from {date}",
+    "summary": "{condition}, high {max}°, low {min}°",
+    "summaryRain": "{condition}, high {max}°, low {min}°, {rain}% chance of rain",
+    "onDay": "{day}: {summary}",
+    "conditions": {
+      "clear": "Clear",
+      "partly": "Partly cloudy",
+      "cloudy": "Cloudy",
+      "fog": "Fog",
+      "drizzle": "Drizzle",
+      "rain": "Rain",
+      "showers": "Showers",
+      "snow": "Snow",
+      "storm": "Thunderstorm"
+    }
   }
 }

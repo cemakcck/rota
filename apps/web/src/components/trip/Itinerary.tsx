@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
-import { dayTimeline, type DayPatch, type Leg, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import { dayTimeline, type DayPatch, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import type { StopWarning } from "@/client/useHours";
+import type { Travel } from "@/client/useTravel";
+import type { DayWeather } from "@/client/useWeather";
 import { MoveDialog } from "./MoveDialog";
 import { placeMoveId, type PlaceActions } from "./PlaceRow";
 import { DaySection } from "./DaySection";
@@ -35,7 +38,9 @@ export type ItineraryActions = PlaceActions & {
 export function Itinerary({
   view,
   visible,
-  legsFor,
+  travel,
+  warnings,
+  weather,
   listLabel,
   dayDate,
   selectedId,
@@ -44,7 +49,12 @@ export function Itinerary({
 }: {
   view: TripView;
   visible: (p: PlaceView) => boolean;
-  legsFor: (dayId: string) => (Leg | null)[];
+  /** Each day's travel, by day id. */
+  travel: Record<string, Travel>;
+  /** Opening-hours warnings by place id. */
+  warnings: Map<string, StopWarning>;
+  /** Weather by date. */
+  weather: Record<string, DayWeather>;
   listLabel: (list: ListId) => string;
   dayDate: (date: string) => string;
   /** The place selected in the list or on the map. */
@@ -97,7 +107,10 @@ export function Itinerary({
           title={listLabel(day.id)}
           subtitle={dayDate(day.date)}
           places={day.places}
-          timeline={dayTimeline(day, legsFor(day.id))}
+          timeline={dayTimeline(day, travel[day.id]?.legs ?? [])}
+          travel={travel[day.id]}
+          warnings={warnings}
+          weather={weather[day.date]}
           visible={visible}
           selectedId={selectedId}
           onSelect={onSelect}
