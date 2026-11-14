@@ -28,6 +28,12 @@ function isConnectionError(err: unknown): boolean {
   return false;
 }
 
+/**
+ * Retries `fn` on connection-class errors only, with exponential backoff.
+ * A retried write may rarely be applied twice (the connection can drop after the server committed
+ * but before the reply arrived), so writes should be idempotent, and transaction callbacks must
+ * have no side effects outside the database.
+ */
 export async function withDbRetry<T>(
   fn: () => Promise<T>,
   { attempts = 4, baseDelayMs = 250 }: { attempts?: number; baseDelayMs?: number } = {},
@@ -42,34 +48,40 @@ export async function withDbRetry<T>(
   }
 }
 
-type Thenable = { then: unknown; execute: () => Promise<unknown> };
+type Thenable = { execute: () => Promise<unknown> };
 const isQuery = (v: unknown): v is Thenable =>
-  typeof v === "object" && v !== null && typeof (v as Thenable).then === "function" && typeof (v as Thenable).execute === "function";
+  typeof v === "object" && v !== null && typeof (v as { then?: unknown }).then === "function" && typeof (v as Thenable).execute === "function";
+
+/** Properties that hold drizzle internals or the driver, not queries. */
+const PASS_THROUGH = new Set(["$client", "_", "session", "dialect", "$cache"]);
 
 /**
- * Wraps a drizzle object so every query it runs goes through withDbRetry. Query builders are
- * thenables whose `then` calls `execute()`; the proxy replaces `then` with a retried `execute()`
- * and re-wraps whatever a builder method returns, so `db.select().from(t).where(...)` is covered
- * however long the chain. `transaction` retries as a whole (a dropped connection rolls it back).
- * Because the wrapper is on the db itself, Better Auth's adapter gets the same protection.
+ * Wraps a drizzle object so every way of running a query goes through withDbRetry:
+ * - awaiting a builder (`then`, `catch`, `finally` all go through one retried `execute()`),
+ * - an explicit `execute()` on a builder, a prepared statement or `db` itself,
+ * - relational queries (`db.query.x.findFirst()`), reached by wrapping object properties,
+ * - `transaction`, which retries as a whole (a dropped connection rolls it back).
+ * Whatever a method returns is wrapped again, so any chain length is covered. Because the wrapper
+ * is on the db itself, Better Auth's adapter gets the same protection.
  */
 function retrying<T extends object>(target: T): T {
   return new Proxy(target, {
     get(obj, prop) {
       const value: unknown = Reflect.get(obj, prop, obj);
-      if (prop === "then" && isQuery(obj)) {
-        return (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
-          withDbRetry(() => obj.execute()).then(resolve, reject);
+      if ((prop === "then" || prop === "catch" || prop === "finally") && isQuery(obj)) {
+        const run = withDbRetry(() => obj.execute());
+        return (run[prop] as (...a: unknown[]) => unknown).bind(run);
       }
-      if (prop === "transaction" && typeof value === "function") {
-        return (...args: unknown[]) => withDbRetry(() => value.apply(obj, args) as Promise<unknown>);
-      }
-      if (prop === "query" && typeof value === "object" && value !== null) return retrying(value);
       if (typeof value === "function") {
+        const retried = prop === "execute" || prop === "transaction";
         return (...args: unknown[]) => {
+          if (retried) return withDbRetry(() => value.apply(obj, args) as Promise<unknown>);
           const result: unknown = value.apply(obj, args);
           return typeof result === "object" && result !== null ? retrying(result) : result;
         };
+      }
+      if (typeof value === "object" && value !== null && typeof prop === "string" && !PASS_THROUGH.has(prop)) {
+        return retrying(value);
       }
       return value;
     },

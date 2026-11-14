@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { MEMBER_COLOURS } from "@rota/trip";
 import { auth, getSessionFromRequest } from "@/server/auth";
 
 const ORIGIN = "http://localhost:3400";
@@ -18,7 +19,7 @@ function post(path: string, body: unknown, headers: Record<string, string> = {})
 }
 
 const signUp = (over: Record<string, unknown> = {}, headers?: Record<string, string>) =>
-  post("/sign-up/email", { email: uniqueEmail(), password: "correct-horse-1", name: "Ayşe", colour: "#e11d48", ...over }, headers);
+  post("/sign-up/email", { email: uniqueEmail(), password: "correct-horse-1", name: "Ayşe", colour: MEMBER_COLOURS[0], ...over }, headers);
 
 describe("accounts", () => {
   it("sign up, sign in and read the session by cookie and by bearer token", async () => {
@@ -51,11 +52,13 @@ describe("accounts", () => {
     expect((await signUp({ name: "   " })).status).toBe(400);
     expect((await signUp({ name: "x".repeat(31) })).status).toBe(400);
     expect((await signUp({ colour: undefined })).status).toBe(400);
+    expect((await signUp({ colour: "#000000" })).status).toBe(400);
+    expect((await signUp({ colour: "red" })).status).toBe(400);
 
-    const res = await signUp({ name: "x".repeat(30), colour: "#0ea5e9" });
+    const res = await signUp({ name: "x".repeat(30), colour: MEMBER_COLOURS[5] });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { user: { colour: string; isDemo: boolean } };
-    expect(body.user.colour).toBe("#0ea5e9");
+    expect(body.user.colour).toBe(MEMBER_COLOURS[5]);
     expect(body.user.isDemo).toBe(false);
   });
 
@@ -64,5 +67,27 @@ describe("accounts", () => {
     for (let i = 0; i < 20; i++) expect((await signUp({}, headers)).status).toBe(200);
     expect((await signUp({}, headers)).status).toBe(429);
     expect((await signUp({}, { "x-forwarded-for": randomIp() })).status).toBe(200);
+  });
+
+  it("update-user applies the same name and colour rules and stores the trimmed name", async () => {
+    const email = uniqueEmail();
+    const signIn = async () => {
+      await signUp({ email });
+      const res = await post("/sign-in/email", { email, password: "correct-horse-1" });
+      return { Authorization: `Bearer ${res.headers.get("set-auth-token")}` };
+    };
+    const bearer = await signIn();
+    expect((await post("/update-user", { colour: "#000000" }, bearer)).status).toBe(400);
+    expect((await post("/update-user", { name: "x".repeat(31) }, bearer)).status).toBe(400);
+    expect((await post("/update-user", { name: "   " }, bearer)).status).toBe(400);
+    expect((await post("/update-user", { name: "  Mehmet  ", colour: MEMBER_COLOURS[3] }, bearer)).status).toBe(200);
+    const session = await getSessionFromRequest(new Request(`${ORIGIN}/x`, { headers: bearer }));
+    expect(session?.user.name).toBe("Mehmet");
+    expect((session?.user as { colour?: string }).colour).toBe(MEMBER_COLOURS[3]);
+  });
+
+  it("sign-up stores the trimmed name", async () => {
+    const res = await signUp({ name: "  Ayşe  " });
+    expect(((await res.json()) as { user: { name: string } }).user.name).toBe("Ayşe");
   });
 });

@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { isMemberColour } from "@rota/trip";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -39,20 +40,28 @@ export const auth = betterAuth({
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/sign-up/email") return;
+      const signUp = ctx.path === "/sign-up/email";
+      if (!signUp && ctx.path !== "/update-user") return;
       const body = (ctx.body ?? {}) as { name?: unknown; colour?: unknown };
-      const name = typeof body.name === "string" ? body.name.trim() : "";
-      if (name.length < 1 || name.length > 30) {
-        throw new APIError("BAD_REQUEST", { message: "Name must be 1 to 30 characters" });
+      let name: string | undefined;
+      if (signUp || body.name !== undefined) {
+        name = typeof body.name === "string" ? body.name.trim() : "";
+        if (name.length < 1 || name.length > 30) {
+          throw new APIError("BAD_REQUEST", { message: "Name must be 1 to 30 characters" });
+        }
       }
-      if (typeof body.colour !== "string" || body.colour.length < 1 || body.colour.length > 32) {
-        throw new APIError("BAD_REQUEST", { message: "Colour is required" });
+      if ((signUp || body.colour !== undefined) && !isMemberColour(body.colour)) {
+        throw new APIError("BAD_REQUEST", { message: "Colour must be one of the member colours" });
       }
-      const headers = ctx.headers ?? ctx.request?.headers ?? new Headers();
-      const limited = await hit("signup:" + hashIp(clientIp(headers)), SIGN_UPS_PER_IP_PER_DAY, DAY_SEC);
-      if (!limited.ok) {
-        throw new APIError("TOO_MANY_REQUESTS", { message: "Too many sign-ups from this address; try again tomorrow" });
+      if (signUp) {
+        const headers = ctx.headers ?? ctx.request?.headers ?? new Headers();
+        const limited = await hit("signup:" + hashIp(clientIp(headers)), SIGN_UPS_PER_IP_PER_DAY, DAY_SEC);
+        if (!limited.ok) {
+          throw new APIError("TOO_MANY_REQUESTS", { message: "Too many sign-ups from this address; try again tomorrow" });
+        }
       }
+      // Store the trimmed name.
+      return name === undefined ? undefined : { context: { body: { ...body, name } } };
     }),
   },
   databaseHooks: {

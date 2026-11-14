@@ -12,3 +12,4 @@ export * from "./travel";
 export * from "./timeline";
 export * from "./gmaps";
 export * from "./hours";
+export * from "./colours";

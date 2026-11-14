@@ -3,10 +3,12 @@ import type { IncomingMessage } from "node:http";
 
 /** Keyed hash of an IP so rate limiting works without ever storing a raw IP. */
 export function hashIp(ip: string, secret: string | undefined = process.env.IP_HASH_SECRET): string {
-  if (!secret && process.env.NODE_ENV === "production") {
-    console.warn("[privacy] IP_HASH_SECRET is not set; stored IP hashes use a public default key.");
+  if (!secret) {
+    // A public fallback key would make hashed IPv4 addresses trivially reversible.
+    if (process.env.NODE_ENV === "production") throw new Error("IP_HASH_SECRET must be set in production");
+    secret = "dev-secret";
   }
-  return createHmac("sha256", secret || "dev-secret").update(ip).digest("hex");
+  return createHmac("sha256", secret).update(ip).digest("hex");
 }
 
 /** Headers of a Fetch `Request`, a `Headers`, or a Node `IncomingMessage`, as one `Headers`. */
