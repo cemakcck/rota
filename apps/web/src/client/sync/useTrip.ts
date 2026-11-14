@@ -1,12 +1,22 @@
 "use client";
 
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
-import { readTrip, type TripView } from "@rota/trip";
+import { newId, readTrip, type TripView } from "@rota/trip";
 import { syncToken, useUserId } from "../authClient";
-import { markOfflineCopy, pendingChanges, setPendingChanges, tripDatabaseName } from "../myTrips";
+import { markOfflineCopy, tripDatabaseName } from "../myTrips";
+import {
+  PENDING_HEARTBEAT_MS,
+  adoptStalePending,
+  changedRecords,
+  clearPending,
+  heartbeatPending,
+  isPendingStorageKey,
+  pendingCount,
+  recordPending,
+} from "./pending";
 import { syncStatus, type SyncStatus } from "./status";
 
 /** Why the server will not sync this trip any more. The local copy stays until the user confirms `forgetTrip`. */
@@ -126,7 +136,7 @@ function initialState(tripId: string): State {
     simulatedOffline: false,
     connected: false,
     synced: false,
-    unsynced: pendingChanges(tripId),
+    unsynced: pendingCount(tripId),
     closed: null,
   };
 }
@@ -143,6 +153,8 @@ export function useTrip(tripId: string): TripSession {
   const userId = useUserId();
   const token = syncToken();
   const [state, dispatch] = useReducer(reducer, tripId, initialState);
+  /** This tab's key for its pending changes (see pending.ts). */
+  const [tabId] = useState(newId);
   // Another trip: start over with a fresh document (React re-renders before committing this one).
   if (state.tripId !== tripId) dispatch({ type: "open", tripId });
   const { doc } = state;
@@ -152,21 +164,38 @@ export function useTrip(tripId: string): TripSession {
     let local: IndexeddbPersistence | null = null;
     let provider: HocuspocusProvider | null = null;
     let frame: number | null = null;
-    let pending = pendingChanges(tripId);
 
-    const setPending = (n: number) => {
-      pending = n;
-      setPendingChanges(tripId, n);
-      dispatch({ type: "unsynced", unsynced: n });
+    const recount = () => dispatch({ type: "unsynced", unsynced: pendingCount(tripId) });
+    // Records left by tabs that closed before the server had them become this tab's to deliver.
+    const adopt = () => {
+      adoptStalePending(tripId, tabId);
+      heartbeatPending(tripId, tabId);
+      recount();
     };
-    /** Everything the server has is acknowledged: nothing is waiting any more. */
+    adopt();
+    const beat = setInterval(adopt, PENDING_HEARTBEAT_MS);
+    const onStorage = (event: StorageEvent) => {
+      if (isPendingStorageKey(tripId, event.key)) recount();
+    };
+    window.addEventListener("storage", onStorage);
+
+    /** The server has everything this tab sent: its own records are no longer waiting. */
     const acknowledged = () => {
-      if (provider?.synced && provider.unsyncedChanges === 0 && pending !== 0) setPending(0);
+      if (!provider?.synced || provider.unsyncedChanges !== 0) return;
+      clearPending(tripId, tabId);
+      recount();
     };
 
-    const onUpdate = (_update: Uint8Array, origin: unknown) => {
-      // Counted per local change and kept across reloads; updates from the server or the local copy are not changes.
-      if (origin !== provider && origin !== local) setPending(pending + 1);
+    const onTransaction = (transaction: Y.Transaction) => {
+      // Updates from the server or from the local copy are not this device's changes.
+      if (transaction.origin === provider || transaction.origin === local) return;
+      const records = changedRecords(transaction);
+      if (records.length === 0) return;
+      recordPending(tripId, tabId, records);
+      recount();
+    };
+
+    const onUpdate = () => {
       if (frame !== null) return;
       frame = requestAnimationFrame(() => {
         frame = null;
@@ -184,6 +213,7 @@ export function useTrip(tripId: string): TripSession {
     const attach = () => {
       if (disposed) return;
       doc.on("update", onUpdate);
+      doc.on("afterTransaction", onTransaction);
       dispatch({ type: "local-loaded", view: readTrip(doc), hasContent: hasContent(doc) });
       // A friend window without its token yet must not connect with the visitor's cookie.
       if (token === null) return;
@@ -217,12 +247,15 @@ export function useTrip(tripId: string): TripSession {
       disposed = true;
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
+      window.removeEventListener("storage", onStorage);
+      clearInterval(beat);
       if (frame !== null) cancelAnimationFrame(frame);
       doc.off("update", onUpdate);
+      doc.off("afterTransaction", onTransaction);
       provider?.destroy();
       void local?.destroy();
     };
-  }, [doc, tripId, token]);
+  }, [doc, tripId, token, tabId]);
 
   const { provider, closed } = state;
   const simulateOffline = useCallback(

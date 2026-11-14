@@ -84,6 +84,15 @@ export function rememberedUser(): MemberView | null {
   }
 }
 
+/** Forgets the remembered user; the sign-out action calls it. */
+export function forgetUser(): void {
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    // Storage blocked: nothing was remembered.
+  }
+}
+
 /** Remembers the session's user, and forgets it once the session says nobody is signed in. */
 export function trackSessionUser(session: SessionState): void {
   try {
@@ -92,7 +101,7 @@ export function trackSessionUser(session: SessionState): void {
       const colour = (user as { colour?: unknown }).colour;
       localStorage.setItem(USER_KEY, JSON.stringify({ id: user.id, name: user.name, colour: typeof colour === "string" ? colour : "" }));
     } else if (!session.isPending && !session.error) {
-      localStorage.removeItem(USER_KEY);
+      forgetUser();
     }
   } catch {
     // Storage blocked: the id is then only known while the session is.

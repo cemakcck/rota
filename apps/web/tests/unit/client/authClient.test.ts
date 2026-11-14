@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, authHeaders, friendSession, isFriendWindow, rememberedUser, resolveUserId, syncToken, trackSessionUser } from "@/client/authClient";
+import { apiFetch, authHeaders, forgetUser, friendSession, isFriendWindow, rememberedUser, resolveUserId, syncToken, trackSessionUser } from "@/client/authClient";
 
 const deniz = { id: "u-deniz", name: "Deniz", colour: "#ea580c" };
 
@@ -86,6 +86,13 @@ describe("current user id", () => {
     expect(resolveUserId(signedIn)).toBeNull();
     sessionStorage.setItem("rota.friend", JSON.stringify({ token: "friend-token", user: deniz }));
     expect(resolveUserId(signedIn)).toBe("u-deniz");
+  });
+
+  it("forgetUser drops the remembered user (signing out)", () => {
+    trackSessionUser(signedIn);
+    forgetUser();
+    expect(rememberedUser()).toBeNull();
+    expect(resolveUserId(offline)).toBeNull();
   });
 
   it("ignores a corrupted remembered user", () => {

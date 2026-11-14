@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
-import { initTrip, newTripId, readTrip, setTripMeta } from "@rota/trip";
+import { addChecklistItem, addPlace, initTrip, newTripId, placeNote, readTrip, setTripMeta } from "@rota/trip";
+import { PENDING_STALE_MS } from "@/client/sync/pending";
 import { forgetTrip } from "@/client/myTrips";
 import { useTrip } from "@/client/sync/useTrip";
 
@@ -50,10 +51,19 @@ async function seedLocalTrip(name: string): Promise<string> {
   const id = newTripId();
   const doc = new Y.Doc();
   initTrip(doc, { name, startDate: "2026-12-04", days: 3, locale: "en" }, "seed");
+  addPlace(doc, { name: "Galata Tower", category: "sight", dayId: null }, "seed");
   const idb = new IndexeddbPersistence(`rota-trip-${id}`, doc);
   await idb.whenSynced;
   await idb.destroy();
   return id;
+}
+
+/** The server has everything this tab sent. */
+function acknowledge(provider: InstanceType<typeof StubProvider>) {
+  provider.emit("status", { status: "connected" });
+  provider.synced = true;
+  provider.emit("synced", { state: true });
+  provider.emit("unsyncedChanges", { number: 0 });
 }
 
 async function openTrip(id: string) {
@@ -148,7 +158,7 @@ describe("useTrip", () => {
     act(() => {
       provider.emit("status", { status: "disconnected" });
       setTripMeta(hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
-      setTripMeta(hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
+      addChecklistItem(hook.result.current.doc, "Tickets", "u-ada");
     });
     expect(provider.disconnects).toBe(1);
     expect(hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
@@ -185,29 +195,80 @@ describe("useTrip", () => {
     act(() => {
       setTripMeta(first.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
       setTripMeta(first.hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
+      addChecklistItem(first.hook.result.current.doc, "Tickets", "u-ada");
     });
     expect(first.hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
     first.hook.unmount();
 
-    const again = await openTrip(id);
-    await waitFor(() => expect(again.hook.result.current.view.name).toBe("Lisbon and Porto"));
-    act(() => again.hook.result.current.simulateOffline(true));
-    expect(again.hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
+    // Reopened later: the closed tab's records are adopted, so this tab's acknowledgement clears them.
+    const later = vi.spyOn(Date, "now").mockReturnValue(Date.now() + PENDING_STALE_MS + 1000);
+    try {
+      const again = await openTrip(id);
+      await waitFor(() => expect(again.hook.result.current.view.name).toBe("Lisbon and Porto"));
+      act(() => again.hook.result.current.simulateOffline(true));
+      expect(again.hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
 
-    act(() => again.hook.result.current.simulateOffline(false));
+      act(() => again.hook.result.current.simulateOffline(false));
+      act(() => acknowledge(again.provider));
+      expect(again.hook.result.current.status).toEqual({ kind: "synced", pending: 0 });
+      again.hook.unmount();
+
+      const third = await openTrip(id);
+      expect(third.hook.result.current.status.pending).toBe(0);
+      third.hook.unmount();
+    } finally {
+      later.mockRestore();
+    }
+  });
+
+  it("typing into a place's note is one change waiting, not one per keystroke", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const { hook } = await openTrip(id);
+    act(() => hook.result.current.simulateOffline(true));
+    const doc = hook.result.current.doc;
+    const placeId = [...doc.getMap("places").keys()][0];
+    const text = new Y.XmlText("");
     act(() => {
-      again.provider.emit("status", { status: "connected" });
-      again.provider.synced = true;
-      again.provider.emit("synced", { state: true });
-      again.provider.emit("unsyncedChanges", { number: 0 });
+      doc.transact(() => {
+        const paragraph = new Y.XmlElement("paragraph");
+        paragraph.insert(0, [text]);
+        placeNote(doc, placeId).insert(0, [paragraph]);
+      }, "u-ada");
+      for (const [i, ch] of [..."Queue is shortest at"].entries()) doc.transact(() => text.insert(i, ch), "u-ada");
     });
-    expect(again.hook.result.current.status).toEqual({ kind: "synced", pending: 0 });
-    again.hook.unmount();
+    expect(text.toString()).toHaveLength(20);
+    expect(hook.result.current.status).toEqual({ kind: "offline", pending: 1 });
+    hook.unmount();
+  });
 
-    const third = await openTrip(id);
-    act(() => third.hook.result.current.simulateOffline(true));
-    expect(third.hook.result.current.status.pending).toBe(0);
-    third.hook.unmount();
+  it("two tabs: the count is the union, and one tab's acknowledgement does not clear the other's changes", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const a = await openTrip(id);
+    const b = await openTrip(id);
+    /** The browser tells other tabs about localStorage writes; jsdom has one window, so the test does. */
+    const tellOtherTabs = () => window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.x` }));
+
+    act(() => {
+      setTripMeta(a.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+      tellOtherTabs();
+      addChecklistItem(b.hook.result.current.doc, "Tickets", "u-ada");
+      tellOtherTabs();
+    });
+    expect(a.hook.result.current.status.pending).toBe(2);
+    expect(b.hook.result.current.status.pending).toBe(2);
+
+    act(() => {
+      acknowledge(a.provider);
+      tellOtherTabs();
+    });
+    expect(a.hook.result.current.status.pending).toBe(1);
+    expect(b.hook.result.current.status.pending).toBe(1);
+
+    a.hook.unmount();
+    b.hook.unmount();
+    const reopened = await openTrip(id);
+    expect(reopened.hook.result.current.status.pending).toBe(1);
+    reopened.hook.unmount();
   });
 
   it("a friend window waits for its token instead of syncing as the visitor", async () => {

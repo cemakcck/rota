@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { newTripId } from "@rota/trip";
-import { cacheTrips, cachedTrips, forgetTrip, hasOfflineCopy, markOfflineCopy, pendingChanges, setPendingChanges, type CachedTrip } from "@/client/myTrips";
+import { pendingCount, recordPending } from "@/client/sync/pending";
+import { cacheTrips, cachedTrips, forgetTrip, hasOfflineCopy, markOfflineCopy, type CachedTrip } from "@/client/myTrips";
 
 const trip = (id: string, name: string): CachedTrip => ({
   id,
@@ -38,9 +39,6 @@ describe("my trips cache", () => {
     expect(cachedTrips().map((t) => t.name)).toEqual(["ok"]);
     localStorage.setItem("rota.offlineTrips", "[[[");
     expect(hasOfflineCopy(newTripId())).toBe(false);
-    const id = newTripId();
-    localStorage.setItem(`rota.pending.${id}`, "lots");
-    expect(pendingChanges(id)).toBe(0);
   });
 
   it("remembers which trips have an offline copy", () => {
@@ -63,7 +61,8 @@ describe("my trips cache", () => {
     }
     cacheTrips([trip(id, "Istanbul"), trip(other, "Lisbon")]);
     markOfflineCopy(id);
-    setPendingChanges(id, 3);
+    recordPending(id, "tab-a", ["meta"], Date.now());
+    recordPending(other, "tab-a", ["meta"], Date.now());
     expect(await databaseNames()).toContain(`rota-trip-${id}`);
 
     await forgetTrip(id);
@@ -71,7 +70,8 @@ describe("my trips cache", () => {
     expect(await databaseNames()).not.toContain(`rota-trip-${id}`);
     expect(await databaseNames()).toContain(`rota-trip-${other}`);
     expect(hasOfflineCopy(id)).toBe(false);
-    expect(pendingChanges(id)).toBe(0);
+    expect(pendingCount(id)).toBe(0);
+    expect(pendingCount(other)).toBe(1);
     expect(cachedTrips().map((t) => t.id)).toEqual([other]);
   });
 });

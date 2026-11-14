@@ -1,4 +1,5 @@
 import type { MemberView } from "@rota/trip";
+import { forgetPending } from "./sync/pending";
 
 // My trips must open offline (spec §10), so the last list from the server is kept on the device,
 // along with which trips have been synced into IndexedDB at least once (the "offline copy" badge).
@@ -74,30 +75,9 @@ export function markOfflineCopy(tripId: string): void {
   if (!ids.includes(tripId)) write(OFFLINE_KEY, [...ids, tripId]);
 }
 
-const pendingKey = (tripId: string) => `rota.pending.${tripId}`;
-
-/** Local changes the server has not acknowledged yet, kept across reloads so the count never drops to 0 while they wait. */
-export function pendingChanges(tripId: string): number {
-  try {
-    const n = Number(localStorage.getItem(pendingKey(tripId)) ?? 0);
-    return Number.isSafeInteger(n) && n > 0 ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-export function setPendingChanges(tripId: string, n: number): void {
-  try {
-    if (n > 0) localStorage.setItem(pendingKey(tripId), String(n));
-    else localStorage.removeItem(pendingKey(tripId));
-  } catch {
-    // Storage blocked: the count then lives for this page only.
-  }
-}
-
-/** Drops the trip from this device: its IndexedDB database, its offline mark, pending count and cached entry. */
+/** Drops the trip from this device: its IndexedDB database, its offline mark, pending changes and cached entry. */
 export async function forgetTrip(tripId: string): Promise<void> {
-  setPendingChanges(tripId, 0);
+  forgetPending(tripId);
   write(OFFLINE_KEY, offlineIds().filter((id) => id !== tripId));
   write(TRIPS_KEY, cachedTrips().filter((t) => t.id !== tripId));
   await new Promise<void>((resolve, reject) => {
