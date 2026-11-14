@@ -1,7 +1,7 @@
-import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { findUp } from "../files";
 import * as schema from "./schema";
 
 const DEFAULT_URL = "postgres://rota:rota@localhost:5434/rota";
@@ -97,11 +97,11 @@ export function createDb(url: string = process.env.DATABASE_URL ?? DEFAULT_URL) 
 export type Db = ReturnType<typeof createDb>["db"];
 
 export async function migrateDb(url?: string): Promise<void> {
+  // apps/web/drizzle, found from here whether this runs as source or bundled into dist/migrate.mjs.
+  const migrationsFolder = await findUp("drizzle", import.meta.url);
   const client = postgres(url ?? process.env.DATABASE_URL ?? DEFAULT_URL, { max: 1, onnotice: () => {} });
   try {
-    await withDbRetry(() =>
-      migrate(drizzle(client), { migrationsFolder: path.join(import.meta.dirname, "../../../drizzle") }),
-    );
+    await withDbRetry(() => migrate(drizzle(client), { migrationsFolder }));
   } finally {
     await client.end();
   }

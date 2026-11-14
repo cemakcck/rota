@@ -15,6 +15,7 @@ export default defineConfig([
     "**/playwright-report/**",
     "**/out/**",
     "**/build/**",
+    "**/dist/**",
     "**/next-env.d.ts",
     ".superpowers/**",
   ]),

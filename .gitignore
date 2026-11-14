@@ -27,3 +27,4 @@ npm-debug.log*
 
 # controller workspace (never commit)
 .superpowers/
+dist/

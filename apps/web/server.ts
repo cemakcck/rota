@@ -1,10 +1,20 @@
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import next from "next";
 import { startCleanup } from "./src/server/cleanup";
 import { startFriends, stopFriends } from "./src/server/friend";
 import { createSyncServer, serveSync } from "./src/server/sync";
+
+/** apps/web: this file's directory, or the one above when it runs bundled from dist/ (the container). */
+function appDir(): string {
+  for (let dir = import.meta.dirname; ; dir = path.dirname(dir)) {
+    if (existsSync(path.join(dir, "next.config.ts"))) return dir;
+    if (path.dirname(dir) === dir) throw new Error("next.config.ts not found");
+  }
+}
 
 export type RunningServer = { url: string; close(): Promise<void> };
 
@@ -16,7 +26,7 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
   // sync socket we had just accepted. So Next gets a server of its own that never listens: its listener
   // lands there, and only upgrades that are not /sync are passed on to it (HMR in dev).
   const nextUpgrades = createServer();
-  const app = next({ dev, dir: import.meta.dirname, port, httpServer: nextUpgrades });
+  const app = next({ dev, dir: appDir(), port, httpServer: nextUpgrades });
   await app.prepare();
   const handle = app.getRequestHandler();
   const sync = serveSync(createSyncServer());
