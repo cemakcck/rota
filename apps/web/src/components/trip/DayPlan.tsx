@@ -61,7 +61,8 @@ export const signedMinutes = (minutes: number) => `${minutes < 0 ? "−" : "+"}$
 
 /**
  * "Shift times" and its popover of steps (−60 … +60 min). Non-modal, like the Filter popover: Escape or a
- * press elsewhere closes it, and focus goes back to the button. Disabled when the day has no set times.
+ * press elsewhere closes it, and focus goes back to the button. Unavailable (aria-disabled, with the
+ * reason as its description) when the day has no set times.
  */
 function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): void }) {
   const t = useTranslations("trip");
@@ -84,19 +85,26 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
   };
   return (
     <div className="relative">
+      {/* Without set times it stays focusable (aria-disabled), so its reason is heard as well as seen on hover. */}
       <button
         ref={button}
         type="button"
         aria-expanded={open && timed}
         aria-controls={open && timed ? id : undefined}
-        disabled={!timed}
+        aria-disabled={!timed || undefined}
+        aria-describedby={timed ? undefined : `${id}-why`}
         title={timed ? undefined : t("shiftNoTimes")}
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-[26px] items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[12.5px] text-ink hover:bg-hover disabled:cursor-default disabled:text-ink-2 disabled:hover:bg-surface aria-expanded:border-ink"
+        onClick={() => timed && setOpen((o) => !o)}
+        className="inline-flex h-[26px] items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[12.5px] text-ink hover:bg-hover aria-disabled:cursor-default aria-disabled:text-ink-2 aria-disabled:hover:bg-surface aria-expanded:border-ink"
       >
         <Icon name="clock" size={13} />
         {t("shiftTimes")}
       </button>
+      {!timed && (
+        <span id={`${id}-why`} className="sr-only">
+          {t("shiftNoTimes")}
+        </span>
+      )}
       {open && timed && (
         <div
           ref={box}
@@ -114,14 +122,15 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
             <button
               key={minutes}
               type="button"
-              aria-label={minutes < 0 ? t("shiftEarlier", { minutes: -minutes }) : t("shiftLater", { minutes })}
               onClick={() => {
                 close();
                 onShift(minutes);
               }}
               className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium tabular-nums text-ink hover:bg-hover"
             >
-              {t("shiftBy", { minutes: signedMinutes(minutes) })}
+              {/* The name starts with what is shown (label in name), then which way. */}
+              <span>{t("shiftBy", { minutes: signedMinutes(minutes) })}</span>
+              <span className="sr-only">, {minutes < 0 ? t("shiftEarlier") : t("shiftLater")}</span>
             </button>
           ))}
         </div>

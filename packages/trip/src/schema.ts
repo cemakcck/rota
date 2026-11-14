@@ -55,8 +55,13 @@ export type DayView = {
   places: PlaceView[];
 };
 
-/** The longest a day's title can be. */
+/** The longest a day's title can be, in characters (code points). */
 export const DAY_TITLE_MAX = 40;
+
+/** A day's title as kept: trimmed, at most DAY_TITLE_MAX characters (never splitting one). */
+export function dayTitle(value: string): string {
+  return Array.from(value.trim()).slice(0, DAY_TITLE_MAX).join("").trimEnd();
+}
 
 export type ChecklistItemView = {
   id: string;

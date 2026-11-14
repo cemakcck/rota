@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as Y from "yjs";
-import { addPlace, dayNote, readTrip, setDay } from "@rota/trip";
+import { addPlace, dayNote, deletePlace, readTrip, setDay } from "@rota/trip";
 import { MapLoaderContext } from "@/components/map/engine";
 import { fakeMap } from "../map/fakeMap";
 import { renderIntl } from "./helpers";
@@ -156,15 +156,20 @@ describe("shift times", () => {
     plan();
     renderIntl(<TripScreen tripId="t1" />);
     const menu = openShift();
-    expect(within(menu).getAllByRole("button").map((b) => b.textContent)).toEqual(["−60 min", "−30 min", "−15 min", "+15 min", "+30 min", "+60 min"]);
-    expect(within(menu).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
-      "60 minutes earlier",
-      "30 minutes earlier",
-      "15 minutes earlier",
-      "15 minutes later",
-      "30 minutes later",
-      "60 minutes later",
+    expect(within(menu).getAllByRole("button").map((b) => b.firstChild?.textContent)).toEqual(["−60 min", "−30 min", "−15 min", "+15 min", "+30 min", "+60 min"]);
+    // Label in name (WCAG 2.5.3): each name starts with what is shown, and says which way.
+    const buttons = within(menu).getAllByRole("button");
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([null, null, null, null, null, null]);
+    for (const b of buttons) expect(b.querySelector(".sr-only")).toBeTruthy();
+    expect(buttons.map((b) => (b.textContent ?? "").replace(/\s+/g, " "))).toEqual([
+      "−60 min, earlier",
+      "−30 min, earlier",
+      "−15 min, earlier",
+      "+15 min, later",
+      "+30 min, later",
+      "+60 min, later",
     ]);
+    expect(within(menu).getByRole("button", { name: "−30 min, earlier" })).toBe(buttons[1]);
     // Escape closes it, focus back on its button.
     fireEvent.keyDown(within(menu).getAllByRole("button")[0], { key: "Escape" });
     expect(within(day(1)).queryByRole("group", { name: "Shift the times of Day 1" })).toBeNull();
@@ -174,7 +179,7 @@ describe("shift times", () => {
   it("moves every set time, says how many and which were kept at 23:59, and Undo reverts it in one step", () => {
     plan();
     renderIntl(<TripScreen tripId="t1" />);
-    fireEvent.click(within(openShift()).getByRole("button", { name: "30 minutes later" }));
+    fireEvent.click(within(openShift()).getByRole("button", { name: "+30 min, later" }));
     expect(times()).toEqual(["Breakfast:09:00", "Walk:-", "Dinner:23:59"]);
     expect(screen.getByText("Shifted 2 stops by +30 min. 1 stop kept at 23:59.")).toBeTruthy();
     expect(within(day(1)).queryByRole("group", { name: "Shift the times of Day 1" })).toBeNull();
@@ -185,7 +190,7 @@ describe("shift times", () => {
   it("earlier, without clamping, the toast has no clamped note", () => {
     plan();
     renderIntl(<TripScreen tripId="t1" />);
-    fireEvent.click(within(openShift()).getByRole("button", { name: "15 minutes earlier" }));
+    fireEvent.click(within(openShift()).getByRole("button", { name: "−15 min, earlier" }));
     expect(times()).toEqual(["Breakfast:08:15", "Walk:-", "Dinner:23:30"]);
     expect(screen.getByText("Shifted 2 stops by −15 min.")).toBeTruthy();
   });
@@ -194,7 +199,7 @@ describe("shift times", () => {
     const { doc, dayIds } = newTrip({ days: 1 });
     addPlace(doc, { name: "Late", category: "food", dayId: dayIds[0], time: "23:59" }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
-    fireEvent.click(within(openShift()).getByRole("button", { name: "15 minutes later" }));
+    fireEvent.click(within(openShift()).getByRole("button", { name: "+15 min, later" }));
     expect(times()).toEqual(["Late:23:59"]);
     expect(screen.getByText("No times changed: they are already at 23:59.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Undo shifting/ })).toBeNull();
@@ -204,7 +209,14 @@ describe("shift times", () => {
     const { doc, dayIds } = newTrip({ days: 1 });
     addPlace(doc, { name: "Walk", category: "sight", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
-    expect((within(day(1)).getByRole("button", { name: "Shift times" }) as HTMLButtonElement).disabled).toBe(true);
+    // Still focusable, so its reason can be heard: aria-disabled, described by why.
+    const shift = within(day(1)).getByRole("button", { name: "Shift times" }) as HTMLButtonElement;
+    expect(shift.disabled).toBe(false);
+    expect(shift.getAttribute("aria-disabled")).toBe("true");
+    expect(document.getElementById(shift.getAttribute("aria-describedby")!)!.textContent).toBe("No set times to shift");
+    fireEvent.click(shift);
+    expect(shift.getAttribute("aria-expanded")).toBe("false");
+    expect(within(day(1)).queryByRole("group", { name: "Shift the times of Day 1" })).toBeNull();
     cleanup();
     plan();
     fake.userId = null;
@@ -236,6 +248,25 @@ describe("linked rows and pins", () => {
     expect(row("Galata Tower").dataset.hovered).toBeUndefined();
     fireEvent.pointerLeave(pin(lokanta), { pointerType: "mouse" });
     expect(row("Karaköy Lokantası").dataset.hovered).toBeUndefined();
+  });
+
+  it("a hovered place that leaves the view is no longer hovered when it comes back", async () => {
+    const { tower } = pinned();
+    await withMap();
+    fireEvent.pointerEnter(row("Galata Tower"), { pointerType: "mouse" });
+    expect(pin(tower).dataset.hovered).toBe("true");
+    // Deleted under the pointer (no pointerleave), then brought back with Ctrl+Z.
+    act(() => deletePlace(fake.doc, tower, "u1"));
+    expect(screen.queryByText("Galata Tower", { selector: "[data-testid=place-name]" })).toBeNull();
+    act(() => void fireEvent.keyDown(window, { key: "z", ctrlKey: true }));
+    expect(row("Galata Tower").dataset.hovered).toBeUndefined();
+    expect(pin(tower).dataset.hovered).toBeUndefined();
+
+    // Another day chosen from the keyboard while hovering: back on this day, nothing is hovered.
+    fireEvent.pointerEnter(row("Galata Tower"), { pointerType: "mouse" });
+    fireEvent.click(within(rail()).getByRole("button", { name: "Ideas & votes, 0" }));
+    fireEvent.click(railDays()[0]);
+    expect(row("Galata Tower").dataset.hovered).toBeUndefined();
   });
 
   it("a click on the empty map closes the details panel", async () => {

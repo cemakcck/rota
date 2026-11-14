@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
-import * as Y from "yjs";
 import type { DayView, TripView } from "@rota/trip";
 import { apiFetch } from "@/client/authClient";
 import { errorMessage, readError } from "@/client/apiError";
@@ -13,27 +12,6 @@ import type { TripViewState } from "./view";
 /** Drop targets on the rail: dragging a row onto a day moves it there, onto Ideas unschedules it. */
 export const railDayDropId = (dayId: string) => `rail:day:${dayId}`;
 export const RAIL_IDEAS_DROP_ID = "rail:ideas";
-
-/** Plain text of a note node (Tiptap's XML: elements holding text). */
-function plain(node: Y.XmlElement | Y.XmlText | Y.XmlHook): string {
-  if (node instanceof Y.XmlText) return (node.toDelta() as { insert: unknown }[]).map((d) => (typeof d.insert === "string" ? d.insert : "")).join("");
-  if (node instanceof Y.XmlElement) return node.toArray().map(plain).join("");
-  return "";
-}
-
-/** A day note's first non-empty paragraph (or list item), as plain text. */
-export function noteFirstLine(note: Y.XmlFragment): string {
-  const blocks = (nodes: (Y.XmlElement | Y.XmlText | Y.XmlHook)[]): string => {
-    for (const node of nodes) {
-      if (!(node instanceof Y.XmlElement)) continue;
-      const children = node.toArray();
-      const text = children.some((c) => c instanceof Y.XmlText) ? plain(node).trim() : blocks(children);
-      if (text) return text;
-    }
-    return "";
-  };
-  return blocks(note.toArray());
-}
 
 const entry =
   "w-full rounded-xl border border-transparent px-3 text-left hover:bg-hover aria-[current=true]:border-line aria-[current=true]:bg-surface aria-[current=true]:shadow-1 max-lg:w-auto max-lg:shrink-0";

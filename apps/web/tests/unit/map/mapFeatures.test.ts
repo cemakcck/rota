@@ -335,6 +335,14 @@ describe("pin labels", () => {
     expect([...shown]).toEqual(["b"]);
   });
 
+  it("the selected pin's label box is measured from its larger head", () => {
+    // Selected, a's head is 42 px: its label reaches to x 221 (it would end at 217 from a 34 px head),
+    // so b's label, starting at 219, would overlap it.
+    expect([...labelledPins([at("a", 100, 100), at("b", 198, 100)], { zoom, keep: "a" })]).toEqual(["a"]);
+    // Not selected, b's pin is under a's label instead: a's hides, b's shows.
+    expect([...labelledPins([at("a", 100, 100), at("b", 198, 100)], { zoom, keep: null })]).toEqual(["b"]);
+  });
+
   it("at low zoom only the selected pin's label shows", () => {
     expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: null })]).toEqual([]);
     expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: "b" })]).toEqual(["b"]);

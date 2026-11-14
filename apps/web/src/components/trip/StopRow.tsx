@@ -7,9 +7,8 @@ import { placeNote, type PlacePatch, type PlaceView, type TimelineEntry } from "
 import type { StopWarning } from "@/client/useHours";
 import { HoursWarning } from "./HoursWarning";
 import { CategoryGlyph, Icon } from "./icons";
-import { noteOrNull } from "./NoteEditor";
+import { noteFirstLine, noteOrNull } from "./NoteEditor";
 import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
-import { noteFirstLine } from "./Rail";
 import { parseTime, placeDropId } from "./plan";
 import { Approximate, useStay } from "./TravelLeg";
 

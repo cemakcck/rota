@@ -57,4 +57,14 @@ describe("day titles", () => {
     expect(tr.every((t) => t.length > 0 && t.length <= 40)).toBe(true);
     expect(tr).not.toEqual(en);
   });
+
+  it("counts the 40 in characters (code points), never splitting one", () => {
+    const { doc, dayId } = trip();
+    const title = `${"a".repeat(39)}🌉🌉`;
+    setDay(doc, dayId, { title }, "alice");
+    expect(readTrip(doc).days[0].title).toBe(`${"a".repeat(39)}🌉`);
+    // Written by a peer without the cap: read the same way.
+    doc.getMap<Y.Map<unknown>>("days").get(dayId)!.set("title", `${"b".repeat(39)}🌉🌉`);
+    expect(readTrip(doc).days[0].title).toBe(`${"b".repeat(39)}🌉`);
+  });
 });

@@ -72,6 +72,27 @@ export function noteOrNull(read: () => Y.XmlFragment): Y.XmlFragment | null {
   }
 }
 
+/** Plain text of a note node (Tiptap's XML: elements holding text). */
+function plain(node: Y.XmlElement | Y.XmlText | Y.XmlHook): string {
+  if (node instanceof Y.XmlText) return (node.toDelta() as { insert: unknown }[]).map((d) => (typeof d.insert === "string" ? d.insert : "")).join("");
+  if (node instanceof Y.XmlElement) return node.toArray().map(plain).join("");
+  return "";
+}
+
+/** A day note's first non-empty paragraph (or list item), as plain text. */
+export function noteFirstLine(note: Y.XmlFragment): string {
+  const blocks = (nodes: (Y.XmlElement | Y.XmlText | Y.XmlHook)[]): string => {
+    for (const node of nodes) {
+      if (!(node instanceof Y.XmlElement)) continue;
+      const children = node.toArray();
+      const text = children.some((c) => c instanceof Y.XmlText) ? plain(node).trim() : blocks(children);
+      if (text) return text;
+    }
+    return "";
+  };
+  return blocks(note.toArray());
+}
+
 const inline = (text: Y.XmlText) => (text.toDelta() as { insert: unknown }[]).map((d) => (typeof d.insert === "string" ? d.insert : "")).join("");
 
 /** The note's text, a line per paragraph (list items included), for the collapsed preview. */

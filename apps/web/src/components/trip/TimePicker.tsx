@@ -75,8 +75,9 @@ export function TimePicker({
         {t("time")}
       </label>
       <div className="flex flex-wrap items-center gap-1.5">
-        <button type="button" className={step} aria-label={t("timeEarlier")} disabled={!canShift} onClick={() => onChange(shift(-30) ?? value)}>
-          <span aria-hidden="true">−30</span>
+        <button type="button" className={step} disabled={!canShift} onClick={() => onChange(shift(-30) ?? value)}>
+          {"−30 "}
+          <span className="sr-only">{t("timeEarlier")}</span>
         </button>
         <input
           ref={inputRef}
@@ -89,8 +90,9 @@ export function TimePicker({
           onChange={(e) => onChange(e.target.value)}
           {...(coarse ? { type: "time" } : { type: "text", inputMode: "numeric" as const, placeholder: "HH:MM", maxLength: 5 })}
         />
-        <button type="button" className={step} aria-label={t("timeLater")} disabled={!canShift} onClick={() => onChange(shift(30) ?? value)}>
-          <span aria-hidden="true">+30</span>
+        <button type="button" className={step} disabled={!canShift} onClick={() => onChange(shift(30) ?? value)}>
+          {"+30 "}
+          <span className="sr-only">{t("timeLater")}</span>
         </button>
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">

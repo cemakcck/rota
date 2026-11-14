@@ -133,18 +133,19 @@ export type PlacedPin = { id: string; x: number; y: number; label: string; idea:
 type Box = { left: number; top: number; right: number; bottom: number };
 const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
-// Pin geometry (see PinMarker): a day pin's head is 34 px, an idea's 24 px, its tip 21% of that below it.
+// Pin geometry (see PinMarker): a day pin's head is 34 px (42 selected), an idea's 24 px (32 selected),
+// its tip 21% of that below it.
 // The label sits right of the head, centred on it: 20 px high, about 7 px a character at 12 px.
 const LABEL_HEIGHT = 20;
 const LABEL_GAP = 4;
 const labelWidth = (label: string) => [...label].length * 7 + 12;
-function headBox({ x, y, idea }: PlacedPin): Box {
-  const size = idea ? 24 : 34;
+function headBox({ x, y, idea }: PlacedPin, selected: boolean): Box {
+  const size = idea ? (selected ? 32 : 24) : selected ? 42 : 34;
   const bottom = y - Math.round(size * 0.21);
   return { left: x - size / 2, top: bottom - size, right: x + size / 2, bottom };
 }
-function labelBox(pin: PlacedPin): Box {
-  const head = headBox(pin);
+function labelBox(pin: PlacedPin, selected: boolean): Box {
+  const head = headBox(pin, selected);
   const middle = (head.top + head.bottom) / 2;
   const left = head.right + LABEL_GAP;
   return { left, top: middle - LABEL_HEIGHT / 2, right: left + labelWidth(pin.label), bottom: middle + LABEL_HEIGHT / 2 };
@@ -160,11 +161,11 @@ export function labelledPins(pins: readonly PlacedPin[], { zoom, keep }: { zoom:
   const kept = pins.find((p) => p.id === keep);
   if (kept) shown.add(kept.id);
   if (zoom < LABEL_MIN_ZOOM) return shown;
-  const heads = pins.map((p) => ({ id: p.id, box: headBox(p) }));
-  const taken: Box[] = kept ? [labelBox(kept)] : [];
+  const heads = pins.map((p) => ({ id: p.id, box: headBox(p, p.id === keep) }));
+  const taken: Box[] = kept ? [labelBox(kept, true)] : [];
   for (const pin of pins) {
     if (pin.id === keep) continue;
-    const box = labelBox(pin);
+    const box = labelBox(pin, false);
     if (taken.some((t) => overlaps(t, box)) || heads.some((h) => h.id !== pin.id && overlaps(h.box, box))) continue;
     shown.add(pin.id);
     taken.push(box);

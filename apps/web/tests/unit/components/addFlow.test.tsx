@@ -130,11 +130,11 @@ describe("add-place flow", () => {
     const suggested = within(form).getByRole("button", { name: "Suggested 10:00" });
     expect(suggested.getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.click(within(form).getByRole("button", { name: "30 minutes later" }));
+    fireEvent.click(within(form).getByRole("button", { name: "+30 min, later" }));
     expect(time.value).toBe("10:30");
     expect(suggested.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(within(form).getByRole("button", { name: "30 minutes earlier" }));
-    fireEvent.click(within(form).getByRole("button", { name: "30 minutes earlier" }));
+    fireEvent.click(within(form).getByRole("button", { name: "−30 min, earlier" }));
+    fireEvent.click(within(form).getByRole("button", { name: "−30 min, earlier" }));
     expect(time.value).toBe("09:30");
 
     const none = within(form).getByRole("button", { name: "No set time" });
@@ -147,10 +147,10 @@ describe("add-place flow", () => {
 
     // Never past the day's ends.
     fireEvent.change(time, { target: { value: "23:45" } });
-    fireEvent.click(within(form).getByRole("button", { name: "30 minutes later" }));
+    fireEvent.click(within(form).getByRole("button", { name: "+30 min, later" }));
     expect(time.value).toBe("23:59");
     fireEvent.change(time, { target: { value: "00:10" } });
-    fireEvent.click(within(form).getByRole("button", { name: "30 minutes earlier" }));
+    fireEvent.click(within(form).getByRole("button", { name: "−30 min, earlier" }));
     expect(time.value).toBe("00:00");
 
     fireEvent.change(time, { target: { value: "25:00" } });
@@ -173,8 +173,11 @@ describe("add-place flow", () => {
     offline();
     renderIntl(<TripScreen tripId="t1" />);
     const form = stepFor("Galata Tower");
-    const earlier = within(form).getByRole("button", { name: "30 minutes earlier" }) as HTMLButtonElement;
-    const later = within(form).getByRole("button", { name: "30 minutes later" }) as HTMLButtonElement;
+    const earlier = within(form).getByRole("button", { name: "−30 min, earlier" }) as HTMLButtonElement;
+    const later = within(form).getByRole("button", { name: "+30 min, later" }) as HTMLButtonElement;
+    // Label in name: the shown "−30" / "+30" starts each name (no aria-label overriding it).
+    expect([earlier.getAttribute("aria-label"), later.getAttribute("aria-label")]).toEqual([null, null]);
+    expect(earlier.textContent!.startsWith("−30")).toBe(true);
     expect(within(form).queryByRole("button", { name: /^Suggested/ })).toBeNull();
     expect([earlier.disabled, later.disabled]).toEqual([true, true]);
     fireEvent.change(within(form).getByLabelText("Time"), { target: { value: "14:00" } });
