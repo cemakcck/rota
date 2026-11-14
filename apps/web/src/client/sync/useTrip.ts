@@ -78,6 +78,8 @@ export function wsUrl(path: string): string {
 
 type State = {
   tripId: string;
+  /** Whose device copy `doc` has loaded: null while the user is unknown (the doc then holds only server state and the tab's own edits). */
+  owner: string | null;
   doc: Y.Doc;
   provider: HocuspocusProvider | null;
   view: TripView;
@@ -93,6 +95,7 @@ type State = {
 
 type Action =
   | { type: "open"; tripId: string; userId: string | null }
+  | { type: "owner"; userId: string }
   | { type: "local-loaded"; view: TripView; hasContent: boolean }
   | { type: "provider"; provider: HocuspocusProvider }
   | { type: "view"; view: TripView; hasContent: boolean }
@@ -107,6 +110,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "open":
       return initialState(action);
+    case "owner":
+      return { ...state, owner: action.userId };
     case "local-loaded":
       return { ...state, localLoaded: true, view: action.view, hasContent: action.hasContent };
     case "provider":
@@ -132,6 +137,7 @@ function initialState({ tripId, userId }: { tripId: string; userId: string | nul
   const doc = new Y.Doc();
   return {
     tripId,
+    owner: userId,
     doc,
     provider: null,
     view: readTrip(doc),
@@ -160,8 +166,13 @@ export function useTrip(tripId: string): TripSession {
   const [state, dispatch] = useReducer(reducer, { tripId, userId }, initialState);
   /** This tab's key for its pending changes (see pending.ts). */
   const [tabId] = useState(newId);
-  // Another trip: start over with a fresh document (React re-renders before committing this one).
-  if (state.tripId !== tripId) dispatch({ type: "open", tripId, userId });
+  // Another trip, or another user than the one whose copy the document holds (signed out, the session
+  // turned out to be someone else): start over with a fresh document, so one user's copy and unsent edits
+  // never reach another user's copy or connection. React re-renders before committing this one, so no
+  // effect ever runs with the old document and the new user. An unknown user becoming known keeps the
+  // document (it holds no one's copy); a user coming back after a flap reloads their edits from their copy.
+  if (state.tripId !== tripId || (state.owner !== null && state.owner !== userId)) dispatch({ type: "open", tripId, userId });
+  else if (state.owner === null && userId !== null) dispatch({ type: "owner", userId });
   const { doc } = state;
 
   useEffect(() => {

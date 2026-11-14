@@ -48,13 +48,20 @@ const { StubProvider } = await vi.hoisted(async () => {
 });
 
 vi.mock("@hocuspocus/provider", () => ({ HocuspocusProvider: StubProvider }));
-/** The user a hook instance signs in as: kept from its first render like a real tab's session (an unknown user can become known later). */
-const signedIn = vi.hoisted(() => ({ userId: "u-ada" as string | null }));
+/**
+ * The user a hook instance signs in as: kept from its first render like a real tab's session (an unknown
+ * user can become known later). With `live` on, every render reads the current value, so a test can
+ * change the signed-in user inside one tab.
+ */
+const signedIn = vi.hoisted(() => ({ userId: "u-ada" as string | null, live: false }));
 vi.mock("@/client/authClient", async (original) => {
   const { useState } = await import("react");
   return {
     ...(await original<typeof import("@/client/authClient")>()),
-    useUserId: () => useState(() => signedIn.userId)[0] ?? signedIn.userId,
+    useUserId: () => {
+      const first = useState(() => signedIn.userId)[0];
+      return signedIn.live ? signedIn.userId : (first ?? signedIn.userId);
+    },
   };
 });
 
@@ -100,8 +107,37 @@ const databaseNames = async () => (await indexedDB.databases()).map((d) => d.nam
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
 
+/** What this user's IndexedDB copy of the trip holds. */
+async function storedCopy(tripId: string, user: string) {
+  const doc = new Y.Doc();
+  const idb = new IndexeddbPersistence(`rota-trip-${tripId}-${user}`, doc);
+  await idb.whenSynced;
+  await idb.destroy();
+  return readTrip(doc);
+}
+
+/** Opens a trip as Ada, who renames it while offline (an unsent edit, kept in her copy), then changes the tab's user. */
+async function switchUserAfterUnsentEdit(next: string | null) {
+  signedIn.live = true;
+  const id = await seedLocalTrip("Lisbon");
+  const ada = await openTrip(id);
+  act(() => ada.hook.result.current.simulateOffline(true));
+  act(() => {
+    setTripMeta(ada.hook.result.current.doc, { name: "Ada's unsent rename" }, "u-ada");
+  });
+  await act(settle);
+  expect((await storedCopy(id, "u-ada")).name).toBe("Ada's unsent rename");
+  const made = StubProvider.made.length;
+  signedIn.userId = next;
+  ada.hook.rerender();
+  await waitFor(() => expect(StubProvider.made.length).toBe(made + 1));
+  await act(settle);
+  return { id, hook: ada.hook, adaProvider: ada.provider, after: StubProvider.made.slice(made) };
+}
+
 afterEach(() => {
   signedIn.userId = "u-ada";
+  signedIn.live = false;
   StubProvider.made = [];
   localStorage.clear();
 });
@@ -435,6 +471,55 @@ describe("useTrip", () => {
     unknown.hook.rerender();
     await waitFor(async () => expect(await databaseNames()).toContain(`rota-trip-${id}-u-ada`));
     unknown.hook.unmount();
+  });
+
+  it("a tab whose user changes to someone else gets a fresh document: the other user never stores or sends the first one's edits", async () => {
+    const { id, hook, after } = await switchUserAfterUnsentEdit("u-deniz");
+    const doc = hook.result.current.doc;
+    expect(hook.result.current.userId).toBe("u-deniz");
+    expect(readTrip(doc).name).not.toBe("Ada's unsent rename");
+    for (const provider of after) {
+      expect(provider.configuration.token).toBe("cookie");
+      expect(provider.nameAtAttach).not.toBe("Ada's unsent rename");
+      expect(readTrip(provider.configuration.document).name).not.toBe("Ada's unsent rename");
+    }
+    expect((await storedCopy(id, "u-deniz")).name).not.toBe("Ada's unsent rename");
+    // Deniz's edits stay out of Ada's copy too.
+    act(() => {
+      addChecklistItem(doc, "Deniz's item", "u-deniz");
+    });
+    await act(settle);
+    expect((await storedCopy(id, "u-ada")).checklist).toHaveLength(0);
+    expect(hook.result.current.status.pending).toBe(1);
+    hook.unmount();
+  });
+
+  it("a tab whose user becomes unknown gets a fresh document: its online-only connection never sends the user's edits", async () => {
+    const { hook, after } = await switchUserAfterUnsentEdit(null);
+    expect(hook.result.current.userId).toBeNull();
+    expect(readTrip(hook.result.current.doc).name).not.toBe("Ada's unsent rename");
+    for (const provider of after) {
+      expect(provider.nameAtAttach).not.toBe("Ada's unsent rename");
+      expect(readTrip(provider.configuration.document).name).not.toBe("Ada's unsent rename");
+    }
+    expect(hook.result.current.status.pending).toBe(0);
+    hook.unmount();
+  });
+
+  it("a session that flaps (user, unknown, same user) keeps the user's unsent edits: the fresh document reloads them", async () => {
+    const { id, hook } = await switchUserAfterUnsentEdit(null);
+    const made = StubProvider.made.length;
+    signedIn.userId = "u-ada";
+    hook.rerender();
+    await waitFor(() => expect(StubProvider.made.length).toBe(made + 1));
+    const provider = StubProvider.made.at(-1)!;
+    expect(provider.nameAtAttach).toBe("Ada's unsent rename");
+    await waitFor(() => expect(hook.result.current.view.name).toBe("Ada's unsent rename"));
+    expect(hook.result.current.status.pending).toBe(1);
+    expect((await storedCopy(id, "u-ada")).name).toBe("Ada's unsent rename");
+    act(() => acknowledge(provider));
+    expect(hook.result.current.status.pending).toBe(0);
+    hook.unmount();
   });
 
   it("a tab whose user is unknown joins no relay", async () => {
