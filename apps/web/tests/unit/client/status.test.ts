@@ -6,8 +6,10 @@ describe("syncStatus", () => {
     // online, connected, synced, unsynced → kind, pending
     [false, false, false, 0, "offline", 0],
     [false, false, true, 3, "offline", 3],
-    [true, false, false, 2, "offline", 2],
-    [true, false, true, 0, "offline", 0],
+    // Online but the socket is not up yet (connecting, or retrying): syncing, not offline.
+    [true, false, false, 0, "syncing", 0],
+    [true, false, false, 2, "syncing", 2],
+    [true, false, true, 0, "syncing", 0],
     [false, true, true, 0, "offline", 0],
     [true, true, false, 0, "syncing", 0],
     [true, true, false, 1, "syncing", 1],

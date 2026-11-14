@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
-import { initTrip, newTripId, readTrip } from "@rota/trip";
+import { initTrip, newTripId, readTrip, setTripMeta } from "@rota/trip";
 import { forgetTrip } from "@/client/myTrips";
 import { useTrip } from "@/client/sync/useTrip";
 
@@ -57,9 +57,12 @@ async function seedLocalTrip(name: string): Promise<string> {
 }
 
 async function openTrip(id: string) {
+  const before = StubProvider.made.length;
   const hook = renderHook(() => useTrip(id));
-  await waitFor(() => expect(StubProvider.made.at(-1)?.configuration.name).toBe(id));
-  return { hook, provider: StubProvider.made.at(-1)! };
+  await waitFor(() => expect(StubProvider.made.length).toBe(before + 1));
+  const provider = StubProvider.made.at(-1)!;
+  expect(provider.configuration.name).toBe(id);
+  return { hook, provider };
 }
 
 const databaseNames = async () => (await indexedDB.databases()).map((d) => d.name);
@@ -144,8 +147,8 @@ describe("useTrip", () => {
     act(() => hook.result.current.simulateOffline(true));
     act(() => {
       provider.emit("status", { status: "disconnected" });
-      provider.unsyncedChanges = 2;
-      provider.emit("unsyncedChanges", { number: 2 });
+      setTripMeta(hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+      setTripMeta(hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
     });
     expect(provider.disconnects).toBe(1);
     expect(hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
@@ -155,13 +158,112 @@ describe("useTrip", () => {
     hook.unmount();
   });
 
-  it("a first open while offline says so instead of showing an empty trip", async () => {
+  it("a first open while online but not yet connected is syncing, not offline", async () => {
     const { hook, provider } = await openTrip(newTripId());
+    expect(hook.result.current.status).toEqual({ kind: "syncing", pending: 0 });
     act(() => {
-      provider.emit("status", { status: "disconnected" });
+      provider.emit("status", { status: "connecting" });
     });
+    expect(hook.result.current.status.kind).toBe("syncing");
+    expect(hook.result.current.ready).toBe(false);
+    expect(hook.result.current.firstOpenOffline).toBe(false);
+    hook.unmount();
+  });
+
+  it("a first open while offline says so instead of showing an empty trip", async () => {
+    const { hook } = await openTrip(newTripId());
+    act(() => hook.result.current.simulateOffline(true));
     expect(hook.result.current.ready).toBe(false);
     expect(hook.result.current.firstOpenOffline).toBe(true);
     hook.unmount();
+  });
+
+  it("changes made offline are still waiting after a reload, until the server has them", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const first = await openTrip(id);
+    act(() => first.hook.result.current.simulateOffline(true));
+    act(() => {
+      setTripMeta(first.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+      setTripMeta(first.hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
+    });
+    expect(first.hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
+    first.hook.unmount();
+
+    const again = await openTrip(id);
+    await waitFor(() => expect(again.hook.result.current.view.name).toBe("Lisbon and Porto"));
+    act(() => again.hook.result.current.simulateOffline(true));
+    expect(again.hook.result.current.status).toEqual({ kind: "offline", pending: 2 });
+
+    act(() => again.hook.result.current.simulateOffline(false));
+    act(() => {
+      again.provider.emit("status", { status: "connected" });
+      again.provider.synced = true;
+      again.provider.emit("synced", { state: true });
+      again.provider.emit("unsyncedChanges", { number: 0 });
+    });
+    expect(again.hook.result.current.status).toEqual({ kind: "synced", pending: 0 });
+    again.hook.unmount();
+
+    const third = await openTrip(id);
+    act(() => third.hook.result.current.simulateOffline(true));
+    expect(third.hook.result.current.status.pending).toBe(0);
+    third.hook.unmount();
+  });
+
+  it("a friend window waits for its token instead of syncing as the visitor", async () => {
+    window.history.replaceState(null, "", "/en/trips/x?friend=1");
+    try {
+      const id = await seedLocalTrip("Lisbon");
+      const hook = renderHook(() => useTrip(id));
+      await waitFor(() => expect(hook.result.current.ready).toBe(true));
+      expect(StubProvider.made).toHaveLength(0);
+
+      sessionStorage.setItem("rota.friend", JSON.stringify({ token: "friend-token", user: { id: "u-deniz", name: "Deniz", colour: "#ea580c" } }));
+      hook.rerender();
+      await waitFor(() => expect(StubProvider.made).toHaveLength(1));
+      expect(StubProvider.made[0].configuration.token).toBe("friend-token");
+      hook.unmount();
+    } finally {
+      sessionStorage.clear();
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("without IndexedDB the trip still syncs, online only", async () => {
+    vi.stubGlobal("indexedDB", {
+      open() {
+        throw new DOMException("The user denied permission to access the database.", "SecurityError");
+      },
+    });
+    try {
+      const id = newTripId();
+      const { hook, provider } = await openTrip(id);
+      expect(provider.configuration.name).toBe(id);
+      expect(hook.result.current.ready).toBe(false);
+      hook.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("if opening IndexedDB hangs, the trip syncs online only after a few seconds", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("indexedDB", { open: () => ({}) });
+    try {
+      const id = newTripId();
+      const hook = renderHook(() => useTrip(id));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2900);
+      });
+      expect(StubProvider.made).toHaveLength(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(StubProvider.made).toHaveLength(1);
+      hook.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, authHeaders, friendSession, isFriendWindow, syncToken } from "@/client/authClient";
+import { apiFetch, authHeaders, friendSession, isFriendWindow, rememberedUser, resolveUserId, syncToken, trackSessionUser } from "@/client/authClient";
 
 const deniz = { id: "u-deniz", name: "Deniz", colour: "#ea580c" };
 
 afterEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
   window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
 });
@@ -25,10 +26,10 @@ describe("auth client", () => {
     expect(syncToken()).toBe("cookie");
   });
 
-  it("?friend=1 marks a friend window before its token has arrived", () => {
+  it("a friend window whose token has not arrived has no sync token, so it never syncs as the visitor", () => {
     window.history.replaceState(null, "", "/en/trips/x?friend=1");
     expect(isFriendWindow()).toBe(true);
-    expect(syncToken()).toBe("cookie");
+    expect(syncToken()).toBeNull();
   });
 
   it("ignores a malformed friend session", () => {
@@ -36,7 +37,8 @@ describe("auth client", () => {
     expect(friendSession()).toBeNull();
     sessionStorage.setItem("rota.friend", JSON.stringify({ token: 42 }));
     expect(friendSession()).toBeNull();
-    expect(syncToken()).toBe("cookie");
+    // Still a friend window, so it waits for a usable token rather than falling back to the visitor's cookie.
+    expect(syncToken()).toBeNull();
   });
 
   it("apiFetch sends the friend's bearer and keeps the caller's headers", async () => {
@@ -50,5 +52,45 @@ describe("auth client", () => {
     const headers = new Headers(init.headers);
     expect(headers.get("authorization")).toBe("Bearer friend-token");
     expect(headers.get("content-type")).toBe("application/json");
+  });
+});
+
+describe("current user id", () => {
+  const ada = { id: "u-ada", name: "Ada", colour: "#2563eb" };
+  const signedIn = { data: { user: ada }, isPending: false, error: null };
+  const offline = { data: null, isPending: false, error: new Error("Failed to fetch") };
+  const loading = { data: null, isPending: true, error: null };
+  const signedOut = { data: null, isPending: false, error: null };
+
+  it("a signed-in cookie user keeps their id offline and while the session loads", () => {
+    trackSessionUser(signedIn);
+    expect(rememberedUser()).toEqual(ada);
+    expect(resolveUserId(signedIn)).toBe("u-ada");
+    expect(resolveUserId(offline)).toBe("u-ada");
+    expect(resolveUserId(loading)).toBe("u-ada");
+    trackSessionUser(offline);
+    expect(rememberedUser()).toEqual(ada);
+  });
+
+  it("there is no id (null, never '') once signed out or before any session was seen", () => {
+    expect(resolveUserId(offline)).toBeNull();
+    trackSessionUser(signedIn);
+    trackSessionUser(signedOut);
+    expect(rememberedUser()).toBeNull();
+    expect(resolveUserId(signedOut)).toBeNull();
+  });
+
+  it("a friend window is the friend, and nobody until its token arrives", () => {
+    trackSessionUser(signedIn);
+    window.history.replaceState(null, "", "/en/trips/x?friend=1");
+    expect(resolveUserId(signedIn)).toBeNull();
+    sessionStorage.setItem("rota.friend", JSON.stringify({ token: "friend-token", user: deniz }));
+    expect(resolveUserId(signedIn)).toBe("u-deniz");
+  });
+
+  it("ignores a corrupted remembered user", () => {
+    localStorage.setItem("rota.user", "{nope");
+    expect(rememberedUser()).toBeNull();
+    expect(resolveUserId(offline)).toBeNull();
   });
 });

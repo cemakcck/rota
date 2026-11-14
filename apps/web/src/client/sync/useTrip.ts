@@ -6,7 +6,7 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 import { readTrip, type TripView } from "@rota/trip";
 import { syncToken, useUserId } from "../authClient";
-import { markOfflineCopy, tripDatabaseName } from "../myTrips";
+import { markOfflineCopy, pendingChanges, setPendingChanges, tripDatabaseName } from "../myTrips";
 import { syncStatus, type SyncStatus } from "./status";
 
 /** Why the server will not sync this trip any more. The local copy stays until the user confirms `forgetTrip`. */
@@ -25,8 +25,36 @@ export type TripSession = {
   firstOpenOffline: boolean;
   simulateOffline(on: boolean): void;
   awareness: HocuspocusProvider["awareness"];
-  userId: string;
+  /** Null when the user is not known (e.g. a friend window before its token): the UI blocks edits. */
+  userId: string | null;
 };
+
+/** How long to wait for IndexedDB before syncing without a local copy (blocked or broken storage). */
+export const LOCAL_OPEN_TIMEOUT_MS = 3000;
+
+/**
+ * Whether this browser's IndexedDB opens at all. Probed on a database of its own, so the trip's database
+ * is still created by y-indexeddb with its stores; false if opening fails or hangs.
+ */
+function localStorageWorks(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), LOCAL_OPEN_TIMEOUT_MS);
+    const done = (ok: boolean) => {
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    try {
+      const request = indexedDB.open("rota-storage-check");
+      request.onsuccess = () => {
+        request.result.close();
+        done(true);
+      };
+      request.onerror = () => done(false);
+    } catch {
+      done(false);
+    }
+  });
+}
 
 /** The same-origin WebSocket URL for `path`. */
 export function wsUrl(path: string): string {
@@ -50,7 +78,8 @@ type State = {
 
 type Action =
   | { type: "open"; tripId: string }
-  | { type: "local-loaded"; provider: HocuspocusProvider; view: TripView; hasContent: boolean }
+  | { type: "local-loaded"; view: TripView; hasContent: boolean }
+  | { type: "provider"; provider: HocuspocusProvider }
   | { type: "view"; view: TripView; hasContent: boolean }
   | { type: "online"; online: boolean }
   | { type: "simulate-offline"; on: boolean }
@@ -64,7 +93,9 @@ function reducer(state: State, action: Action): State {
     case "open":
       return initialState(action.tripId);
     case "local-loaded":
-      return { ...state, localLoaded: true, provider: action.provider, view: action.view, hasContent: action.hasContent };
+      return { ...state, localLoaded: true, view: action.view, hasContent: action.hasContent };
+    case "provider":
+      return { ...state, provider: action.provider };
     case "view":
       return { ...state, view: action.view, hasContent: action.hasContent };
     case "online":
@@ -95,7 +126,7 @@ function initialState(tripId: string): State {
     simulatedOffline: false,
     connected: false,
     synced: false,
-    unsynced: 0,
+    unsynced: pendingChanges(tripId),
     closed: null,
   };
 }
@@ -105,10 +136,12 @@ const hasContent = (doc: Y.Doc) => doc.store.clients.size > 0;
 /**
  * Opens a trip: this device's IndexedDB copy first, then the sync connection. The provider is attached
  * only after the local copy has loaded, so its first sync carries the local state instead of pushing
- * it piecemeal while the server is still authenticating the connection.
+ * it piecemeal while the server is still authenticating the connection. If IndexedDB cannot be used,
+ * the trip syncs online only.
  */
 export function useTrip(tripId: string): TripSession {
   const userId = useUserId();
+  const token = syncToken();
   const [state, dispatch] = useReducer(reducer, tripId, initialState);
   // Another trip: start over with a fresh document (React re-renders before committing this one).
   if (state.tripId !== tripId) dispatch({ type: "open", tripId });
@@ -116,11 +149,24 @@ export function useTrip(tripId: string): TripSession {
 
   useEffect(() => {
     let disposed = false;
+    let local: IndexeddbPersistence | null = null;
     let provider: HocuspocusProvider | null = null;
     let frame: number | null = null;
-    const local = new IndexeddbPersistence(tripDatabaseName(tripId), doc);
+    let pending = pendingChanges(tripId);
 
-    const onUpdate = () => {
+    const setPending = (n: number) => {
+      pending = n;
+      setPendingChanges(tripId, n);
+      dispatch({ type: "unsynced", unsynced: n });
+    };
+    /** Everything the server has is acknowledged: nothing is waiting any more. */
+    const acknowledged = () => {
+      if (provider?.synced && provider.unsyncedChanges === 0 && pending !== 0) setPending(0);
+    };
+
+    const onUpdate = (_update: Uint8Array, origin: unknown) => {
+      // Counted per local change and kept across reloads; updates from the server or the local copy are not changes.
+      if (origin !== provider && origin !== local) setPending(pending + 1);
       if (frame !== null) return;
       frame = requestAnimationFrame(() => {
         frame = null;
@@ -135,20 +181,31 @@ export function useTrip(tripId: string): TripSession {
       dispatch({ type: "closed", reason: reason as ClosedReason });
     };
 
-    local.whenSynced.then(() => {
+    const attach = () => {
       if (disposed) return;
-      provider = new HocuspocusProvider({ url: wsUrl("/sync"), name: tripId, document: doc, token: syncToken() });
+      doc.on("update", onUpdate);
+      dispatch({ type: "local-loaded", view: readTrip(doc), hasContent: hasContent(doc) });
+      // A friend window without its token yet must not connect with the visitor's cookie.
+      if (token === null) return;
+      provider = new HocuspocusProvider({ url: wsUrl("/sync"), name: tripId, document: doc, token });
       provider.on("status", ({ status }: { status: string }) => dispatch({ type: "connected", connected: status === "connected" }));
       provider.on("synced", ({ state: synced }: { state: boolean }) => {
         dispatch({ type: "synced", synced });
         if (synced) markOfflineCopy(tripId);
+        acknowledged();
       });
-      provider.on("unsyncedChanges", ({ number }: { number: number }) => dispatch({ type: "unsynced", unsynced: number }));
+      provider.on("unsyncedChanges", acknowledged);
       provider.on("authenticationFailed", ({ reason }: { reason: string }) => close(reason));
       // Refusals after authentication arrive as a close reason (code 4403, or Hocuspocus' reset 4205).
       provider.on("close", ({ event }: { event: { reason: string } }) => close(event.reason));
-      doc.on("update", onUpdate);
-      dispatch({ type: "local-loaded", provider, view: readTrip(doc), hasContent: hasContent(doc) });
+      dispatch({ type: "provider", provider });
+    };
+
+    localStorageWorks().then((works) => {
+      if (disposed) return;
+      if (!works) return attach();
+      local = new IndexeddbPersistence(tripDatabaseName(tripId), doc);
+      local.whenSynced.then(attach);
     });
 
     const onOnline = () => dispatch({ type: "online", online: true });
@@ -163,9 +220,9 @@ export function useTrip(tripId: string): TripSession {
       if (frame !== null) cancelAnimationFrame(frame);
       doc.off("update", onUpdate);
       provider?.destroy();
-      void local.destroy();
+      void local?.destroy();
     };
-  }, [doc, tripId]);
+  }, [doc, tripId, token]);
 
   const { provider, closed } = state;
   const simulateOffline = useCallback(

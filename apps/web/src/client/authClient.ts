@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { createAuthClient } from "better-auth/react";
 import type { MemberView } from "@rota/trip";
 
@@ -44,9 +45,14 @@ export function authHeaders(): Record<string, string> {
   return friend ? { Authorization: `Bearer ${friend.token}` } : {};
 }
 
-/** The sync server's `token`: the friend's bearer token, else "cookie" for the upgrade request's cookie. */
-export function syncToken(): string {
-  return friendSession()?.token ?? "cookie";
+/**
+ * The sync server's `token`: the friend's bearer token, else "cookie" for the upgrade request's cookie.
+ * Null in a friend window whose token has not arrived: the cookie there is the visitor's.
+ */
+export function syncToken(): string | null {
+  const friend = friendSession();
+  if (friend) return friend.token;
+  return isFriendWindow() ? null : "cookie";
 }
 
 /** `fetch` for this app's API, with the friend's bearer header when there is one. */
@@ -60,8 +66,48 @@ export const authClient = createAuthClient({
   fetchOptions: { auth: { type: "Bearer", token: () => friendSession()?.token } },
 });
 
-/** The signed-in user's id ("" until known). A friend window knows it without asking the server. */
-export function useUserId(): string {
+// The last signed-in user is remembered on the device, so a cookie user still has an id offline
+// (their edits are attributed to them, never to "").
+const USER_KEY = "rota.user";
+
+export type SessionState = { data: { user: { id: string; name: string } } | null; isPending: boolean; error: unknown };
+
+export function rememberedUser(): MemberView | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(USER_KEY) ?? "null");
+    if (typeof value !== "object" || value === null) return null;
+    const { id, name, colour } = value as Record<string, unknown>;
+    if (typeof id !== "string" || !id || typeof name !== "string" || typeof colour !== "string") return null;
+    return { id, name, colour };
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers the session's user, and forgets it once the session says nobody is signed in. */
+export function trackSessionUser(session: SessionState): void {
+  try {
+    const user = session.data?.user;
+    if (user) {
+      const colour = (user as { colour?: unknown }).colour;
+      localStorage.setItem(USER_KEY, JSON.stringify({ id: user.id, name: user.name, colour: typeof colour === "string" ? colour : "" }));
+    } else if (!session.isPending && !session.error) {
+      localStorage.removeItem(USER_KEY);
+    }
+  } catch {
+    // Storage blocked: the id is then only known while the session is.
+  }
+}
+
+/** Who is editing: the friend in a friend window, else the session's or the remembered user. Null when unknown. */
+export function resolveUserId(session: SessionState): string | null {
+  if (isFriendWindow()) return friendSession()?.user.id ?? null;
+  return session.data?.user.id ?? rememberedUser()?.id ?? null;
+}
+
+/** The current user's id, or null when it is not known (the UI then blocks edits). */
+export function useUserId(): string | null {
   const session = authClient.useSession();
-  return friendSession()?.user.id ?? session.data?.user.id ?? "";
+  useEffect(() => trackSessionUser(session), [session]);
+  return resolveUserId(session);
 }
