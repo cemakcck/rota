@@ -17,6 +17,7 @@
     "@rota/trip": "*",
     "better-auth": "^1.7.23",
     "drizzle-orm": "^0.45.4",
+    "zod": "^4.6.7",
     "next": "16.4.5",
     "next-intl": "^4.14.9",
     "postgres": "^4.1.0",

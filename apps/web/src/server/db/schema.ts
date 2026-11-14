@@ -127,6 +127,8 @@ export const tripMembers = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["owner", "member"] }).notNull(),
     joinedAt: tstz("joined_at").defaultNow().notNull(),
+    /** Soft removal: a removed member keeps the row (so sync can say "removed") but has no access. */
+    removedAt: tstz("removed_at"),
   },
   (t) => [
     primaryKey({ columns: [t.tripId, t.userId] }),
@@ -134,6 +136,12 @@ export const tripMembers = pgTable(
     check("trip_members_role_check", sql`${t.role} in ('owner', 'member')`),
   ],
 );
+
+/** Written when a trip is deleted, so a client can be told "deleted" rather than "removed". */
+export const tripTombstones = pgTable("trip_tombstones", {
+  tripId: text("trip_id").primaryKey(),
+  deletedAt: tstz("deleted_at").defaultNow().notNull(),
+});
 
 export const tripInvites = pgTable(
   "trip_invites",
