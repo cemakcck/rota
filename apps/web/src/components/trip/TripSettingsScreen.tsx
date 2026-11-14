@@ -29,6 +29,7 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
     (async () => {
       try {
         const res = await apiFetch(`/api/trips/${tripId}`);
+        if (res.status === 401) return router.replace(`/sign-in?next=${encodeURIComponent(`/trips/${tripId}/settings`)}`);
         const next = res.ok ? ((await res.json()) as Loaded) : "failed";
         if (live) setTrip(next);
       } catch {
@@ -38,7 +39,7 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
     return () => {
       live = false;
     };
-  }, [tripId, version]);
+  }, [tripId, version, router]);
 
   if (trip === "loading" || !userId) return <p role="status">{tc("loading")}</p>;
   if (trip === "failed")

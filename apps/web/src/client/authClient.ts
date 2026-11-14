@@ -123,11 +123,13 @@ export function useUserId(): string | null {
 
 /**
  * The current user for pages that need one. `signedOut` is true only once the session has settled with
- * nobody signed in and nobody remembered on the device: a failed session fetch (offline) is not signed out.
+ * nobody signed in: a failed session fetch (offline) is not signed out.
  */
 export function useUserState(): { userId: string | null; signedOut: boolean } {
   const session = authClient.useSession();
   useEffect(() => trackSessionUser(session), [session]);
   const userId = resolveUserId(session);
-  return { userId, signedOut: userId === null && !session.isPending && !session.error };
+  // From the session alone: the remembered user is read from storage, which sign-out clears without a re-render.
+  // A failed fetch (offline) is not signed out, and a friend window carries its own bearer session.
+  return { userId, signedOut: !session.data && !session.isPending && !session.error && !isFriendWindow() };
 }

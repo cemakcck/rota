@@ -84,6 +84,12 @@ describe("my trips", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ftrips%2F${"c".repeat(22)}%2Fsettings`));
   });
 
+  it("trip settings: a 401 from the trip goes to sign in", async () => {
+    vi.stubGlobal("fetch", stubFetch({ [`GET /api/trips/${"c".repeat(22)}`]: () => ({ status: 401, body: { error: "unauthorized" } }) }).fn);
+    renderIntl(<TripSettingsScreen tripId={"c".repeat(22)} />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ftrips%2F${"c".repeat(22)}%2Fsettings`));
+  });
+
   it("a settled session with a remembered user (offline) does not redirect", async () => {
     cacheTrips("u1", [soon]);
     vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
