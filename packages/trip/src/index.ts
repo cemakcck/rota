@@ -13,3 +13,4 @@ export * from "./timeline";
 export * from "./gmaps";
 export * from "./hours";
 export * from "./colours";
+export * from "./seed";

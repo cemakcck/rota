@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { newTripId } from "@rota/trip";
 import { startCleanup } from "@/server/cleanup";
 import { db } from "@/server/db/client";
-import { tripTombstones, trips, user } from "@/server/db/schema";
-import { createTrip } from "@/server/trips/repo";
+import { DEMO_FRIEND_DOMAIN } from "@/server/demo";
+import { tripMembers, tripTombstones, trips, user } from "@/server/db/schema";
+import { addMember, createTrip } from "@/server/trips/repo";
 import { NEW_TRIP, insertUser } from "./helpers";
 
 const DAY = 86_400_000;
@@ -14,6 +15,14 @@ async function demoUser(lastActive: Date): Promise<{ id: string; tripId: string 
   await db.update(user).set({ isDemo: true, lastActiveAt: lastActive }).where(eq(user.id, id));
   const tripId = await createTrip({ ownerId: id, ...NEW_TRIP, destination: null, isDemo: true });
   return { id, tripId };
+}
+
+/** A demo friend (Deniz/Selin style): never acts, so its own lastActiveAt is old from day one. */
+async function demoFriend(tripId: string): Promise<string> {
+  const id = await insertUser("Deniz");
+  await db.update(user).set({ isDemo: true, email: `${id}@${DEMO_FRIEND_DOMAIN}` }).where(eq(user.id, id));
+  await addMember(tripId, id, "member");
+  return id;
 }
 
 const userExists = async (id: string) => (await db.select({ id: user.id }).from(user).where(eq(user.id, id))).length > 0;
@@ -50,6 +59,30 @@ describe("cleanup", () => {
     expect(await userExists(realIdle)).toBe(true);
     // The deleted trip is tombstoned (members are told "deleted"); tombstones past 30 days go.
     await vi.waitFor(async () => expect((await tombstones([idle.tripId, oldStone, freshStone])).sort()).toEqual([idle.tripId, freshStone].sort()));
+  });
+
+  it("demo friends live and die with the visitor whose trip they are on, never on their own", async () => {
+    // Friends are old (never act); the visitor is still active, so everyone stays.
+    const active = await demoUser(new Date(Date.now() - 1 * DAY));
+    const friend = await demoFriend(active.tripId);
+    await db.update(user).set({ createdAt: new Date(Date.now() - 30 * DAY), lastActiveAt: new Date(Date.now() - 30 * DAY) }).where(eq(user.id, friend));
+    // An idle visitor goes together with their friends.
+    const idle = await demoUser(new Date(Date.now() - 8 * DAY));
+    const idleFriend = await demoFriend(idle.tripId);
+    // A friend of someone else's trip is not collateral.
+    const bystander = await insertUser("Bystander");
+    await db.update(user).set({ isDemo: true }).where(eq(user.id, bystander));
+    await addMember(idle.tripId, bystander, "member");
+
+    stop = startCleanup(20);
+    await vi.waitFor(async () => expect(await userExists(idle.id)).toBe(false), { timeout: 5000 });
+
+    expect(await userExists(idleFriend)).toBe(false);
+    expect(await tripExists(idle.tripId)).toBe(false);
+    expect(await userExists(friend)).toBe(true);
+    expect(await userExists(active.id)).toBe(true);
+    expect((await db.select().from(tripMembers).where(eq(tripMembers.userId, friend))).length).toBe(1);
+    expect(await userExists(bystander)).toBe(true);
   });
 
   it("cleanup survives a DB error", async () => {
