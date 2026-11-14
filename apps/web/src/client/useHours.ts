@@ -3,7 +3,7 @@ import { dayTimeline, hoursWarning, type HoursWarning, type Leg, type Locale, ty
 import { apiFetch } from "./authClient";
 import { createRemote, getJson, useRemote } from "./remote";
 
-/** A warning for a stop, with what its text needs: the day's date and the estimated arrival. */
+/** A warning for a stop, with what its text needs: the day's date and the set or estimated arrival. */
 export type StopWarning = { warning: HoursWarning; date: string; arrive: string };
 
 // One request per batch of up to 25 OSM ids; each id's hours are kept on their own.
@@ -14,7 +14,7 @@ const hours = createRemote<string | null>(async (ids, signal) => {
 
 /**
  * Opening-hours warnings for the trip's planned stops, by place id (spec §8.2): OpenStreetMap's hours
- * at the stop's estimated arrival and stay. No hours known, no warning.
+ * at the stop's set or estimated arrival and stay. No hours known, or no time for the stop, no warning.
  */
 export function useHours(view: TripView, legsFor: (dayId: string) => (Leg | null)[], locale: Locale): Map<string, StopWarning> {
   const ids = useMemo(() => [...new Set(view.days.flatMap((d) => d.places.flatMap((p) => (p.osmId ? [p.osmId] : []))))], [view.days]);
@@ -27,6 +27,7 @@ export function useHours(view: TripView, legsFor: (dayId: string) => (Leg | null
       const tag = place.osmId ? get(place.osmId) : null;
       if (!tag || !day.date) return;
       const { arrive, leave } = timeline[i];
+      if (arrive === null || leave === null) return;
       const warning = hoursWarning(tag, day.date, arrive, leave, locale);
       if (warning) warnings.set(place.id, { warning, date: day.date, arrive });
     });

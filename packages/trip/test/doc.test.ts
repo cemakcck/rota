@@ -86,7 +86,7 @@ describe("trip document", () => {
     const view = readTrip(trip(3));
     expect(view.days.map((d) => d.date)).toEqual(["2026-11-30", "2026-12-01", "2026-12-02"]);
     expect(view.days.map((d) => d.index)).toEqual([0, 1, 2]);
-    expect(view.days.every((d) => d.startTime === "09:00" && d.travelMode === "walk")).toBe(true);
+    expect(view.days.every((d) => d.travelMode === "walk" && !("startTime" in d))).toBe(true);
     expect(view.name).toBe("Istanbul");
     expect(view.startDate).toBe("2026-11-30");
     expect(view.destination).toBeNull();

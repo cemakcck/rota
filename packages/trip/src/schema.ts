@@ -5,9 +5,10 @@ import type { Category } from "./categories";
  * rejects anything else):
  * - meta: Y.Map { name, startDate, destination, isDemo, locale }
  * - places: Y.Map<placeId, Y.Map { name, lat, lng, osmId, address, category, tags,
- *     stayMinutes, dayId, order, addedBy, createdAt, status, votes: Y.Map<userId, 1 | -1>,
+ *     stayMinutes, time ("HH:MM" or null = untimed), dayId, order, addedBy, createdAt, status, votes: Y.Map<userId, 1 | -1>,
  *     note: Y.XmlFragment, deletedBy (set just before the place is deleted, see deletePlace) }>
- * - days: Y.Map<dayId, Y.Map { index, startTime, travelMode, note: Y.XmlFragment }>
+ * - days: Y.Map<dayId, Y.Map { index, travelMode, note: Y.XmlFragment }> (legacy days may
+ *     still hold `startTime`; it is never read, and migrateDayStart moves it onto the first stop)
  * - checklist: Y.Map<itemId, Y.Map { text, done, assignee, order }>
  * - members: Y.Map<userId, Y.Map { name, colour }>
  *
@@ -31,6 +32,8 @@ export type PlaceView = {
   category: Category;
   tags: string[];
   stayMinutes: number;
+  /** "HH:MM" wall-clock time you arrive / it starts, set by someone; null = untimed. */
+  time: string | null;
   dayId: string | null;
   order: string;
   addedBy: string;
@@ -46,8 +49,6 @@ export type DayView = {
   index: number;
   /** YYYY-MM-DD, startDate + index. */
   date: string;
-  /** HH:MM wall-clock. */
-  startTime: string;
   travelMode: TravelMode;
   places: PlaceView[];
 };
@@ -77,5 +78,10 @@ export type TripView = {
   placeCount: number;
 };
 
-export const DEFAULT_START_TIME = "09:00";
+/** A wall-clock time "HH:MM", 00:00–23:59. */
+export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function isTime(value: unknown): value is string {
+  return typeof value === "string" && TIME_PATTERN.test(value);
+}
 export const DEFAULT_TRAVEL_MODE: TravelMode = "walk";

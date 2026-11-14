@@ -28,7 +28,32 @@ describe("seedDemoTrip", () => {
     expect(view.suggestions).toHaveLength(2);
     expect(view.checklist).toHaveLength(5);
     expect(view.members.map((m) => m.id).sort()).toEqual([deniz.id, owner.id, selin.id].sort());
-    expect(view.days[0].startTime).toBe("09:30");
+  });
+
+  it("seed has timed and untimed stops", () => {
+    const { view } = seeded();
+    for (const day of view.days) {
+      const timed = day.places.filter((p) => p.time !== null);
+      // Each day starts at a set time, has an untimed stop between set ones, and its set times run in order.
+      expect(day.places[0].time).not.toBeNull();
+      expect(timed.length).toBeGreaterThanOrEqual(2);
+      expect(timed.length).toBeLessThan(day.places.length);
+      expect(timed.map((p) => p.time)).toEqual(timed.map((p) => p.time).sort());
+      const untimed = day.places.findIndex((p) => p.time === null);
+      expect(day.places.slice(untimed + 1).some((p) => p.time !== null) || untimed === day.places.length - 1).toBe(true);
+    }
+    const day1 = view.days[0].places;
+    expect(day1.map((p) => [p.name, p.time])).toEqual([
+      ["Karaköy Güllüoğlu", "08:30"],
+      ["Istanbul Modern", "10:15"],
+      ["Karaköy Lokantası", "13:00"],
+      ["Galata Tower", null],
+    ]);
+    for (const day of view.days) {
+      const legs = day.places.slice(1).map((p, i) => estimateLeg(day.places[i] as { lat: number; lng: number }, p as { lat: number; lng: number }, day.travelMode));
+      // Untimed stops come after a timed one, so every stop shows a set or estimated time.
+      expect(dayTimeline(day, legs).every((e) => e.arrive !== null)).toBe(true);
+    }
   });
 
   it("is lived in: categories, tags, notes, votes, checklist state and spread authorship", () => {
@@ -102,6 +127,7 @@ describe("seedDemoTrip", () => {
       dayTimeline(day, legs).forEach((entry, i) => {
         const hours = OSM_HOURS[day.places[i].osmId ?? ""];
         if (!hours) return;
+        if (entry.arrive === null || entry.leave === null) return;
         const w = hoursWarning(hours, day.date, entry.arrive, entry.leave, "en");
         if (w) warnings.push(`${day.places[i].name}:${w.kind}`);
       });

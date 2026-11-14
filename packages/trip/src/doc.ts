@@ -3,11 +3,12 @@ import { DEFAULT_STAY_MINUTES, normaliseTags, type Category } from "./categories
 import { newId } from "./ids";
 import { keyBetween, planSlot } from "./order";
 import {
-  DEFAULT_START_TIME,
   DEFAULT_TRAVEL_MODE,
+  isTime,
   type Destination,
   type Locale,
   type PlaceStatus,
+  type PlaceView,
   type TravelMode,
   type TripView,
 } from "./schema";
@@ -35,12 +36,14 @@ export type NewPlace = {
   category: Category;
   tags?: string[];
   stayMinutes?: number;
+  /** "HH:MM" the stop starts; a planned stop with a time goes to its chronological place in the day. */
+  time?: string | null;
   dayId: string | null;
   status?: "planned" | "suggested";
 };
 
 export type PlacePatch = Partial<{ name: string; category: Category; tags: string[]; stayMinutes: number }>;
-export type DayPatch = Partial<{ startTime: string; travelMode: TravelMode }>;
+export type DayPatch = Partial<{ travelMode: TravelMode }>;
 export type ChecklistPatch = Partial<{ text: string; done: boolean; assignee: string | null }>;
 /** Neighbours in the target list; null = the open end. Neither given: append. */
 export type Slot = { beforeId?: string | null; afterId?: string | null };
@@ -76,9 +79,33 @@ function slotKey(container: Y.Map<unknown>, sorted: readonly { id: string; order
   const after = indexOf(slot.afterId);
   const before = indexOf(slot.beforeId);
   const at = after >= 0 ? after + 1 : before >= 0 ? before : slot.afterId === null ? 0 : sorted.length;
+  return keyAt(container, sorted, at);
+}
+
+/** Order key for position `at` of `sorted`; tied neighbours get fresh keys (call inside a transaction). */
+function keyAt(container: Y.Map<unknown>, sorted: readonly { id: string; order: string }[], at: number): string {
   const { key, rekey } = planSlot(sorted, at);
   for (const { id, order } of rekey) record(container, id)?.set("order", order);
   return key;
+}
+
+/**
+ * Where a stop at `time` belongs in `others` (a day's stops, sorted, without it), given that it
+ * would otherwise sit at position `current`: after the last stop timed at or before `time` and no
+ * later than the first stop timed after it. Already in that range, it stays (so the untimed stops
+ * around it keep their relative order); otherwise it goes right after the earlier timed stop, or
+ * right before the later one when none is earlier.
+ */
+function chronologicalIndex(others: readonly PlaceView[], time: string, current: number): number {
+  let lo = 0;
+  let hi = others.length;
+  others.forEach((p, i) => {
+    if (p.time === null) return;
+    if (p.time <= time) lo = i + 1;
+    else if (hi === others.length) hi = i;
+  });
+  if (lo <= current && current <= hi) return current;
+  return lo > 0 ? lo : hi;
 }
 
 /** The sorted planned list for `dayId` (null = Ideas); null if that day is gone. */
@@ -100,7 +127,6 @@ function dayExists(doc: Y.Doc, dayId: string | null): boolean {
 function newDay(index: number): YRecord {
   const day = new Y.Map<unknown>();
   day.set("index", index);
-  day.set("startTime", DEFAULT_START_TIME);
   day.set("travelMode", DEFAULT_TRAVEL_MODE);
   day.set("note", new Y.XmlFragment());
   return day;
@@ -173,20 +199,21 @@ export function setDay(doc: Y.Doc, dayId: string, patch: DayPatch, origin: strin
   const day = record(days(doc), dayId);
   if (!day) return;
   doc.transact(() => {
-    if (patch.startTime !== undefined && /^([01]\d|2[0-3]):[0-5]\d$/.test(patch.startTime)) {
-      day.set("startTime", patch.startTime);
-    }
     if (patch.travelMode === "walk" || patch.travelMode === "drive") day.set("travelMode", patch.travelMode);
   }, origin);
 }
 
 /**
  * Adds a place at the end of its list (a day, Ideas, or Suggestions); returns
- * its id. The name is trimmed; a blank name throws.
+ * its id. A planned stop with a time goes to its chronological place in the
+ * day instead (see setPlaceTime). The name is trimmed; a blank name or a time
+ * that is not "HH:MM" throws.
  */
 export function addPlace(doc: Y.Doc, input: NewPlace, origin: string): string {
   const name = input.name.trim();
   if (!name) throw new Error("A place needs a name");
+  const time = input.time ?? null;
+  if (time !== null && !isTime(time)) throw new Error("A time is HH:MM");
   const id = newId();
   const status = input.status ?? "planned";
   // A planned place for a day that no longer exists goes to Ideas.
@@ -201,8 +228,16 @@ export function addPlace(doc: Y.Doc, input: NewPlace, origin: string): string {
     place.set("category", input.category);
     place.set("tags", normaliseTags(input.tags ?? []));
     place.set("stayMinutes", input.stayMinutes ?? DEFAULT_STAY_MINUTES[input.category]);
+    place.set("time", time);
     place.set("dayId", dayId);
-    place.set("order", appendKey(listOrders(readTrip(doc), status, dayId)));
+    const view = readTrip(doc);
+    const day = status === "planned" && dayId !== null ? plannedList(view, dayId) : null;
+    place.set(
+      "order",
+      day && time !== null
+        ? keyAt(places(doc), day, chronologicalIndex(day, time, day.length))
+        : appendKey(listOrders(view, status, dayId)),
+    );
     place.set("addedBy", origin);
     place.set("createdAt", Date.now());
     place.set("status", status);
@@ -224,6 +259,53 @@ export function updatePlace(doc: Y.Doc, id: string, patch: PlacePatch, origin: s
     if (patch.tags !== undefined) place.set("tags", normaliseTags(patch.tags));
     if (patch.stayMinutes !== undefined && Number.isFinite(patch.stayMinutes)) {
       place.set("stayMinutes", Math.max(0, Math.round(patch.stayMinutes)));
+    }
+  }, origin);
+}
+
+/**
+ * Sets (or with null clears) the time a place starts. A planned stop given a
+ * time also moves to its chronological place among the day's timed stops
+ * (writing only its `order`, plus fresh keys for tied neighbours); untimed
+ * stops keep their order. Returns false, changing nothing, if the time is not
+ * "HH:MM" (00:00–23:59) or the place is gone.
+ */
+export function setPlaceTime(doc: Y.Doc, id: string, time: string | null, origin: string): boolean {
+  const place = record(places(doc), id);
+  if (!place || (time !== null && !isTime(time))) return false;
+  doc.transact(() => {
+    place.set("time", time);
+    if (time === null) return;
+    const view = readTrip(doc);
+    const current = view.days.find((d) => d.places.some((p) => p.id === id))?.places;
+    if (!current) return;
+    const at = current.findIndex((p) => p.id === id);
+    const others = current.filter((p) => p.id !== id);
+    const to = chronologicalIndex(others, time, at);
+    if (to !== at) place.set("order", keyAt(places(doc), others, to));
+  }, origin);
+  return true;
+}
+
+/**
+ * Moves the start time of days written before times were set per stop onto
+ * each day's first stop, when that stop has no time of its own, then deletes
+ * it. Writes nothing (no transaction) when there is nothing left to move, so
+ * calling it on every load is cheap.
+ */
+export function migrateDayStart(doc: Y.Doc, origin: string): void {
+  const legacy: [string, YRecord][] = [];
+  days(doc).forEach((day, id) => {
+    if (day instanceof Y.Map && day.has("startTime")) legacy.push([id, day as YRecord]);
+  });
+  if (legacy.length === 0) return;
+  doc.transact(() => {
+    const view = readTrip(doc);
+    for (const [id, day] of legacy) {
+      const start = day.get("startTime");
+      const first = view.days.find((d) => d.id === id)?.places[0];
+      if (first && first.time === null && isTime(start)) record(places(doc), first.id)?.set("time", start);
+      day.delete("startTime");
     }
   }, origin);
 }

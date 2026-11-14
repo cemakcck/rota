@@ -11,6 +11,7 @@ import {
   readTrip,
   removeDay,
   setDay,
+  setPlaceTime,
   setTripMeta,
   updateChecklistItem,
   updatePlace,
@@ -193,7 +194,7 @@ describe("merging concurrent edits", () => {
         offlineIds.push(addPlace(offline, { name: `Offline ${i}`, category: "food", dayId: days[i % 3] }, "bob"));
       }
     }
-    setDay(online, days[1], { startTime: "10:30", travelMode: "drive" }, "alice");
+    setDay(online, days[1], { travelMode: "drive" }, "alice");
     setTripMeta(online, { name: "Istanbul trip" }, "alice");
     const onlineAdded = addPlace(online, { name: "Online place", category: "cafe", dayId: days[0] }, "alice");
     updatePlace(online, shared, { stayMinutes: 90 }, "alice");
@@ -207,7 +208,7 @@ describe("merging concurrent edits", () => {
     expect(ids).toContain(onlineAdded);
     expect(view.placeCount).toBe(new Set(offlineIds).size + 2);
     expect(view.name).toBe("Istanbul trip");
-    expect(view.days[1]).toMatchObject({ startTime: "10:30", travelMode: "drive" });
+    expect(view.days[1]).toMatchObject({ travelMode: "drive" });
     expect(view.days.flatMap((d) => d.places).find((p) => p.id === shared)!.stayMinutes).toBe(90);
     expect(view.days.flatMap((d) => d.places).filter((p) => p.name.startsWith("Renamed"))).toHaveLength(10);
   });
@@ -255,5 +256,34 @@ describe("merging concurrent edits", () => {
     expect(view.checklist.map((i) => i.id)).toEqual([passports, tickets, fromB]);
     expect(view.checklist[0]).toMatchObject({ text: "Passports and IDs", done: true, assignee: "bob" });
     expect(typeof view.checklist[1].done).toBe("boolean");
+  });
+
+  it("concurrent setPlaceTime on two peers converges with one copy", () => {
+    const a = trip(1);
+    const [day] = readTrip(a).days.map((d) => d.id);
+    const breakfast = addPlace(a, { name: "Breakfast", category: "food", dayId: day, time: "08:30" }, "alice");
+    const museum = addPlace(a, { name: "Museum", category: "museum", dayId: day, time: "10:00" }, "alice");
+    const walk = addPlace(a, { name: "Walk", category: "sight", dayId: day }, "alice");
+    const lunch = addPlace(a, { name: "Lunch", category: "food", dayId: day, time: "13:00" }, "alice");
+    const b = replica(a);
+
+    // The same stop re-timed differently on each peer, and two stops given the same new time.
+    setPlaceTime(a, museum, "14:00", "alice");
+    setPlaceTime(b, museum, "07:00", "bob");
+    setPlaceTime(a, walk, "12:00", "alice");
+    setPlaceTime(b, breakfast, "12:00", "bob");
+    sync(a, b);
+
+    const view = readTrip(a);
+    expect(view).toEqual(readTrip(b));
+    const ids = view.days[0].places.map((p) => p.id);
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids)).toEqual(new Set([breakfast, museum, walk, lunch]));
+    // One writer won the museum's time and its order together.
+    const m = view.days[0].places.find((p) => p.id === museum)!;
+    expect(["14:00", "07:00"]).toContain(m.time);
+    const index = ids.indexOf(museum);
+    if (m.time === "07:00") expect(index).toBe(0);
+    else expect(index).toBe(3);
   });
 });

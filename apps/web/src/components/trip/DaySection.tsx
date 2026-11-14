@@ -8,7 +8,6 @@ import type { StopWarning } from "@/client/useHours";
 import type { Travel } from "@/client/useTravel";
 import type { DayWeather } from "@/client/useWeather";
 import { btn, btnSm } from "../ui";
-import { CommitInput } from "./CommitInput";
 import { GoogleMapsPin, Icon } from "./icons";
 import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { PlaceRow, type PlaceActions } from "./PlaceRow";
@@ -17,29 +16,13 @@ import { listDropId } from "./plan";
 import { Approximate, TravelLeg, useDuration } from "./TravelLeg";
 import { WeatherChip } from "./WeatherChip";
 
-const segment = "inline-flex h-[26px] items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2";
-
-/** A day's start time, travel mode and total, and Google Maps directions (one link per part of a long day). */
-function DayControls({ day, title, travel, onDay }: { day: DayView; title: string; travel?: Travel; onDay: ((patch: DayPatch) => void) | null }) {
+/** A day's travel mode and total, and Google Maps directions (one link per part of a long day). */
+function DayControls({ day, travel, onDay }: { day: DayView; travel?: Travel; onDay: ((patch: DayPatch) => void) | null }) {
   const t = useTranslations("trip");
-  const id = useId();
   const duration = useDuration();
   const urls = dayUrls(day, day.travelMode);
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2.5 text-[12.5px] text-ink-2">
-      <label htmlFor={id} className={segment}>
-        <Icon name="clock" size={14} />
-        {t("startTime")}
-        <span className="sr-only">, {title}</span>
-        <CommitInput
-          id={id}
-          type="time"
-          value={day.startTime}
-          readOnly={!onDay}
-          className="bg-transparent font-mono text-[12px] text-ink"
-          onCommit={(startTime) => onDay?.({ startTime })}
-        />
-      </label>
       <div role="group" aria-label={t("travelMode", { n: day.index + 1 })} className="inline-flex rounded-[7px] border border-line bg-surface p-0.5">
         {(["walk", "drive"] as const).map((mode) => (
           <button
@@ -125,7 +108,7 @@ export function DaySection({
   const t = useTranslations("trip");
   const headingId = useId();
   const { setNodeRef, isOver } = useDroppable({ id: listDropId(day?.id ?? null), disabled: !actions });
-  const arrivals = new Map(timeline?.map((e) => [e.placeId, e.arrive]));
+  const arrivals = new Map(timeline?.flatMap((e) => (e.arrive === null ? [] : [[e.placeId, { time: e.arrive, estimated: e.estimated }] as const])));
   return (
     <section aria-labelledby={headingId} className="pb-2">
       <div className="flex flex-wrap items-center gap-x-2 px-4 pb-2.5 pt-3.5">
@@ -140,7 +123,7 @@ export function DaySection({
           </span>
         )}
       </div>
-      {day && <DayControls day={day} title={title} travel={travel} onDay={onDay} />}
+      {day && <DayControls day={day} travel={travel} onDay={onDay} />}
       {day && <DayNote day={day} title={title} editable={onDay !== null} />}
       <div ref={setNodeRef} className={`mx-3 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
         {places.length === 0 ? (

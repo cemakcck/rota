@@ -29,7 +29,7 @@ const day1 = () => screen.getByRole("region", { name: /^Day 1\b/ });
 
 function twoStops(lng: number) {
   const { doc, dayIds } = newTrip({ days: 1 });
-  addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng }, "u1");
+  addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng, time: "09:00" }, "u1");
   addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], lat: 41.0317, lng: lng + 0.001 }, "u1");
   return `${lng},41.0256;${lng + 0.001},41.0317`;
 }
@@ -47,7 +47,7 @@ describe("travel times", () => {
     expect(await within(day1()).findByText("12 min walk · 950 m")).toBeTruthy();
     expect(within(day1()).queryByText(/≈/)).toBeNull();
     expect(within(day1()).getByText("12 min travel")).toBeTruthy();
-    // The second stop's arrival follows the routed leg: 09:00, a 45 min stay, then 12 min.
+    // The second stop's estimated arrival follows the routed leg: set at 09:00, a 45 min stay, then 12 min.
     expect(within(day1()).getByText("around 09:57")).toBeTruthy();
   });
 

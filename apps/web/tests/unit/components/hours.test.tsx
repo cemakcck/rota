@@ -33,7 +33,7 @@ function mondayTrip() {
 describe("opening hours", () => {
   it("an opening-hours warning appears for a Monday museum visit", async () => {
     const { doc, dayIds } = mondayTrip();
-    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], osmId: "n101" }, "u1");
+    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], osmId: "n101", time: "09:00" }, "u1");
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], osmId: "w102" }, "u1");
     vi.stubGlobal(
       "fetch",

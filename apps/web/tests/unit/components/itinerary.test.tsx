@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
-import { addPlace, createUndo, dayUrls, deletePlace, movePlace, placeUrl, updatePlace } from "@rota/trip";
+import { addPlace, createUndo, dayUrls, deletePlace, movePlace, placeUrl, setPlaceTime, updatePlace } from "@rota/trip";
 import { renderIntl } from "./helpers";
 import { fake, newTrip, remoteEdit, remotePeer, useFakeTrip } from "./tripHarness";
 
@@ -148,38 +148,33 @@ describe("itinerary", () => {
     expect(name.closest("li")!.className).toContain("min-w-0");
   });
 
-  it("arrival times update when a stay duration changes", () => {
+  it("set times show as set and estimated times follow stays", () => {
     const { doc, dayIds } = newTrip();
-    addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0] }, "u1");
+    addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 30, dayId: dayIds[0] }, "u1");
+    const galata = addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0], time: "07:00" }, "u1");
     addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
-    expect(within(row("Galata Tower")).getByText("around 09:00")).toBeTruthy();
-    expect(within(row("Karaköy Lokantası")).getByText("around 10:00")).toBeTruthy();
+    // No default start: an untimed stop before any set time has no time.
+    expect(screen.queryByLabelText(/^Start time/)).toBeNull();
+    expect(within(row("Breakfast")).queryByText(/\d\d:\d\d/)).toBeNull();
+    expect(within(row("Galata Tower")).getByText("07:00")).toBeTruthy();
+    expect(within(row("Karaköy Lokantası")).getByText("around 08:00")).toBeTruthy();
 
     const stay = screen.getByLabelText("Stay at Galata Tower, in minutes");
     fireEvent.change(stay, { target: { value: "90" } });
     fireEvent.blur(stay);
-    expect(within(row("Karaköy Lokantası")).getByText("around 10:30")).toBeTruthy();
+    expect(within(row("Karaköy Lokantası")).getByText("around 08:30")).toBeTruthy();
 
-    const start = screen.getByLabelText("Start time, Day 1");
-    fireEvent.change(start, { target: { value: "10:15" } });
-    fireEvent.blur(start);
+    remoteEdit("u2", (d, origin) => setPlaceTime(d, galata, "10:15", origin));
+    expect(within(row("Galata Tower")).getByText("10:15")).toBeTruthy();
     expect(within(row("Karaköy Lokantası")).getByText("around 11:45")).toBeTruthy();
   });
 
-  it("start time and stay fields keep focus and the typed value through saves and remote updates", () => {
+  it("stay fields keep focus and the typed value through saves and remote updates", () => {
     const { doc, dayIds } = newTrip();
     const id = addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0] }, "u1");
     addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
-
-    const start = screen.getByLabelText("Start time, Day 1") as HTMLInputElement;
-    start.focus();
-    fireEvent.change(start, { target: { value: "10:00" } });
-    expect(document.activeElement).toBe(start);
-    fireEvent.keyDown(start, { key: "Enter" });
-    expect(fake.view.days[0].startTime).toBe("10:00");
-    expect(document.activeElement).toBe(start);
 
     const stay = screen.getByLabelText("Stay at Galata Tower, in minutes") as HTMLInputElement;
     stay.focus();

@@ -156,6 +156,25 @@ describe("useTrip", () => {
     hook.unmount();
   });
 
+  it("a legacy day's start time moves onto its first stop once the trip loads", async () => {
+    const id = newTripId();
+    const legacy = new Y.Doc();
+    initTrip(legacy, { name: "Legacy", startDate: "2026-12-04", days: 1, locale: "en" }, "seed");
+    const [day] = readTrip(legacy).days;
+    legacy.getMap<Y.Map<unknown>>("days").get(day.id)!.set("startTime", "07:30");
+    addPlace(legacy, { name: "Simit stand", category: "food", dayId: day.id }, "seed");
+    const idb = new IndexeddbPersistence(`rota-trip-${id}-u-ada`, legacy);
+    await idb.whenSynced;
+    await idb.destroy();
+
+    const { hook } = await openTrip(id);
+    await waitFor(() => expect(hook.result.current.ready).toBe(true));
+    const doc = hook.result.current.doc;
+    expect(readTrip(doc).days[0].places[0].time).toBe("07:30");
+    expect(doc.getMap<Y.Map<unknown>>("days").get(day.id)!.has("startTime")).toBe(false);
+    hook.unmount();
+  });
+
   it("removed reason shows closed=removed and keeps the local doc until forgetTrip", async () => {
     const id = await seedLocalTrip("Istanbul long weekend");
     const { hook, provider } = await openTrip(id);

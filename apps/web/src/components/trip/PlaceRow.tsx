@@ -62,7 +62,7 @@ function StayInput({ place, onSave }: { place: PlaceView; onSave: (minutes: numb
 }
 
 /**
- * One place in a day or in Ideas: category, name, who added it, tags, estimated arrival, stay, its
+ * One place in a day or in Ideas: category, name, who added it, tags, its set or estimated time, stay, its
  * note, and the actions. A row someone else is editing is outlined in their colour and says so. Every
  * drag has button alternatives (up/down, Move to…); the drag handle is for pointers only and hidden
  * from assistive technology.
@@ -85,7 +85,8 @@ export function PlaceRow({
   number?: number;
   first: boolean;
   last: boolean;
-  arrival?: string;
+  /** The stop's time: set (shown as is) or estimated from the stop before ("around …"). */
+  arrival?: { time: string; estimated: boolean };
   /** An opening-hours warning for the stop's estimated visit. */
   warning?: StopWarning;
   dimmed: boolean;
@@ -161,7 +162,12 @@ export function PlaceRow({
         </p>
       </div>
       <div className="grid justify-items-end gap-1 text-right">
-        {arrival && <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums">{t("arrive", { time: arrival })}</span>}
+        {arrival &&
+          (arrival.estimated ? (
+            <span className="whitespace-nowrap text-[13px] tabular-nums text-ink-2">{t("arrive", { time: arrival.time })}</span>
+          ) : (
+            <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums">{arrival.time}</span>
+          ))}
         {actions ? (
           <StayInput place={place} onSave={(m) => actions.setStay(place.id, m)} />
         ) : (
