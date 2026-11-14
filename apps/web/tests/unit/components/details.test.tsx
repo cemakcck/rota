@@ -177,7 +177,9 @@ describe("place details", () => {
     // Empty clears it.
     set("");
     expect(fake.view.days[0].places[1].time).toBeNull();
-    expect(status.textContent).toBe("B has no set time");
+    // A cleared time is said by an Undo toast.
+    expect(document.querySelector("[data-action-toast] [role=status]")?.textContent).toBe("B has no set time");
+    expect(screen.getByRole("button", { name: "Undo clearing the time of B" })).toBeTruthy();
     expect(time().getAttribute("aria-invalid")).toBeNull();
   });
 

@@ -200,6 +200,45 @@ export function removeDay(doc: Y.Doc, dayId: string, origin: string): void {
   }, origin);
 }
 
+/**
+ * Moves a day to position `toIndex` (0-based, clamped to the trip) among the days; the dates follow the
+ * new order (day N is startDate + N − 1), and its places, title and note go with it. Writes only the
+ * day's `index`, a number between its new neighbours' (so a friend's concurrent move of another day,
+ * or any place edit, merges with it); only when no number fits between them (tied indexes from
+ * concurrent adds, or exhausted precision) are all days renumbered 0..n−1 in the new order, in the same
+ * transaction. Returns false, changing nothing (no transaction), for an unknown day, a position that is
+ * not a number, or the position it already has.
+ */
+export function moveDay(doc: Y.Doc, dayId: string, toIndex: number, origin: string): boolean {
+  const sorted = readTrip(doc).days.map((d) => d.id);
+  const from = sorted.indexOf(dayId);
+  if (from < 0 || !Number.isFinite(toIndex)) return false;
+  const to = Math.min(sorted.length - 1, Math.max(0, Math.round(toIndex)));
+  if (to === from) return false;
+  const others = sorted.filter((id) => id !== dayId);
+  const stored = (id: string | undefined) => {
+    const index = id === undefined ? undefined : record(days(doc), id)?.get("index");
+    return typeof index === "number" && Number.isFinite(index) ? index : null;
+  };
+  const [prevId, nextId] = [others[to - 1], others[to]];
+  const [prev, next] = [stored(prevId), stored(nextId)];
+  let index: number | null = null;
+  // A neighbour with no usable index sorts last: renumber rather than guess.
+  if ((prevId === undefined || prev !== null) && (nextId === undefined || next !== null)) {
+    const candidate = prev === null ? next! - 1 : next === null ? prev + 1 : (prev + next) / 2;
+    if (Number.isFinite(candidate) && (prev === null || candidate > prev) && (next === null || candidate < next)) index = candidate;
+  }
+  doc.transact(() => {
+    if (index !== null) return void record(days(doc), dayId)?.set("index", index);
+    others.splice(to, 0, dayId);
+    others.forEach((id, i) => {
+      const day = record(days(doc), id);
+      if (day && day.get("index") !== i) day.set("index", i);
+    });
+  }, origin);
+  return true;
+}
+
 export function setDay(doc: Y.Doc, dayId: string, patch: DayPatch, origin: string): void {
   const day = record(days(doc), dayId);
   if (!day) return;

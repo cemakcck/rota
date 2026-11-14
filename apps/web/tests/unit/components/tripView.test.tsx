@@ -204,7 +204,7 @@ describe("trip view", () => {
     expect(screen.getByText("Çiya")).toBeTruthy();
   });
 
-  it("header shows name, dates·days·places, weather chips, sync pill, avatars, Share opens the invite panel", async () => {
+  it("header shows name, dates·days·places, weather chips, sync pill, avatars, Share opens the people sheet", async () => {
     const { doc, dayIds } = newTrip({ days: 3 });
     setTripMeta(doc, { destination: { name: "Istanbul", lat: 41.01, lng: 28.98 } }, "seed");
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
@@ -249,7 +249,8 @@ describe("trip view", () => {
     expect(within(within(header).getByRole("list", { name: "In this trip now" })).getByRole("img", { name: /Ann/ })).toBeTruthy();
 
     fireEvent.click(within(header).getByRole("button", { name: "Share" }));
-    const dialog = await screen.findByRole("dialog", { name: "Share" });
+    const dialog = await screen.findByRole("dialog", { name: "People" });
+    expect(await within(dialog).findByRole("heading", { name: "Members" })).toBeTruthy();
     expect(await within(dialog).findByRole("heading", { name: "Invite people" })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

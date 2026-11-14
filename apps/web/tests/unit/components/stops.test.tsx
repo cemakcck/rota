@@ -32,6 +32,8 @@ const names = (region: HTMLElement) => within(region).queryAllByTestId("place-na
 const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
 /** Opens a stop (click on its name): its details panel. */
 const open = (name: string) => fireEvent.click(within(row(name)).getByRole("button", { name }));
+/** What the action toast says (its polite live region). */
+const toastText = () => document.querySelector("[data-action-toast] [role=status]")?.textContent;
 
 describe("stops", () => {
   it("adds, edits category and tags, deletes a place, and Undo restores it", () => {
@@ -108,7 +110,9 @@ describe("stops", () => {
       ["Galata Tower", "15:00"],
       ["Dinner", "19:00"],
     ]);
-    expect(screen.getByTestId("plan-status").textContent).toBe("Galata Tower moved to Day 2 at 15:00, position 2 of 3");
+    // Said by the Undo toast (a polite live region).
+    expect(toastText()).toBe("Galata Tower moved to Day 2 at 15:00, position 2 of 3");
+    expect(screen.getByRole("button", { name: "Undo moving Galata Tower" })).toBeTruthy();
     // One undo step: back in Day 1, still at 15:00.
     fireEvent.keyDown(window, { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places.map((p) => [p.name, p.time])).toEqual([["Galata Tower", "15:00"]]);
@@ -128,7 +132,7 @@ describe("stops", () => {
       ["Breakfast", "08:00"],
       ["Galata Tower", null],
     ]);
-    expect(screen.getByTestId("plan-status").textContent).toBe("Galata Tower moved to Day 2, position 2 of 2");
+    expect(toastText()).toBe("Galata Tower moved to Day 2, position 2 of 2");
   });
 
   it("a timed stop dropped on a day in the rail keeps its time; dragged within a day it is re-timed", () => {

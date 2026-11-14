@@ -78,9 +78,23 @@ export function EditingTag({ peer }: { peer: { name: string; colour: string } })
   );
 }
 
-/** Header avatars: this person first, then everyone else here now; after five, "+N" names the rest. */
-export function Presence({ self, peers, members }: { self: MemberView | null; peers: Peer[]; members: MemberView[] }) {
+/**
+ * Header avatars: this person first, then everyone else here now; after five, "+N" names the rest. With
+ * `onOpen` they are one button that opens the people sheet (who is on the trip, roles, invites).
+ */
+export function Presence({
+  self,
+  peers,
+  members,
+  onOpen,
+}: {
+  self: MemberView | null;
+  peers: Peer[];
+  members: MemberView[];
+  onOpen?: (from: HTMLElement) => void;
+}) {
   const t = useTranslations("trip");
+  const ts = useTranslations("share");
   const people = [
     ...(self ? [{ key: self.id, ...identify(members, self, t("someone")), label: t("you", { name: self.name || t("someone") }) }] : []),
     ...peers.map((p) => {
@@ -90,15 +104,18 @@ export function Presence({ self, peers, members }: { self: MemberView | null; pe
   ];
   const shown = people.slice(0, MAX_AVATARS);
   const rest = people.slice(MAX_AVATARS);
-  return (
-    <ul aria-label={t("here")} className="flex items-center">
+  // Inside a button only phrasing content is allowed: the list is spans with list roles then.
+  const List = onOpen ? "span" : "ul";
+  const Item = onOpen ? "span" : "li";
+  const list = (
+    <List role={onOpen ? "list" : undefined} aria-label={t("here")} className="flex items-center">
       {shown.map((p, i) => (
-        <li key={p.key} className={i > 0 ? "-ml-1.5" : undefined}>
+        <Item key={p.key} role={onOpen ? "listitem" : undefined} className={`flex ${i > 0 ? "-ml-1.5" : ""}`}>
           <Avatar name={p.name} colour={p.colour} label={p.label} />
-        </li>
+        </Item>
       ))}
       {rest.length > 0 && (
-        <li className="-ml-1.5">
+        <Item role={onOpen ? "listitem" : undefined} className="-ml-1.5 flex">
           <span
             role="img"
             aria-label={t("moreHere", { count: rest.length, names: rest.map((p) => p.name).join(", ") })}
@@ -107,8 +124,21 @@ export function Presence({ self, peers, members }: { self: MemberView | null; pe
           >
             +{rest.length}
           </span>
-        </li>
+        </Item>
       )}
-    </ul>
+    </List>
+  );
+  if (!onOpen) return list;
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      aria-label={ts("peopleHere", { names: people.map((p) => p.label).join(", ") })}
+      title={ts("people")}
+      onClick={(e) => onOpen(e.currentTarget)}
+      className="flex h-9 items-center rounded-full px-1 hover:bg-hover"
+    >
+      {list}
+    </button>
   );
 }

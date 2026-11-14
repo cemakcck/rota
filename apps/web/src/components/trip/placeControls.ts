@@ -9,16 +9,21 @@ import type { Schedule } from "./IdeasView";
 import { placeFocusId, type StopActions } from "./StopRow";
 import { plannedLists, type ListId } from "./plan";
 
+/** Shows an Undo toast for this person's last action (its own undo step): what happened, and Undo's accessible name. */
+export type UndoToast = (message: string, undoLabel: string) => void;
+
 /**
  * What a stop's row and its details panel can do, wired to the plan (and an idea's Add to day…): Move up/down and Alt+↑/↓ swap
  * with a neighbour, and this person's own reorders and time changes are said politely (`status`;
  * others' changes come from the Announcer); Move to… opens the Move dialog (`moving`), which closes
- * by itself when the place goes (deleted or un-planned elsewhere).
+ * by itself when the place goes (deleted or un-planned elsewhere). A move to another list (Move to…,
+ * a drop on another day or Ideas) and a cleared time are said by an Undo toast (`undoToast`) instead.
  */
 export function usePlaceControls(
   doc: Y.Doc,
   view: TripView,
   actions: PlanActions | null,
+  undoToast: UndoToast,
 ): {
   stopActions: StopActions | null;
   schedule: Schedule | null;
@@ -59,7 +64,8 @@ export function usePlaceControls(
     if (from !== undefined && from !== list.id) {
       const index = now.days.findIndex((d) => d.id === list.id);
       const label = index < 0 ? t("ideas") : t("day", { n: index + 1 });
-      return setStatus(time === null ? t("movedTo", { name, list: label, position, total }) : t("movedToAt", { name, list: label, time, position, total }));
+      const message = time === null ? t("movedTo", { name, list: label, position, total }) : t("movedToAt", { name, list: label, time, position, total });
+      return undoToast(message, t("undoMoveFor", { name }));
     }
     setStatus(time === null ? t("reorderedTo", { name, position, total }) : t("reorderedToAt", { name, time, position, total }));
   };
@@ -69,10 +75,13 @@ export function usePlaceControls(
     remove: actions.remove,
     openMove: setMoving,
     setTime(id, time) {
+      const place = find(id)?.place;
       actions.setTime(id, time);
       if (time !== null) return sayWhere(id);
-      const place = find(id)?.place;
-      if (place) setStatus(t("timeCleared", { name: place.name || t("unnamed") }));
+      if (!place) return;
+      const name = place.name || t("unnamed");
+      if (place.time === null) return setStatus(t("timeCleared", { name }));
+      undoToast(t("timeCleared", { name }), t("undoClearTimeFor", { name }));
     },
     nudge(id, by) {
       const list = find(id);

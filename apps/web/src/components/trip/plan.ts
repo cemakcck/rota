@@ -40,6 +40,23 @@ export function dropTarget(view: TripView, activeId: string, overId: string): ({
   return null;
 }
 
+/** A rail day being dragged (to reorder the days); rows are dragged by their place id. */
+export const railDayDragId = (dayId: string) => `rail:drag:${dayId}`;
+export const isDayDrag = (activeId: string) => activeId.startsWith("rail:drag:");
+
+/**
+ * Where a dragged rail day goes when dropped on `overId`: onto another rail day, it takes that day's
+ * position (the days between shift over). Anything else (a row, a list, Ideas, itself, a day gone
+ * meanwhile) takes nothing.
+ */
+export function dayDropTarget(view: TripView, activeId: string, overId: string): { dayId: string; toIndex: number } | null {
+  if (!isDayDrag(activeId) || !overId.startsWith("rail:day:")) return null;
+  const dayId = activeId.slice("rail:drag:".length);
+  const from = view.days.findIndex((d) => d.id === dayId);
+  const to = view.days.findIndex((d) => d.id === overId.slice("rail:day:".length));
+  return from < 0 || to < 0 || from === to ? null : { dayId, toIndex: to };
+}
+
 /**
  * A move to another list without a slot (Move to…, a drop on a day in the rail or on another day's list):
  * a stop with a set time keeps it and goes to its place by time in that day (ruling F1); an untimed stop

@@ -564,6 +564,6 @@ describe("day plan", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Time for A" }), { target: { value: "" } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for A" }), { key: "Enter" });
     expect(fake.view.days[0].places[0].time).toBeNull();
-    expect(screen.getByTestId("plan-status").textContent).toBe("A has no set time");
+    expect(document.querySelector("[data-action-toast] [role=status]")?.textContent).toBe("A has no set time");
   });
 });

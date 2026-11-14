@@ -390,7 +390,19 @@
     "shifted": "{count, plural, one {Shifted # stop by {minutes} min.} other {Shifted # stops by {minutes} min.}}",
     "shiftClamped": "{count, plural, one {# stop kept at {time}.} other {# stops kept at {time}.}}",
     "shiftUnchanged": "No times changed: they are already at {time}.",
-    "undoShiftFor": "Undo shifting the times of {day}"
+    "undoShiftFor": "Undo shifting the times of {day}",
+    "dayDeleted": "{day} deleted.",
+    "dayDeletedPlaces": "{count, plural, one {Its stop is in Ideas.} other {Its # stops are in Ideas.}}",
+    "undoDeleteDayFor": "Undo deleting {day}",
+    "undoMoveFor": "Undo moving {name}",
+    "dismissedPlace": "{name} dismissed.",
+    "undoDismissFor": "Undo dismissing {name}",
+    "acceptedTo": "{name} accepted into {list}.",
+    "acceptedToAt": "{name} accepted into {list} at {time}.",
+    "undoAcceptFor": "Undo accepting {name}",
+    "undoClearTimeFor": "Undo clearing the time of {name}",
+    "undoTip": "Undo (Ctrl+Z or ⌘Z)",
+    "redoTip": "Redo (Ctrl+Shift+Z or ⌘⇧Z)"
   },
   "map": {
     "sheetHandle": "Resize the list",
@@ -464,10 +476,20 @@
     "addDay": "Add a day",
     "ideas": "Ideas & votes",
     "ideasCount": "Ideas & votes, {count}",
-    "all": "Whole trip on map"
+    "all": "Whole trip on map",
+    "dayMenu": "Day {n} options",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "rename": "Rename",
+    "deleteDay": "Delete day",
+    "lastDay": "A trip needs at least one day.",
+    "dayMoved": "{day} is now Day {n}, {date}"
   },
   "share": {
     "title": "Share",
-    "ownerOnly": "Only the trip's owner can invite people. Ask them for a join link."
+    "ownerOnly": "Only the trip's owner can invite people. Ask them for a join link.",
+    "people": "People",
+    "peopleHere": "People on this trip. In this trip now: {names}",
+    "inviteFriends": "Invite friends"
   }
 }

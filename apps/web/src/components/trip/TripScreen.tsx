@@ -14,8 +14,10 @@ import {
   isChecklistFull,
   isTripFull,
   moveChecklistItem,
+  moveDay,
   movePlace,
   readTrip,
+  removeDay,
   setDay,
   setPlaceStatus,
   setPlaceTime,
@@ -53,10 +55,10 @@ import { DemoBox } from "./DemoBox";
 import { MoveDialog } from "./MoveDialog";
 import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
 import { usePlaceControls } from "./placeControls";
-import { CollabContext, Presence, type Collab } from "./Presence";
-import { NO_FILTER, dropPlace, moveKeepingTime, passes, plannedLists, tripCentre, type ListId } from "./plan";
+import { CollabContext, type Collab } from "./Presence";
+import { NO_FILTER, dayDropTarget, dropPlace, isDayDrag, moveKeepingTime, railDayDragId, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
-import { Rail } from "./Rail";
+import { Rail, railDayButtonId, type DayActions } from "./Rail";
 import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
 import { TripSettingsScreen } from "./TripSettingsScreen";
@@ -242,6 +244,17 @@ function TripScreenFor({ tripId }: Props) {
     show(openListId === null ? { kind: "ideas" } : { kind: "day", dayId: openListId });
   }, [openId, openListId, shown.kind, show]);
 
+  // One action of this person's as its own undo step, so a toast's Undo reverts just it (never a
+  // friend's edit: those are not on this person's stack).
+  const step = <T,>(run: () => T): T => {
+    undo?.stopCapturing();
+    const result = run();
+    undo?.stopCapturing();
+    return result;
+  };
+  // The toast for such a step (no Undo without the undo manager).
+  const undoToast = (message: string, undoLabel: string) => toast.show({ message, undoLabel, onUndo: undo ? () => undo.undo() : undefined });
+
   // An add by this person: its own undo step, the new row highlighted, focused and scrolled to when it
   // is shown, and a toast saying where it went, whose Undo removes just that place.
   const addOwn = (put: () => string, name: string, to: ListId | "suggest", time: string | null): string => {
@@ -275,14 +288,14 @@ function TripScreenFor({ tripId }: Props) {
 
   const actions: PlanActions | null = editor === null ? null : {
     save: (id, edit) => updatePlace(doc, id, edit, editor),
-    setTime: (id, time) => void setPlaceTime(doc, id, time, editor),
+    setTime: (id, time) => void step(() => setPlaceTime(doc, id, time, editor)),
     // Set by the plan (it knows the neighbours and says what happened).
     nudge: () => undefined,
     openMove: () => undefined,
     // A move to a slot (Alt+arrows, Move up/down) re-times a timed stop for it (spec §2b); Move to…
     // keeps a set time and slots the stop by it in the new day (ruling F1).
     move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
-    moveTo: (id, dayId) => moveKeepingTime(doc, id, dayId, editor),
+    moveTo: (id, dayId) => step(() => moveKeepingTime(doc, id, dayId, editor)),
     add: (stop, to) => void addStop(stop, to, editor),
     remove(place) {
       // Its own undo step, so the toast's Undo restores just the place.
@@ -295,14 +308,31 @@ function TripScreenFor({ tripId }: Props) {
     vote: (id, value) => vote(doc, id, editor, value),
     // One transaction (one undo step, one announcement): planned, then into the chosen list; into a day
     // at the chosen time (to its place by time) and with the chosen stay.
-    accept: (id, to, timing) =>
-      doc.transact(() => {
-        setPlaceStatus(doc, id, "planned", editor);
-        if (!movePlace(doc, id, { dayId: to }, editor) || to === null || !timing) return;
-        setPlaceTime(doc, id, timing.time, editor);
-        updatePlace(doc, id, { stayMinutes: timing.stayMinutes }, editor);
-      }, editor),
-    dismiss: (id) => setPlaceStatus(doc, id, "dismissed", editor),
+    // An Undo toast for each (the suggestion leaves the list; Undo puts it back where it was).
+    accept(id, to, timing) {
+      const place = view.suggestions.find((p) => p.id === id);
+      if (!place) return;
+      step(() =>
+        doc.transact(() => {
+          setPlaceStatus(doc, id, "planned", editor);
+          if (!movePlace(doc, id, { dayId: to }, editor) || to === null || !timing) return;
+          setPlaceTime(doc, id, timing.time, editor);
+          updatePlace(doc, id, { stayMinutes: timing.stayMinutes }, editor);
+        }, editor),
+      );
+      const name = place.name || t("unnamed");
+      const now = readTrip(doc);
+      const list = labelIn(now, plannedLists(now).find((l) => l.places.some((p) => p.id === id))?.id ?? null);
+      const time = to !== null && timing?.time ? timing.time : null;
+      undoToast(time ? t("acceptedToAt", { name, list, time }) : t("acceptedTo", { name, list }), t("undoAcceptFor", { name }));
+    },
+    dismiss(id) {
+      const place = view.suggestions.find((p) => p.id === id);
+      if (!place) return;
+      step(() => setPlaceStatus(doc, id, "dismissed", editor));
+      const name = place.name || t("unnamed");
+      undoToast(t("dismissedPlace", { name }), t("undoDismissFor", { name }));
+    },
     // An idea into a day, at its time (or untimed) and with its stay: one transaction, one undo step.
     schedule: (id, dayId, time, stayMinutes) =>
       doc.transact(() => {
@@ -312,7 +342,37 @@ function TripScreenFor({ tripId }: Props) {
       }, editor),
     restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
-  const controls = usePlaceControls(doc, view, actions);
+  const controls = usePlaceControls(doc, view, actions, undoToast);
+
+  // Days from the rail: reordered (one step; the dates follow), renamed, or deleted with an Undo toast.
+  const dayActions: DayActions | null = editor === null ? null : {
+    move: (dayId, toIndex) => step(() => moveDay(doc, dayId, toIndex, editor)),
+    rename: (dayId, title) => step(() => setDay(doc, dayId, { title }, editor)),
+    remove: (dayId) => deleteDay(dayId, editor),
+  };
+
+  // "Day 2 deleted. Its 3 stops are in Ideas." Focus moves to Undo (the day's menu is gone); Undo brings the
+  // day back (one step: its places, title and note), shows it again if it was shown, and focuses it on the rail.
+  function deleteDay(dayId: string, origin: string) {
+    const day = view.days.find((d) => d.id === dayId);
+    if (!day) return;
+    const wasShown = shown.kind === "day" && shown.dayId === dayId;
+    step(() => removeDay(doc, dayId, origin));
+    const name = labelIn(view, dayId);
+    const count = day.places.length;
+    toast.show({
+      message: [t("dayDeleted", { day: name }), count > 0 ? t("dayDeletedPlaces", { count }) : ""].filter(Boolean).join(" "),
+      undoLabel: t("undoDeleteDayFor", { day: name }),
+      focus: true,
+      onUndo: undo
+        ? () => {
+            undo.undo();
+            if (wasShown) show({ kind: "day", dayId });
+            requestAnimationFrame(() => document.getElementById(railDayButtonId(dayId))?.focus());
+          }
+        : undefined,
+    });
+  }
 
   // Every set time of a day moved at once: its own undo step, and a toast saying how many moved and which
   // stopped at 00:00 / 23:59, whose Undo reverts just that.
@@ -463,10 +523,17 @@ function TripScreenFor({ tripId }: Props) {
     setDragging(null);
     if (editor === null || !over) return;
     const id = String(active.id);
+    // A rail day dropped on another: it takes that day's place.
+    if (isDayDrag(id)) {
+      const to = dayDropTarget(view, id, String(over.id));
+      if (to) dayActions?.move(to.dayId, to.toIndex);
+      return;
+    }
     const from = listOf(id)?.id;
-    if (dropPlace(doc, view, id, String(over.id), editor) && from !== undefined) controls.sayMoved(id, from);
+    if (step(() => dropPlace(doc, view, id, String(over.id), editor)) && from !== undefined) controls.sayMoved(id, from);
   };
   const dragged = dragging === null ? undefined : listOf(dragging)?.places.find((p) => p.id === dragging);
+  const draggedDay = dragging !== null && isDayDrag(dragging) ? view.days.find((d) => railDayDragId(d.id) === dragging) : undefined;
 
   return (
     <CollabContext.Provider value={collab}>
@@ -487,7 +554,7 @@ function TripScreenFor({ tripId }: Props) {
               history={undo && { canUndo: undo.canUndo(), canRedo: undo.canRedo(), undo: undo.undo, redo: undo.redo }}
               onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
               settings={<TripSettingsScreen tripId={tripId} />}
-              presence={<Presence self={userId ? (self ?? { id: userId, name: "", colour: "" }) : null} peers={peers} members={view.members} />}
+              people={{ self: userId ? (self ?? { id: userId, name: "", colour: "" }) : null, peers, members: view.members }}
             />
             {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
             <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
@@ -511,6 +578,7 @@ function TripScreenFor({ tripId }: Props) {
                 selected={shown}
                 onSelect={show}
                 canAddDay={editor !== null}
+                dayActions={dayActions}
                 demo={view.isDemo ? <DemoBox tripId={tripId} simulateOffline={simulateOffline} onSideBySide={setFriend} /> : undefined}
               />
               <div className="relative flex min-h-0 flex-1 flex-col lg:contents">
@@ -616,6 +684,11 @@ function TripScreenFor({ tripId }: Props) {
           <DragOverlay dropAnimation={null}>
             {dragged && (
               <div className="rounded-xl border border-ink bg-surface px-3 py-2 text-[14px] font-semibold shadow-2 [overflow-wrap:anywhere]">{dragged.name || t("unnamed")}</div>
+            )}
+            {draggedDay && (
+              <div className="w-44 rounded-xl border border-ink bg-surface px-3 py-2 text-[14px] font-semibold shadow-2 [overflow-wrap:anywhere]">
+                {[t("day", { n: draggedDay.index + 1 }), draggedDay.title].filter(Boolean).join(" · ")}
+              </div>
             )}
           </DragOverlay>
         </DndContext>

@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useLocale, useTranslations } from "next-intl";
-import { addDaysToDate, type TripView } from "@rota/trip";
+import { addDaysToDate, type MemberView, type TripView } from "@rota/trip";
 import { apiFetch } from "@/client/authClient";
+import type { Peer } from "@/client/presence";
 import type { SyncStatus } from "@/client/sync/status";
 import type { DayWeather } from "@/client/useWeather";
 import { Link } from "@/i18n/navigation";
 import { errorText, hint } from "../ui";
 import { Icon } from "./icons";
 import { InvitePanel } from "./InvitePanel";
+import { MembersPanel, type TripMember } from "./MembersPanel";
+import { Presence } from "./Presence";
 import { SyncIndicator } from "./SyncIndicator";
 import { WeatherChip } from "./WeatherChip";
 
@@ -107,16 +110,42 @@ function WeatherStrip({ view, weather }: { view: TripView; weather: Record<strin
   );
 }
 
-/** A side sheet (settings, share): titled, closed with ✕ or Escape, focus back on its button. */
-function Sheet({ title, trigger, children }: { title: string; trigger: ReactNode; children: ReactNode }) {
+/**
+ * A side sheet (settings, people): titled, closed with ✕ or Escape, focus back on its button. With
+ * `open`/`onOpenChange` and no `trigger` it is opened from outside (by more than one button), and focus
+ * goes back to `returnFocus` (the button that opened it).
+ */
+function Sheet({
+  title,
+  trigger,
+  open,
+  onOpenChange,
+  returnFocus,
+  children,
+}: {
+  title: string;
+  trigger?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  returnFocus?: RefObject<HTMLElement | null>;
+  children: ReactNode;
+}) {
   const t = useTranslations("trip");
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40" />
         <Dialog.Content
           aria-describedby={undefined}
+          onCloseAutoFocus={
+            returnFocus
+              ? (e) => {
+                  e.preventDefault();
+                  returnFocus.current?.focus();
+                }
+              : undefined
+          }
           className="fixed inset-y-0 right-0 z-50 w-full max-w-xl overflow-y-auto border-l border-line bg-paper p-5 shadow-3 sm:p-6"
         >
           <div className="mb-5 flex items-center justify-between gap-3">
@@ -134,37 +163,48 @@ function Sheet({ title, trigger, children }: { title: string; trigger: ReactNode
   );
 }
 
-/** The share sheet's body: the invite panel for the owner (who alone manages invites), else who to ask. */
-function Share({ tripId }: { tripId: string }) {
+type Loaded = { role: "owner" | "member"; members: TripMember[] };
+
+/**
+ * The people sheet's body: who is on the trip and their roles (the owner manages them, others can
+ * leave), then the invite panel for the owner (who alone manages invites), else who to ask.
+ */
+function People({ tripId, userId }: { tripId: string; userId: string | null }) {
   const t = useTranslations("share");
   const tc = useTranslations("common");
   const ts = useTranslations("settings");
   const locale = useLocale();
-  const [role, setRole] = useState<"owner" | "member" | "loading" | "failed">("loading");
+  const [trip, setTrip] = useState<Loaded | "loading" | "failed">("loading");
+  const [version, setVersion] = useState(0);
+  const reload = () => setVersion((v) => v + 1);
   useEffect(() => {
     let live = true;
     (async () => {
       try {
         const res = await apiFetch(`/api/trips/${tripId}`);
-        const next = res.ok ? ((await res.json()) as { role: "owner" | "member" }).role : "failed";
-        if (live) setRole(next);
+        const next = res.ok ? ((await res.json()) as Loaded) : "failed";
+        if (live) setTrip(next);
       } catch {
-        if (live) setRole("failed");
+        if (live) setTrip("failed");
       }
     })();
     return () => {
       live = false;
     };
-  }, [tripId]);
-  if (role === "loading") return <p role="status">{tc("loading")}</p>;
-  if (role === "failed")
+  }, [tripId, version]);
+  if (trip === "loading") return <p role="status">{tc("loading")}</p>;
+  if (trip === "failed")
     return (
       <p role="alert" className={errorText}>
         {ts("loadFailed")}
       </p>
     );
-  if (role === "member") return <p className={hint}>{t("ownerOnly")}</p>;
-  return <InvitePanel tripId={tripId} locale={locale} />;
+  return (
+    <div className="grid gap-6">
+      {userId && Array.isArray(trip.members) && <MembersPanel tripId={tripId} members={trip.members} userId={userId} onChanged={reload} />}
+      {trip.role === "owner" ? <InvitePanel tripId={tripId} locale={locale} onMembersChanged={reload} /> : <p className={hint}>{t("ownerOnly")}</p>}
+    </div>
+  );
 }
 
 export type UndoControls = {
@@ -174,10 +214,35 @@ export type UndoControls = {
   redo(): void;
 };
 
+/** Undo or Redo: an icon, labelled in text from 1280 px, with its shortcut as a tooltip. */
+function HistoryButton({ kind, keys, disabled, onClick }: { kind: "undo" | "redo"; keys: string; disabled: boolean; onClick(): void }) {
+  const t = useTranslations("trip");
+  return (
+    <button
+      type="button"
+      className={`${iconButton} xl:w-auto xl:gap-1.5 xl:px-2 xl:text-[13px] xl:font-medium`}
+      aria-label={t(kind)}
+      title={t(kind === "undo" ? "undoTip" : "redoTip")}
+      aria-keyshortcuts={keys}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon name={kind} />
+      <span aria-hidden="true" className="hidden xl:inline">
+        {t(kind)}
+      </span>
+    </button>
+  );
+}
+
+/** Who is on the trip (the header's avatars), as the people sheet needs them. */
+export type HeaderPeople = { self: MemberView | null; peers: Peer[]; members: MemberView[] };
+
 /**
  * The trip screen's header: home, the trip's name (renamed in place) with its dates, days and places,
- * the weather strip, sync status, who is here now, undo/redo, Share (the invite panel) and the settings
- * (members, invites, trip details), each opening as a side sheet.
+ * the weather strip, sync status, who is here now, undo/redo, Share and the settings (members,
+ * invites, trip details), each opening as a side sheet. The avatars open the same people sheet as
+ * Share (who is on the trip, roles, invites); a trip with only its owner shows "Invite friends" there.
  */
 export function TripHeader({
   tripId,
@@ -187,7 +252,7 @@ export function TripHeader({
   history,
   onRename,
   settings,
-  presence,
+  people,
 }: {
   tripId: string;
   view: TripView;
@@ -196,12 +261,22 @@ export function TripHeader({
   history: UndoControls | null;
   onRename: ((name: string) => void) | null;
   settings: ReactNode;
-  /** Avatars of who is here now. */
-  presence: ReactNode;
+  /** Who is here now (the avatars), and who is on the trip. */
+  people: HeaderPeople;
 }) {
   const t = useTranslations("trip");
   const ts = useTranslations("share");
   const locale = useLocale();
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  // The avatars or Share/Invite friends: focus goes back to the one used.
+  const opener = useRef<HTMLElement | null>(null);
+  const openPeople = (from: HTMLElement) => {
+    opener.current = from;
+    setPeopleOpen(true);
+  };
+  const userId = people.self?.id ?? null;
+  // Only its owner so far (the creator is the first member): the call to invite friends.
+  const alone = userId !== null && people.members.length === 1 && people.members[0].id === userId;
   const places = view.days.reduce((n, d) => n + d.places.length, 0);
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-surface px-3 py-2.5 sm:px-5 lg:h-16 lg:flex-nowrap lg:py-0">
@@ -225,40 +300,24 @@ export function TripHeader({
       <WeatherStrip view={view} weather={weather} />
       <div className="ml-auto flex items-center gap-1.5">
         <SyncIndicator status={status} />
-        {presence}
+        <Presence {...people} onOpen={openPeople} />
         {history && (
           <>
-            <button
-              type="button"
-              className={iconButton}
-              aria-label={t("undo")}
-              aria-keyshortcuts="Control+Z Meta+Z"
-              disabled={!history.canUndo}
-              onClick={history.undo}
-            >
-              <Icon name="undo" />
-            </button>
-            <button
-              type="button"
-              className={iconButton}
-              aria-label={t("redo")}
-              aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
-              disabled={!history.canRedo}
-              onClick={history.redo}
-            >
-              <Icon name="redo" />
-            </button>
+            <HistoryButton kind="undo" keys="Control+Z Meta+Z" disabled={!history.canUndo} onClick={history.undo} />
+            <HistoryButton kind="redo" keys="Control+Shift+Z Meta+Shift+Z" disabled={!history.canRedo} onClick={history.redo} />
           </>
         )}
-        <Sheet
-          title={ts("title")}
-          trigger={
-            <button type="button" className="inline-flex h-8 items-center rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-ink-2">
-              {ts("title")}
-            </button>
-          }
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          onClick={(e) => openPeople(e.currentTarget)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-ink-2"
         >
-          <Share tripId={tripId} />
+          {alone && <Icon name="plus" size={14} />}
+          {alone ? ts("inviteFriends") : ts("title")}
+        </button>
+        <Sheet title={ts("people")} open={peopleOpen} onOpenChange={setPeopleOpen} returnFocus={opener}>
+          <People tripId={tripId} userId={userId} />
         </Sheet>
         <Sheet
           title={t("settings")}

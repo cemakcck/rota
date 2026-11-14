@@ -7,7 +7,7 @@ import type { Category } from "./categories";
  * - places: Y.Map<placeId, Y.Map { name, lat, lng, osmId, address, category, tags,
  *     stayMinutes, time ("HH:MM" or null = untimed), dayId, order, addedBy, createdAt, status, votes: Y.Map<userId, 1 | -1>,
  *     note: Y.XmlFragment, deletedBy (set just before the place is deleted, see deletePlace) }>
- * - days: Y.Map<dayId, Y.Map { index, travelMode, title (≤ DAY_TITLE_MAX chars, "" = none), note: Y.XmlFragment }> (legacy days may
+ * - days: Y.Map<dayId, Y.Map { index (a number: days sort by it, then id; not always an integer, see moveDay), travelMode, title (≤ DAY_TITLE_MAX chars, "" = none), note: Y.XmlFragment }> (legacy days may
  *     still hold `startTime`; it is never read, and migrateDayStart moves it onto the first stop)
  * - checklist: Y.Map<itemId, Y.Map { text, done, assignee, order }>
  * - members: Y.Map<userId, Y.Map { name, colour }>

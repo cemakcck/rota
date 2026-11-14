@@ -390,7 +390,19 @@
     "shifted": "{count, plural, one {# durak {minutes} dk kaydırıldı.} other {# durak {minutes} dk kaydırıldı.}}",
     "shiftClamped": "{count, plural, one {# durak {time} saatinde kaldı.} other {# durak {time} saatinde kaldı.}}",
     "shiftUnchanged": "Saatler değişmedi: zaten {time}.",
-    "undoShiftFor": "Saat kaydırmayı geri al: {day}"
+    "undoShiftFor": "Saat kaydırmayı geri al: {day}",
+    "dayDeleted": "{day} silindi.",
+    "dayDeletedPlaces": "{count, plural, other {# durağı Fikirler'e taşındı.}}",
+    "undoDeleteDayFor": "Gün silmeyi geri al: {day}",
+    "undoMoveFor": "Taşımayı geri al: {name}",
+    "dismissedPlace": "{name} reddedildi.",
+    "undoDismissFor": "Reddetmeyi geri al: {name}",
+    "acceptedTo": "{name} kabul edildi: {list}.",
+    "acceptedToAt": "{name} kabul edildi: {list}, {time}.",
+    "undoAcceptFor": "Kabulü geri al: {name}",
+    "undoClearTimeFor": "Saati kaldırmayı geri al: {name}",
+    "undoTip": "Geri al (Ctrl+Z veya ⌘Z)",
+    "redoTip": "Yinele (Ctrl+Shift+Z veya ⌘⇧Z)"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",
@@ -464,10 +476,20 @@
     "addDay": "Gün ekle",
     "ideas": "Fikirler ve oylar",
     "ideasCount": "Fikirler ve oylar, {count}",
-    "all": "Tüm gezi haritada"
+    "all": "Tüm gezi haritada",
+    "dayMenu": "{n}. Gün seçenekleri",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "rename": "Yeniden adlandır",
+    "deleteDay": "Günü sil",
+    "lastDay": "Bir gezide en az bir gün olmalı.",
+    "dayMoved": "{day} artık {n}. Gün, {date}"
   },
   "share": {
     "title": "Paylaş",
-    "ownerOnly": "Yalnızca gezinin sahibi kişi davet edebilir. Ondan bir katılma bağlantısı isteyin."
+    "ownerOnly": "Yalnızca gezinin sahibi kişi davet edebilir. Ondan bir katılma bağlantısı isteyin.",
+    "people": "Kişiler",
+    "peopleHere": "Bu gezideki kişiler. Şu anda bu gezide: {names}",
+    "inviteFriends": "Arkadaşlarınızı davet edin"
   }
 }
