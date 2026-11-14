@@ -173,7 +173,7 @@ function TimeField({ id, place, estimate, onSet }: { id: string; place: PlaceVie
       />
       {place.time === null && estimate !== null && !invalid && <span className="ml-1.5 text-[12px] font-normal text-ink-2">{t("estimated")}</span>}
       {invalid && (
-        <p id={errorId} className={errorText}>
+        <p id={errorId} role="alert" className={errorText}>
           {t("timeInvalid")}
         </p>
       )}

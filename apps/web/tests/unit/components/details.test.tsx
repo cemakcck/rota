@@ -168,7 +168,9 @@ describe("place details", () => {
     // Something that is not a time says why, linked to the field, and saves nothing.
     set("25:00");
     expect(time().getAttribute("aria-invalid")).toBe("true");
-    const error = within(details("B")).getByText("Enter a time like 09:30, or leave it empty.");
+    // Announced (an alert), not only shown.
+    const error = within(details("B")).getByRole("alert");
+    expect(error.textContent).toBe("Enter a time like 09:30, or leave it empty.");
     expect(time().getAttribute("aria-describedby")).toContain(error.id);
     expect(fake.view.days[0].places[1].time).toBe("09:30");
 

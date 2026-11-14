@@ -38,8 +38,23 @@ const CONTROLS = "button, a, input, select, textarea, label, form, [contentedita
 
 const focusLater = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
-/** The stop's time, edited in place: Enter or leaving the field saves, Escape cancels, empty clears. */
-function TimeInput({ place, name, initial, onDone }: { place: PlaceView; name: string; initial: string; onDone: (time?: string | null) => void }) {
+/**
+ * The stop's time, edited in place: Enter or leaving the field saves, Escape cancels, empty clears. An
+ * invalid time left by blur keeps the field open, saying why; `onAway` tells whether focus is out of it.
+ */
+function TimeInput({
+  place,
+  name,
+  initial,
+  onDone,
+  onAway,
+}: {
+  place: PlaceView;
+  name: string;
+  initial: string;
+  onDone: (time?: string | null) => void;
+  onAway: (away: boolean) => void;
+}) {
   const t = useTranslations("trip");
   const errorId = `${placeTimeId(place.id)}-error`;
   const [draft, setDraft] = useState(initial);
@@ -83,13 +98,18 @@ function TimeInput({ place, name, initial, onDone }: { place: PlaceView; name: s
           finish();
         }
       }}
+      onFocus={() => onAway(false)}
       // Leaving the field untouched changes nothing (a prefilled estimate is not pinned); Enter confirms it.
-      onBlur={() => (draft === initial ? finish() : commit())}
+      onBlur={() => {
+        onAway(true);
+        if (draft === initial) finish();
+        else commit();
+      }}
       // Selecting text in the field is not a drag of the row.
       onPointerDown={(e) => e.stopPropagation()}
     />
     {invalid && (
-      <p id={errorId} className="w-36 text-right text-[12px] font-medium leading-snug text-danger">
+      <p id={errorId} role="alert" className="w-36 text-right text-[12px] font-medium leading-snug text-danger">
         {t("timeInvalid")}
       </p>
     )}
@@ -105,14 +125,16 @@ function When({
   onSetTime,
   editing,
   setEditing,
+  onAway,
 }: {
   place: PlaceView;
   name: string;
   timing?: TimelineEntry;
   onSetTime: ((time: string | null) => void) | null;
-  /** The time field is open (the row publishes that it is being edited). */
+  /** The time field is open (the row publishes that it is being edited while focus is in it). */
   editing: boolean;
   setEditing(editing: boolean): void;
+  onAway(away: boolean): void;
 }) {
   const t = useTranslations("trip");
   const stay = useStay();
@@ -136,6 +158,7 @@ function When({
         name={name}
         // An estimate is where the time starts: confirming it sets it.
         initial={place.time ?? arrive ?? ""}
+        onAway={onAway}
         onDone={(value) => {
           setEditing(false);
           if (value !== undefined && value !== place.time) onSetTime(value);
@@ -229,13 +252,15 @@ export function StopRow({
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const [timeOpen, setTimeOpen] = useState(false);
+  // Focus left an open time field (an invalid time keeps it open): not "being edited" for others meanwhile.
+  const [timeAway, setTimeAway] = useState(false);
   const name = place.name || t("unnamed");
   const collab = useCollab();
   const note = collab && noteOrNull(() => placeNote(collab.doc, place.id));
   const hasNote = note !== null && noteFirstLine(note) !== "";
   const peer = useEditingPeer(place.id);
   // One publisher per place: its details panel (with its note) and the row's time field together.
-  usePublishEditing(place.id, actions !== null && (open || timeOpen));
+  usePublishEditing(place.id, actions !== null && (open || (timeOpen && !timeAway)));
   const { setNodeRef: setDragRef, listeners, isDragging } = useDraggable({ id: place.id, disabled: !actions });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: placeDropId(place.id), disabled: !actions });
 
@@ -309,7 +334,11 @@ export function StopRow({
             timing={timing}
             onSetTime={actions && ((time) => actions.setTime(place.id, time))}
             editing={timeOpen}
-            setEditing={setTimeOpen}
+            setEditing={(editing) => {
+              setTimeOpen(editing);
+              setTimeAway(false);
+            }}
+            onAway={setTimeAway}
           />
         )}
       </div>

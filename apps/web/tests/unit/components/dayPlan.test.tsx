@@ -487,18 +487,24 @@ describe("day plan", () => {
     expect(screen.getByTestId("plan-status").textContent).toBe("B now at 08:30, position 1 of 2");
   });
 
-  it("an invalid inline time says why and stays open", () => {
+  it("an invalid inline time says why (an alert) and stays open, without telling others it is edited once left", () => {
     const { doc, dayIds } = newTrip();
-    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
+    const id = addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
     fireEvent.click(screen.getByRole("button", { name: "Change the time for A, now 09:00" }));
     const input = screen.getByRole("textbox", { name: "Time for A" });
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
     fireEvent.change(input, { target: { value: "25:00" } });
     fireEvent.blur(input);
     expect(screen.getByRole("textbox", { name: "Time for A" })).toBe(input);
     expect(input.getAttribute("aria-invalid")).toBe("true");
-    const message = screen.getByText("Enter a time like 09:30, or leave it empty.");
+    const message = screen.getByRole("alert");
+    expect(message.textContent).toBe("Enter a time like 09:30, or leave it empty.");
     expect(input.getAttribute("aria-describedby")).toBe(message.id);
+    // Focus left the field: no lasting "editing" outline for others; back in it, it says so again.
+    expect(fake.awareness.getLocalState()?.editing).toBeNull();
+    fireEvent.focus(input);
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
     fireEvent.keyDown(input, { key: "Enter" });
     expect(screen.getByRole("textbox", { name: "Time for A" })).toBeTruthy();
     expect(fake.view.days[0].places[0].time).toBe("09:00");
