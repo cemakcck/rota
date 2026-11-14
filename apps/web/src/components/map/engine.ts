@@ -17,6 +17,8 @@ export type Padding = {
   left: number;
 };
 export type MapMarker = { move(at: LngLat): void; remove(): void };
+/** Where the view is: its centre and zoom. */
+export type Camera = { centre: LngLat; zoom: number };
 
 export type MapView = {
   /** Container pixels of a coordinate, and back. */
@@ -28,12 +30,17 @@ export type MapView = {
   fit(bounds: Bounds, options: { padding: Padding; animate: boolean }): void;
   /** Brings a coordinate to the middle of the (padded) view. */
   centre(at: LngLat, options: { padding: Padding; animate: boolean }): void;
+  /** The current camera, and a way back to one. */
+  camera(): Camera;
+  goTo(camera: Camera, options: { animate: boolean }): void;
   /** The routes drawn: the day's, or every day's for the whole trip. */
   setRoutes(routes: Route[]): void;
   /** Places an element (a pin) on the map, its bottom centre (the pin's tip) on the coordinate. */
   addMarker(at: LngLat, element: HTMLElement): MapMarker;
   /** Called on every frame the view moves or resizes. Returns the unsubscribe. */
   onMove(listener: () => void): () => void;
+  /** Called when the person starts moving the view (drag, wheel, keys, pinch), not when code moves it. */
+  onUserMove(listener: () => void): () => void;
   remove(): void;
 };
 
@@ -150,6 +157,11 @@ export const loadMapLibre: LoadMap = async (container, { bounds, labels }) => {
     zoom: () => map.getZoom(),
     fit: (b, { padding: p, animate }) => void map.fitBounds(b, { padding: p, maxZoom: MAX_FIT_ZOOM, animate }),
     centre: (at, { padding: p, animate }) => void map.easeTo({ center: [at.lng, at.lat], padding: p, animate }),
+    camera: () => {
+      const { lng, lat } = map.getCenter();
+      return { centre: { lng, lat }, zoom: map.getZoom() };
+    },
+    goTo: ({ centre, zoom }, { animate }) => void map.easeTo({ center: [centre.lng, centre.lat], zoom, animate }),
     setRoutes(next) {
       routes = next;
       draw();
@@ -168,6 +180,12 @@ export const loadMapLibre: LoadMap = async (container, { bounds, labels }) => {
         map.off("move", listener);
         map.off("resize", listener);
       };
+    },
+    onUserMove(listener) {
+      // Moves started by code carry no originalEvent.
+      const onStart = (e: { originalEvent?: unknown }) => e.originalEvent && listener();
+      map.on("movestart", onStart);
+      return () => void map.off("movestart", onStart);
     },
     remove: () => map.remove(),
   };

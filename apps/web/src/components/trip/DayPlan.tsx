@@ -83,8 +83,10 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
     setOpen(false);
     button.current?.focus();
   };
+  // Not positioned itself: the popover is placed in the day's action row (see DayHeader), so it starts at
+  // the column's left edge and fits it wherever this button wraps to.
   return (
-    <div className="relative">
+    <div>
       {/* Without set times it stays focusable (aria-disabled), so its reason is heard as well as seen on hover. */}
       <button
         ref={button}
@@ -116,7 +118,7 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
             e.stopPropagation();
             close();
           }}
-          className="absolute left-0 top-full z-30 mt-1.5 flex w-max max-w-[calc(100vw-32px)] flex-wrap gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-2"
+          className="absolute left-0 top-full z-30 mt-1.5 grid w-72 max-w-full grid-cols-3 gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-2"
         >
           {SHIFT_STEPS.map((minutes) => (
             <button
@@ -126,7 +128,7 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
                 close();
                 onShift(minutes);
               }}
-              className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium tabular-nums text-ink hover:bg-hover"
+              className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-[13px] font-medium tabular-nums text-ink hover:bg-hover"
             >
               {/* The name starts with what is shown (label in name), then which way. */}
               <span>{t("shiftBy", { minutes: signedMinutes(minutes) })}</span>
@@ -189,7 +191,8 @@ function DayHeader({
         </span>
       </h2>
       <DayTitle day={day} onDay={onDay} />
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {/* Positioned: the Shift times popover opens under this row, from its left edge. */}
+      <div data-day-actions className="relative mt-2 flex flex-wrap items-center gap-1.5">
         <div role="group" aria-label={t("travelMode", { n: day.index + 1 })} className="inline-flex h-[26px] items-center rounded-full border border-line bg-surface p-0.5 text-[12.5px] text-ink-2">
           {(["walk", "drive"] as const).map((mode) => (
             <button

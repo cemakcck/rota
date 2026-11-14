@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { CATEGORIES, DEFAULT_STAY_MINUTES, estimateLeg, suggestTime, type Category, type DayView, type Leg } from "@rota/trip";
 import type { SearchResult } from "@/client/geocode";
@@ -199,6 +199,16 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [step, setStep] = useState<{ place: Candidate; time: string } | null>(null);
+  // The map's preview pin: the result hovered or arrowed to, then the picked place while its add step is
+  // open, so the pin (and the map, if the preview took it there) stays until it is added or cancelled.
+  const [listPreview, setListPreview] = useState<PreviewPlace | null>(null);
+  const picked = step?.place;
+  const shownPreview: PreviewPlace | null =
+    picked && picked.lat != null && picked.lng != null ? { name: picked.name, category: picked.category, lat: picked.lat, lng: picked.lng } : listPreview;
+  const previewKey = shownPreview && `${shownPreview.name}|${shownPreview.lat},${shownPreview.lng}`;
+  const tellPreview = useEffectEvent((place: PreviewPlace | null) => onPreview?.(place));
+  useEffect(() => tellPreview(shownPreview), [previewKey]); // eslint-disable-line react-hooks/exhaustive-deps -- follows the place only
+  useEffect(() => () => tellPreview(null), []);
   const label = t("searchIn", { list: target.label });
   // Distances are from the day's last pinned stop, else the trip's destination (or centre).
   const lastPinned = day?.places.findLast((p) => p.lat !== null && p.lng !== null);
@@ -236,7 +246,7 @@ export function SearchBar({
             near={near}
             from={from}
             anchorToParent
-            onPreview={onPreview && ((r) => onPreview(r && { name: r.name, category: r.category, lat: r.lat, lng: r.lng }))}
+            onPreview={(r) => setListPreview(r && { name: r.name, category: r.category, lat: r.lat, lng: r.lng })}
             disabled={full}
             describedBy={full ? `${id}-full` : `${id}-help`}
             placeholder={label}

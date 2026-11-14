@@ -118,6 +118,53 @@ describe("add-place flow", () => {
     expect(fake.view.days[0].places).toHaveLength(1);
   });
 
+  it("after a preview took the map away, it comes back unless the place is added", async () => {
+    withBreakfast();
+    const kadikoy = { name: "Kadıköy Kahvecisi", label: "Kadıköy", lat: 40.99, lng: 37, osmId: "n99", category: "cafe" };
+    const { fn } = stubFetch({ "GET /api/geocode?q=karakoy%20cafe&lang=en&lat=41.03&lng=28.97": () => ({ body: { results: [kadikoy] } }) });
+    vi.stubGlobal("fetch", fn);
+    const map = fakeMap();
+    renderIntl(
+      <MapLoaderContext.Provider value={map.load}>
+        <TripScreen tripId="t1" />
+      </MapLoaderContext.Provider>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("[data-pin]")).toHaveLength(1));
+    const home = { centre: { ...map.state.origin }, zoom: map.state.zoom };
+    const preview = () => document.querySelectorAll<HTMLElement>("[data-preview-pin]");
+    const arrowToResult = async () => {
+      fireEvent.change(search(), { target: { value: "" } });
+      fireEvent.change(search(), { target: { value: "karakoy cafe" } });
+      await screen.findAllByRole("option");
+      fireEvent.keyDown(search(), { key: "ArrowDown" });
+      await waitFor(() => expect(map.state.centred.at(-1)).toEqual({ lat: 40.99, lng: 37 }));
+    };
+
+    // Escape: back where it was.
+    await arrowToResult();
+    fireEvent.keyDown(search(), { key: "Escape" });
+    await waitFor(() => expect(map.state.returned).toEqual([home]));
+
+    // Picked, then the add step cancelled: the pin stays meanwhile, then the map comes back.
+    await arrowToResult();
+    fireEvent.keyDown(search(), { key: "Enter" });
+    await waitFor(() => expect(step()).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 300));
+    expect(preview()).toHaveLength(1);
+    expect(map.state.returned).toHaveLength(1);
+    fireEvent.click(within(step()).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(map.state.returned).toHaveLength(2));
+
+    // Picked and added: the map stays on the new stop.
+    await arrowToResult();
+    fireEvent.keyDown(search(), { key: "Enter" });
+    fireEvent.click(within(step()).getByRole("button", { name: "Add to Day 1" }));
+    expect(names()).toContain("Kadıköy Kahvecisi");
+    await waitFor(() => expect(preview()).toHaveLength(0));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(map.state.returned).toHaveLength(2);
+  });
+
   it("time picker: the suggestion is the default, ±30 minutes, No set time, and invalid input is refused", () => {
     withBreakfast();
     offline();

@@ -15,6 +15,9 @@ export function fakeMap({ width = 800, zoom = 7, scale = 100 }: { width?: number
     /** How each fit was asked for (padding, animated or not), in step with `fits`. */
     fitOptions: [] as { padding: Padding; animate: boolean }[],
     centred: [] as LngLat[],
+    /** Cameras gone back to (goTo), in order. */
+    returned: [] as { centre: LngLat; zoom: number }[],
+    userListeners: new Set<() => void>(),
     removed: false,
     origin: { lng: 28, lat: 42 },
     zoom,
@@ -36,6 +39,12 @@ export function fakeMap({ width = 800, zoom = 7, scale = 100 }: { width?: number
       state.fitOptions.push(options);
     },
     centre: (at) => void state.centred.push(at),
+    camera: () => ({ centre: { ...state.origin }, zoom: state.zoom }),
+    goTo: (camera) => {
+      state.returned.push(camera);
+      state.origin = { ...camera.centre };
+      state.zoom = camera.zoom;
+    },
     setRoutes: (routes) => void (state.routes = routes),
     addMarker(_at, element) {
       state.container!.appendChild(element);
@@ -44,6 +53,10 @@ export function fakeMap({ width = 800, zoom = 7, scale = 100 }: { width?: number
     onMove(listener) {
       state.listeners.add(listener);
       return () => void state.listeners.delete(listener);
+    },
+    onUserMove(listener) {
+      state.userListeners.add(listener);
+      return () => void state.userListeners.delete(listener);
     },
     remove: () => void (state.removed = true),
   };
@@ -62,5 +75,10 @@ export function fakeMap({ width = 800, zoom = 7, scale = 100 }: { width?: number
     state.zoom = to;
     state.listeners.forEach((l) => l());
   };
-  return { state, load, pan, zoomTo };
+  /** The person drags the view (a user move, then the move itself). */
+  const drag = (to: LngLat) => {
+    state.userListeners.forEach((l) => l());
+    pan(to);
+  };
+  return { state, load, pan, zoomTo, drag };
 }

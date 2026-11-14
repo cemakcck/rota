@@ -5,7 +5,7 @@ import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protoc
 import { addPlace, initTrip, readTrip } from "@rota/trip";
 import { MAP_STYLE, MapLoaderContext } from "@/components/map/engine";
 import { DAY_COLOURS } from "@/components/map/mapFeatures";
-import { LONG_PRESS_MS, TripMap, type MapShown } from "@/components/map/TripMap";
+import { LONG_PRESS_MS, PREVIEW_RETURN_MS, TripMap, type MapShown } from "@/components/map/TripMap";
 import { renderIntl } from "../components/helpers";
 import { fakeMap } from "./fakeMap";
 
@@ -413,5 +413,56 @@ describe("TripMap", () => {
     fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerType: "mouse" });
     fireEvent.click(surface, { clientX: 90, clientY: 60 });
     expect(onMapClick).toHaveBeenCalledTimes(1);
+  });
+
+  describe("after a search preview moved the map", () => {
+    const far = { name: "Çamlıca Kulesi", category: "sight" as const, lat: 41.0272, lng: 37 };
+    const farther = { name: "Far away", category: "sight" as const, lat: 41.5, lng: 38 };
+
+    it("goes back to where it was when the preview ends, even after several previews", async () => {
+      const { fake, rerenderWith } = setup();
+      await waitFor(() => expect(pins()).toHaveLength(2));
+      const before = { centre: { ...fake.state.origin }, zoom: fake.state.zoom };
+      rerenderWith({ preview: far });
+      rerenderWith({ preview: farther });
+      expect(fake.state.centred).toHaveLength(2);
+      rerenderWith({ preview: null });
+      await waitFor(() => expect(fake.state.returned).toEqual([before]));
+    });
+
+    it("moving between results (a brief gap with no preview) does not jump back and forth", async () => {
+      const { fake, rerenderWith } = setup();
+      await waitFor(() => expect(pins()).toHaveLength(2));
+      rerenderWith({ preview: far });
+      rerenderWith({ preview: null });
+      rerenderWith({ preview: farther });
+      await new Promise((r) => setTimeout(r, PREVIEW_RETURN_MS + 50));
+      expect(fake.state.returned).toEqual([]);
+    });
+
+    it("stays put when the preview never moved it, when the person moved the map, or when the place was added", async () => {
+      const shown = setup();
+      await waitFor(() => expect(pins()).toHaveLength(2));
+      // On screen: the map never moved.
+      shown.rerenderWith({ preview: { name: "Pera Müzesi", category: "museum", lat: 41.0317, lng: 28.9752 } });
+      shown.rerenderWith({ preview: null });
+      // Moved, then dragged by the person: their view wins.
+      shown.rerenderWith({ preview: far });
+      act(() => shown.fake.drag({ lng: 29, lat: 41.5 }));
+      shown.rerenderWith({ preview: null });
+      await new Promise((r) => setTimeout(r, PREVIEW_RETURN_MS + 50));
+      expect(shown.fake.state.returned).toEqual([]);
+      cleanup();
+
+      // Moved, then the previewed place added (its pin is now there): the map stays on it.
+      const { doc, dayIds } = trip();
+      const added = setup({ view: readTrip(doc), shown: { kind: "all" } });
+      await waitFor(() => expect(pins()).toHaveLength(3));
+      added.rerenderWith({ preview: far });
+      addPlace(doc, { name: far.name, category: "sight", dayId: dayIds[0], lat: far.lat, lng: far.lng }, "u1");
+      added.rerenderWith({ view: readTrip(doc), shown: { kind: "all" }, preview: null });
+      await new Promise((r) => setTimeout(r, PREVIEW_RETURN_MS + 50));
+      expect(added.fake.state.returned).toEqual([]);
+    });
   });
 });

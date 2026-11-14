@@ -231,7 +231,8 @@ function TripScreenFor({ tripId }: Props) {
   }
   // The hovered place, while it is shown: gone from the view (deleted, moved, another view chosen) with
   // no pointerleave, it is forgotten, so it does not come back hovered.
-  const shownPlaces = shown.kind === "all" ? plannedLists(view) : plannedLists(view).filter((l) => (shown.kind === "ideas" ? l.id === null : shown.kind === "day" && l.id === shown.dayId));
+  // The checklist view's map shows the whole trip.
+  const shownPlaces = shown.kind === "all" || shown.kind === "checklist" ? plannedLists(view) : plannedLists(view).filter((l) => (shown.kind === "ideas" ? l.id === null : shown.kind === "day" && l.id === shown.dayId));
   if (hovered !== null && !shownPlaces.some((l) => l.places.some((p) => p.id === hovered))) setHovered(null);
   const followed = useRef<{ id: string; list: string | null } | null>(null);
   useEffect(() => {

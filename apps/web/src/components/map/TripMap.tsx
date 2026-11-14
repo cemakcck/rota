@@ -11,7 +11,7 @@ import type { ListChoice } from "../trip/MoveDialog";
 import type { PreviewPlace } from "../trip/SearchBar";
 import { AddHere, type NewMapPlace, type ReverseGeocode, type SuggestAt } from "./AddHere";
 import { PEEK_PX, type Snap } from "./BottomSheet";
-import { MapLoaderContext, type LngLat, type MapView, type Padding } from "./engine";
+import { MapLoaderContext, type Camera, type LngLat, type MapView, type Padding } from "./engine";
 import { labelledPins, mapFeatures, pinLabel, type MapShown, type Pin } from "./mapFeatures";
 
 export type { MapShown };
@@ -19,6 +19,11 @@ import { RemoteCursors } from "./RemoteCursors";
 
 /** How long a touch must rest on the map to add a place there. */
 export const LONG_PRESS_MS = 500;
+/**
+ * How long after a search preview ends the map goes back to where it was: long enough that moving the
+ * pointer from one result to the next (a moment with no preview) does not jump back and forth.
+ */
+export const PREVIEW_RETURN_MS = 200;
 /** A touch that moves more than this (px) is a pan, not a long-press. */
 const LONG_PRESS_SLOP = 10;
 
@@ -167,12 +172,17 @@ export function TripMap({
 
   // Fit what is shown once the map is there (its container has its final size by then), and again when
   // the view changes; otherwise bring a newly selected place into view if it is not.
+  // Where the map was before a search preview moved it (see below), and the last place previewed.
+  const previewedFrom = useRef<Camera | null>(null);
+  const lastPreview = useRef<LngLat | null>(null);
   const fitted = useRef<{ map: MapView; view: string } | null>(null);
   const follow = useEffectEvent((m: MapView) => {
     const options = {
       padding: padding(m.size()),
       animate: !reducedMotion(),
     };
+    // A fit or a selection brought into view is the map's new place: a preview no longer takes it back.
+    previewedFrom.current = null;
     if (fitted.current?.map !== m) {
       fitted.current = { map: m, view: shownKey };
       m.fit(features.bounds, { ...options, animate: false });
@@ -192,16 +202,36 @@ export function TripMap({
     if (map) follow(map);
   }, [map, shownKey, selectedPlaceId]);
 
-  // A previewed result is shown where it is; the map moves only when it is out of view.
+  // A previewed result is shown where it is; the map moves only when it is out of view. When the preview
+  // ends without the place being added (Escape, leaving the field, clearing the search, cancelling the add
+  // step), the map goes back to where it was before the first preview moved it, unless the person moved
+  // it meanwhile, or a fit or selection did.
   const reveal = useEffectEvent((m: MapView, at: LngLat) => {
+    lastPreview.current = at;
     const p = padding(m.size());
     const { x, y } = m.project(at);
     const { width, height } = m.size();
-    if (x < p.left || y < p.top || x > width - p.right || y > height - p.bottom) m.centre(at, { padding: p, animate: !reducedMotion() });
+    if (x < p.left || y < p.top || x > width - p.right || y > height - p.bottom) {
+      previewedFrom.current ??= m.camera();
+      m.centre(at, { padding: p, animate: !reducedMotion() });
+    }
+  });
+  const goBack = useEffectEvent((m: MapView) => {
+    const from = previewedFrom.current;
+    const at = lastPreview.current;
+    previewedFrom.current = null;
+    if (!from) return;
+    // Added: its pin is where the preview was, and the map stays on it.
+    if (at && features.pins.some((pin) => pin.lat === at.lat && pin.lng === at.lng)) return;
+    m.goTo(from, { animate: !reducedMotion() });
   });
   useEffect(() => {
-    if (map && preview) reveal(map, { lat: preview.lat, lng: preview.lng });
+    if (!map) return;
+    if (preview) return reveal(map, { lat: preview.lat, lng: preview.lng });
+    const timer = setTimeout(() => goBack(map), PREVIEW_RETURN_MS);
+    return () => clearTimeout(timer);
   }, [map, preview?.lat, preview?.lng]); // eslint-disable-line react-hooks/exhaustive-deps -- follows the coordinates only
+  useEffect(() => map?.onUserMove(() => (previewedFrom.current = null)), [map]);
 
   // This person's pointer, for friends' maps (mouse and pen; a finger on the map is panning).
   useEffect(() => {

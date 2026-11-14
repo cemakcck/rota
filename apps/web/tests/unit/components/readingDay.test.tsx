@@ -170,6 +170,15 @@ describe("shift times", () => {
       "+60 min, later",
     ]);
     expect(within(menu).getByRole("button", { name: "−30 min, earlier" })).toBe(buttons[1]);
+    // Fits the 400 px list column: anchored to the left of the day's action row (not to the button, which
+    // may sit at its right end), at most the row's width, the six steps on two rows of three.
+    expect(menu.className).toMatch(/\babsolute\b/);
+    expect(menu.className).toMatch(/\bleft-0\b/);
+    expect(menu.className).toMatch(/\bmax-w-full\b/);
+    expect(menu.className).toMatch(/\bgrid-cols-3\b/);
+    expect(menu.className).not.toMatch(/\bw-max\b/);
+    const anchor = menu.parentElement!.closest(".relative");
+    expect(anchor?.hasAttribute("data-day-actions")).toBe(true);
     // Escape closes it, focus back on its button.
     fireEvent.keyDown(within(menu).getAllByRole("button")[0], { key: "Escape" });
     expect(within(day(1)).queryByRole("group", { name: "Shift the times of Day 1" })).toBeNull();
