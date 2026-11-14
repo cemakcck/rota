@@ -34,4 +34,23 @@ describe("hoursWarning", () => {
     });
     expect(process.env.TZ).toBe("America/New_York");
   });
+  it("arriving after today's last closing → closes-before, not tomorrow's opening", () => {
+    expect(hoursWarning("Mo-Su 09:00-17:00", "2026-11-16", "18:00", "19:00", "en")).toEqual({
+      kind: "closes-before",
+      at: "17:00",
+    });
+  });
+  it("an unknown interval only tomorrow does not suppress today's warning", () => {
+    expect(hoursWarning('Mo 09:00-17:00; Tu "by appointment"', "2026-11-16", "16:00", "17:30", "en")).toEqual({
+      kind: "closes-before",
+      at: "17:00",
+    });
+  });
+  it("an interval crossing midnight from today still counts as open", () => {
+    expect(hoursWarning("Mo-Su 18:00-02:00", "2026-11-16", "23:00", "23:50", "en")).toBeNull();
+    expect(hoursWarning("Mo-Su 18:00-02:00", "2026-11-16", "23:00", "03:00", "en")).toEqual({
+      kind: "closes-before",
+      at: "02:00",
+    });
+  });
 });

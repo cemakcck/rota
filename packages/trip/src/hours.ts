@@ -42,16 +42,18 @@ export function hoursWarning(
   } catch {
     return null;
   }
-  if (intervals.some((i) => i[2])) return null;
-  const dayOnly = intervals.filter((i) => i[0] < new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1));
-  if (dayOnly.length === 0) return { kind: "closed-day" };
+  // Only intervals that begin today matter; the window runs to the end of
+  // tomorrow so one that crosses midnight is not cut short.
+  const nextMidnight = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+  const today = intervals.filter((i) => i[0] < nextMidnight);
+  if (today.some((i) => i[2])) return null;
+  if (today.length === 0) return { kind: "closed-day" };
 
-  const containing = intervals.find((i) => i[0] <= from && from < i[1]);
+  const containing = today.find((i) => i[0] <= from && from < i[1]);
   if (containing) {
     return containing[1] < to ? { kind: "closes-before", at: clock(containing[1]) } : null;
   }
-  const next = intervals.find((i) => i[0] > from);
+  const next = today.find((i) => i[0] > from);
   if (next) return { kind: "opens-later", at: clock(next[0]) };
-  const last = intervals[intervals.length - 1];
-  return { kind: "closes-before", at: clock(last[1]) };
+  return { kind: "closes-before", at: clock(today[today.length - 1][1]) };
 }
