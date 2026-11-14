@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
@@ -82,6 +82,29 @@ describe("notes", () => {
     act(() => applyAwarenessUpdate(awB, encodeAwarenessUpdate(annPhone, [annPhone.clientID]), "remote"));
     const label = await within(deniz).findByText("Ann");
     expect(label.closest(".note-caret")).toBeTruthy();
+  });
+
+  it("re-rendering neither re-subscribes the preview nor reconfigures the open editor", () => {
+    const { a, awA, place } = twoDevices();
+    const fragment = placeNote(a, place);
+    const observe = vi.spyOn(fragment, "observeDeep");
+    const note = (n: number) => (
+      <div data-n={n}>
+        <NoteEditor fragment={fragment} awareness={awA} name="Galata Tower" editable onOpenChange={() => undefined} />
+      </div>
+    );
+    const view = renderIntl(note(0));
+    view.rerender(note(1));
+    view.rerender(note(2));
+    expect(observe).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a note to Galata Tower" }));
+    const editor = editorIn(view.container);
+    const setOptions = vi.spyOn(editor, "setOptions");
+    view.rerender(note(3));
+    view.rerender(note(4));
+    expect(setOptions).not.toHaveBeenCalled();
+    expect(editorIn(view.container)).toBe(editor);
   });
 
   it("collapses to a preview when focus leaves, and is read-only without an editor", async () => {

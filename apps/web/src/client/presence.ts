@@ -68,41 +68,61 @@ function readCursor(value: unknown): MapCursor | null {
 
 /**
  * Everyone else here now: one entry per user (not per tab or device), excluding this user. When a
- * person has several connections, the one that published most recently wins.
+ * person has several connections, the one that published most recently gives the name and map
+ * cursor; what they are editing comes from the newest connection that is editing something, so an
+ * idle second tab (whose presence renews every ~15 s) does not hide it.
  */
 export function peers(awareness: Awareness, selfUserId: string | null): Peer[] {
-  const newest = new Map<string, { peer: Peer; at: number }>();
+  const people = new Map<string, { peer: Peer; at: number; editingAt: number }>();
   awareness.getStates().forEach((state, clientId) => {
     if (clientId === awareness.clientID) return;
     const user = (state as { user?: Record<string, unknown> }).user;
     if (!user || !isString(user.id) || user.id === selfUserId) return;
     const at = awareness.meta.get(clientId)?.lastUpdated ?? 0;
-    const seen = newest.get(user.id);
-    if (seen && seen.at > at) return;
-    const editing = (state as { editing?: unknown }).editing;
-    newest.set(user.id, {
-      at,
-      peer: {
+    const raw = (state as { editing?: unknown }).editing;
+    const editing = isString(raw) ? raw : null;
+    const seen = people.get(user.id);
+    const entry = seen ?? { peer: { clientId, user: { id: user.id, name: "", colour: "" }, editing: null, cursor: null }, at: -Infinity, editingAt: -Infinity };
+    if (at >= entry.at) {
+      entry.at = at;
+      entry.peer = {
+        ...entry.peer,
         clientId,
         user: { id: user.id, name: isString(user.name) ? user.name : "", colour: isString(user.colour) ? user.colour : "" },
-        editing: isString(editing) ? editing : null,
         cursor: readCursor((state as { cursor?: unknown }).cursor),
-      },
-    });
+      };
+    }
+    if (editing !== null && at >= entry.editingAt) {
+      entry.editingAt = at;
+      entry.peer = { ...entry.peer, editing };
+    }
+    people.set(user.id, entry);
   });
-  return [...newest.values()].map((e) => e.peer);
+  return [...people.values()].map((e) => e.peer);
 }
 
 const NO_PEERS: Peer[] = [];
 
-/** An external store of `peers`, for useSyncExternalStore. */
-function peersStore(awareness: Awareness | null, selfUserId: string | null) {
-  let current = awareness ? peers(awareness, selfUserId) : NO_PEERS;
+const sameUser = (a: PresenceUser, b: PresenceUser) => a.id === b.id && a.name === b.name && a.colour === b.colour;
+const sameCursor = (a: MapCursor | null, b: MapCursor | null) => a === b || (a !== null && b !== null && a.lat === b.lat && a.lng === b.lng);
+
+/**
+ * An external store of `peers`, for useSyncExternalStore. It hands out the same array until something
+ * its readers see changes, so carets (and, without `cursors`, map cursors) never re-render them.
+ */
+function peersStore(awareness: Awareness | null, selfUserId: string | null, cursors: boolean) {
+  const read = (): Peer[] => (awareness ? peers(awareness, selfUserId).map((p) => (cursors ? p : { ...p, cursor: null })) : NO_PEERS);
+  const same = (a: Peer[], b: Peer[]) =>
+    a.length === b.length &&
+    a.every((p, i) => sameUser(p.user, b[i].user) && p.editing === b[i].editing && (!cursors || (p.clientId === b[i].clientId && sameCursor(p.cursor, b[i].cursor))));
+  let current = read();
   return {
     subscribe(changed: () => void) {
       if (!awareness) return () => undefined;
       const update = () => {
-        current = peers(awareness, selfUserId);
+        const next = read();
+        if (same(current, next)) return;
+        current = next;
         changed();
       };
       update();
@@ -113,8 +133,11 @@ function peersStore(awareness: Awareness | null, selfUserId: string | null) {
   };
 }
 
-/** `peers`, kept current as presence changes. */
-export function usePeers(awareness: Awareness | null, selfUserId: string | null): Peer[] {
-  const store = useMemo(() => peersStore(awareness, selfUserId), [awareness, selfUserId]);
+/**
+ * `peers`, kept current as presence changes. Pass `{ cursors: false }` when map cursors are not
+ * needed: they are left out (null), and their moves (up to 20 Hz per person) do not re-render.
+ */
+export function usePeers(awareness: Awareness | null, selfUserId: string | null, { cursors = true }: { cursors?: boolean } = {}): Peer[] {
+  const store = useMemo(() => peersStore(awareness, selfUserId, cursors), [awareness, selfUserId, cursors]);
   return useSyncExternalStore(store.subscribe, store.get, () => NO_PEERS);
 }

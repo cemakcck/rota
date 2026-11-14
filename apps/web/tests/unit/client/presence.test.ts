@@ -42,14 +42,38 @@ describe("presence", () => {
 
     const found = peers(me, "u1");
     expect(found.map((p) => p.user.id).sort()).toEqual(["u2", "u3"]);
-    // Deniz's phone spoke last, so its state wins over the laptop's.
-    expect(found.find((p) => p.user.id === "u2")).toMatchObject({ clientId: denizPhone.clientID, editing: null, cursor: { lat: 41, lng: 29 } });
+    // Deniz's phone spoke last, so its name and cursor win; the laptop is still editing p1.
+    expect(found.find((p) => p.user.id === "u2")).toMatchObject({ clientId: denizPhone.clientID, editing: "p1", cursor: { lat: 41, lng: 29 } });
 
-    // Then the laptop speaks again: now it is the newest.
+    // Then the laptop moves on to p2.
     vi.setSystemTime(1_010_000);
     setEditing(denizLaptop, "p2");
     relay(denizLaptop, me);
     expect(peers(me, "u1").find((p) => p.user.id === "u2")).toMatchObject({ clientId: denizLaptop.clientID, editing: "p2" });
+  });
+
+  it("an idle second tab does not hide what the person is editing", () => {
+    vi.useFakeTimers({ now: 1_000_000, toFake: ["Date"] });
+    const me = connection({ user: { id: "u1", name: "Ann", colour: "#2563eb" }, editing: null, cursor: null });
+    const laptop = connection({ user: deniz, editing: "p1", cursor: null });
+    const phone = connection({ user: deniz, editing: null, cursor: null });
+    relay(laptop, me);
+    relay(phone, me);
+    // The idle phone renews its presence (y-protocols does every ~15 s), making it the newest.
+    for (const at of [1_015_000, 1_030_000]) {
+      vi.setSystemTime(at);
+      relay(phone, me);
+      expect(peers(me, "u1")).toEqual([expect.objectContaining({ editing: "p1" })]);
+    }
+    // Two connections editing: the newer one's wins. None editing: null.
+    const tablet = connection({ user: deniz, editing: "p2", cursor: null });
+    relay(tablet, me);
+    expect(peers(me, "u1")[0].editing).toBe("p2");
+    setEditing(laptop, null);
+    setEditing(tablet, null);
+    relay(laptop, me);
+    relay(tablet, me);
+    expect(peers(me, "u1")[0].editing).toBeNull();
   });
 
   it("setMapCursor is throttled", () => {

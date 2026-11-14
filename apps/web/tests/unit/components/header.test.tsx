@@ -92,6 +92,19 @@ describe("header", () => {
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
   });
 
+  it("the undo shortcut is the note's own inside an open note, toolbar included", () => {
+    const { doc, dayIds } = newTrip();
+    const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    updatePlace(doc, id, { name: "Galata Kulesi" }, "u1");
+    refresh();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a note to Galata Kulesi" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Bold" }), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Note for Galata Kulesi" }), { key: "z", ctrlKey: true });
+    expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
+  });
+
   it("the undo shortcut does nothing while the settings sheet or a place editor is open", async () => {
     const { doc, dayIds } = newTrip();
     const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");

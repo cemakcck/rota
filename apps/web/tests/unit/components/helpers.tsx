@@ -1,15 +1,17 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import tr from "../../../messages/tr.json";
 
+/** Renders inside the app's message provider; `rerender` keeps the provider. */
 export function renderIntl(ui: ReactElement, locale: "en" | "tr" = "en") {
-  return render(
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <NextIntlClientProvider locale={locale} messages={locale === "en" ? en : tr} timeZone="UTC">
-      {ui}
-    </NextIntlClientProvider>,
+      {children}
+    </NextIntlClientProvider>
   );
+  return render(ui, { wrapper });
 }
 
 /** A fetch stub answering by "METHOD /path"; unknown requests fail the test loudly. */

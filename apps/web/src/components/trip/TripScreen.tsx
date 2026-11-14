@@ -72,11 +72,14 @@ function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
 }
 
 /**
- * True when Ctrl/Cmd+Z is not for the trip: typing in a field or editor (its own undo wins), or while a
- * dialog (settings, Move to…) or a place editor is open, where undoing would change the trip unseen.
+ * True when Ctrl/Cmd+Z is not for the trip: typing in a field or an open note (its own undo wins), or
+ * while a dialog (settings, Move to…) or a place editor is open, where undoing would change the trip
+ * unseen.
  */
 function notForTrip(target: EventTarget | null): boolean {
   if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return true;
+  // An open note (its toolbar too): the note's own undo, or nothing.
+  if (target instanceof Element && target.closest("[data-note-editor]")) return true;
   return document.querySelector('[role="dialog"], [data-place-editor]') !== null;
 }
 
@@ -134,7 +137,8 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
   const tabsId = useId();
   // What was deleted, and the element its Undo puts focus back on.
   const [toast, setToast] = useState<{ name: string; focus: string; at: number } | null>(null);
-  const peers = usePeers(awareness, userId);
+  // Who is here and what they edit; map cursors stay out, so their moves do not re-render the screen.
+  const peers = usePeers(awareness, userId, { cursors: false });
   const self = view.members.find((m) => m.id === userId);
   const closeToast = useCallback(() => setToast(null), []);
 

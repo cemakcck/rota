@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -88,14 +88,14 @@ const noteText = (fragment: Y.XmlFragment) =>
     .join("\n");
 
 function useNoteText(fragment: Y.XmlFragment): string {
-  return useSyncExternalStore(
-    (changed) => {
+  const subscribe = useCallback(
+    (changed: () => void) => {
       fragment.observeDeep(changed);
       return () => fragment.unobserveDeep(changed);
     },
-    () => noteText(fragment),
-    () => "",
+    [fragment],
   );
+  return useSyncExternalStore(subscribe, () => noteText(fragment), () => "");
 }
 
 const tool = "grid size-7 place-items-center rounded-md text-[13px] text-ink-2 hover:bg-hover aria-pressed:bg-ink aria-pressed:text-white";
@@ -129,9 +129,12 @@ function Toolbar({ editor }: { editor: Editor }) {
 }
 
 /** The open editor, bound to the shared fragment. Mounted only while open, so collapsed notes cost nothing. */
+const attributes = (label: string) => ({ role: "textbox", "aria-multiline": "true", "aria-label": label, class: "note-editor min-h-16 px-2.5 py-2 outline-none" });
+
 function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFragment; awareness: Awareness | null; label: string; onClose(): void }) {
-  const editor = useEditor({
-    extensions: [
+  // Built once per note: Tiptap reconfigures the whole editor whenever its extensions change.
+  const extensions = useMemo(
+    () => [
       // Collaboration brings its own undo (per fragment, only this person's typing).
       StarterKit.configure({
         undoRedo: false,
@@ -149,11 +152,13 @@ function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFr
       Collaboration.configure({ fragment }),
       ...(awareness ? [NoteCaret.configure({ provider: { awareness } })] : []),
     ],
-    autofocus: "end",
-    editorProps: {
-      attributes: { role: "textbox", "aria-multiline": "true", "aria-label": label, class: "note-editor min-h-16 px-2.5 py-2 outline-none" },
-    },
-  });
+    [fragment, awareness],
+  );
+  const editor = useEditor({ extensions, autofocus: "end", editorProps: { attributes: attributes(label) } }, [extensions]);
+  // A renamed place relabels the open editor without recreating it.
+  useEffect(() => {
+    if (editor && editor.view.dom.getAttribute("aria-label") !== label) editor.setOptions({ editorProps: { attributes: attributes(label) } });
+  }, [editor, label]);
   if (!editor) return null;
   return (
     <div
@@ -204,6 +209,7 @@ export function NoteEditor({
   if (open && editable)
     return (
       <div
+        data-note-editor
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) close(false);
         }}
