@@ -10,7 +10,7 @@ import { TripSettings, type TripMeta } from "./TripSettings";
 
 type Loaded = TripMeta & { members: TripMember[] };
 
-/** Loads a trip and shows its settings: the page behind /trips/:id/settings. */
+/** Loads a trip and shows its settings: the trip screen's settings sheet. */
 export function TripSettingsScreen({ tripId }: { tripId: string }) {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
@@ -18,10 +18,11 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
   const { userId, signedOut } = useUserState();
   const router = useRouter();
   const [trip, setTrip] = useState<Loaded | "loading" | "failed">("loading");
+  const signIn = `/sign-in?next=${encodeURIComponent(`/t/${tripId}`)}`;
 
   useEffect(() => {
-    if (signedOut) router.replace(`/sign-in?next=${encodeURIComponent(`/trips/${tripId}/settings`)}`);
-  }, [signedOut, router, tripId]);
+    if (signedOut) router.replace(signIn);
+  }, [signedOut, router, signIn]);
 
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -29,7 +30,7 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
     (async () => {
       try {
         const res = await apiFetch(`/api/trips/${tripId}`);
-        if (res.status === 401) return router.replace(`/sign-in?next=${encodeURIComponent(`/trips/${tripId}/settings`)}`);
+        if (res.status === 401) return router.replace(signIn);
         const next = res.ok ? ((await res.json()) as Loaded) : "failed";
         if (live) setTrip(next);
       } catch {
@@ -39,7 +40,7 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
     return () => {
       live = false;
     };
-  }, [tripId, version, router]);
+  }, [tripId, version, router, signIn]);
 
   if (trip === "loading" || !userId) return <p role="status">{tc("loading")}</p>;
   if (trip === "failed")

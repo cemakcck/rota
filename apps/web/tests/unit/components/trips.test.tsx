@@ -78,16 +78,16 @@ describe("my trips", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in?next=%2Ftrips"));
   });
 
-  it("trip settings signed out goes to sign in, coming back to the settings", async () => {
+  it("trip settings signed out goes to sign in, coming back to the trip", async () => {
     userState.value = { userId: null, signedOut: true };
     renderIntl(<TripSettingsScreen tripId={"c".repeat(22)} />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ftrips%2F${"c".repeat(22)}%2Fsettings`));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ft%2F${"c".repeat(22)}`));
   });
 
   it("trip settings: a 401 from the trip goes to sign in", async () => {
     vi.stubGlobal("fetch", stubFetch({ [`GET /api/trips/${"c".repeat(22)}`]: () => ({ status: 401, body: { error: "unauthorized" } }) }).fn);
     renderIntl(<TripSettingsScreen tripId={"c".repeat(22)} />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ftrips%2F${"c".repeat(22)}%2Fsettings`));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ft%2F${"c".repeat(22)}`));
   });
 
   it("a settled session with a remembered user (offline) does not redirect", async () => {

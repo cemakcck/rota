@@ -5,6 +5,8 @@ export type Undo = {
   redo(): void;
   canUndo(): boolean;
   canRedo(): boolean;
+  /** Ends the current undo step: the next change undoes on its own, even within the 500 ms merge window. */
+  stopCapturing(): void;
   /** Fires whenever the stacks change. Returns an unsubscribe function. */
   onChange(cb: () => void): () => void;
   destroy(): void;
@@ -30,6 +32,7 @@ export function createUndo(doc: Y.Doc, userId: string): Undo {
     redo: () => void manager.redo(),
     canUndo: () => manager.canUndo(),
     canRedo: () => manager.canRedo(),
+    stopCapturing: () => manager.stopCapturing(),
     onChange(cb) {
       listeners.add(cb);
       return () => void listeners.delete(cb);

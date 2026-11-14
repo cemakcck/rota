@@ -72,4 +72,16 @@ describe("undo", () => {
     u.destroy();
     await wait(0);
   });
+
+  it("stopCapturing starts a new undo step, so a delete undoes on its own", () => {
+    const { a, days } = setup();
+    const id = addPlace(a, { name: "Galata", category: "sight", dayId: days[0] }, "A");
+    const u = createUndo(a, "A");
+    updatePlace(a, id, { name: "Galata Tower" }, "A");
+    u.stopCapturing();
+    deletePlace(a, id, "A");
+    u.undo();
+    expect(readTrip(a).days[0].places[0].name).toBe("Galata Tower");
+    u.destroy();
+  });
 });

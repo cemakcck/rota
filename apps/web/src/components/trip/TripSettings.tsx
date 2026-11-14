@@ -16,7 +16,7 @@ export type TripMeta = { id: string; name: string; startDate: string; days: numb
 
 /**
  * The trip settings: details, members, invites (owner) and deleting the trip (owner). Standalone and
- * prop-driven: the trip screen's header menu hosts it, and until then /trips/:id/settings does.
+ * prop-driven: the trip screen's settings sheet hosts it (TripSettingsScreen loads it).
  */
 export function TripSettings({
   trip,

@@ -1,15 +1,7 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { AppPage } from "@/components/Page";
-import { TripSettingsScreen } from "@/components/trip/TripSettingsScreen";
+import { redirect } from "@/i18n/navigation";
 
-/** Hosts the trip settings panel until the trip screen's header menu (Task 10) does. */
+/** Trip settings moved into the trip screen's settings sheet; old links land on the trip. */
 export default async function TripSettingsPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
   const { locale, id } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations("settings");
-  return (
-    <AppPage title={t("title")} narrow={false}>
-      <TripSettingsScreen tripId={id} />
-    </AppPage>
-  );
+  redirect({ href: `/t/${id}`, locale });
 }
