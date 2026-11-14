@@ -83,8 +83,8 @@ function TripName({ name, onRename }: { name: string; onRename: ((name: string) 
 export type UndoControls = { canUndo: boolean; canRedo: boolean; undo(): void; redo(): void };
 
 /**
- * The trip screen's header: home, the trip's name and dates, sync status, undo/redo and the settings
- * menu (members, invites, trip details), which opens as a side sheet.
+ * The trip screen's header: home, the trip's name and dates, sync status, who is here now, undo/redo
+ * and the settings menu (members, invites, trip details), which opens as a side sheet.
  */
 export function Header({
   view,
@@ -92,12 +92,15 @@ export function Header({
   history,
   onRename,
   settings,
+  presence,
 }: {
   view: TripView;
   status: SyncStatus;
   history: UndoControls | null;
   onRename: ((name: string) => void) | null;
   settings: ReactNode;
+  /** Avatars of who is here now. */
+  presence: ReactNode;
 }) {
   const t = useTranslations("trip");
   const locale = useLocale();
@@ -118,6 +121,7 @@ export function Header({
       </div>
       <div className="ml-auto flex items-center gap-1.5">
         <SyncIndicator status={status} />
+        {presence}
         {history && (
           <>
             <button type="button" className={iconButton} aria-label={t("undo")} aria-keyshortcuts="Control+Z Meta+Z" disabled={!history.canUndo} onClick={history.undo}>

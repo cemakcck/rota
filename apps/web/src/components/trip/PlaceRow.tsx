@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
-import { placeUrl, type MemberView, type PlaceView } from "@rota/trip";
+import { placeNote, placeUrl, type MemberView, type PlaceView } from "@rota/trip";
 import { btn, btnSm } from "../ui";
 import { CommitInput } from "./CommitInput";
 import { CategoryIcon, GoogleMapsPin, Icon } from "./icons";
+import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { PlaceEditor, type PlaceEdit } from "./PlaceEditor";
+import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { placeDropId } from "./plan";
 
 /** What a member can do to a place; absent while the user is unknown (read-only). */
@@ -53,9 +55,10 @@ function StayInput({ place, onSave }: { place: PlaceView; onSave: (minutes: numb
 }
 
 /**
- * One place in a day or in Ideas: category, name, who added it, tags, estimated arrival, stay, and
- * the actions. Every drag has button alternatives (up/down, Move to…); the drag handle is for pointers
- * only and hidden from assistive technology.
+ * One place in a day or in Ideas: category, name, who added it, tags, estimated arrival, stay, its
+ * note, and the actions. A row someone else is editing is outlined in their colour and says so. Every
+ * drag has button alternatives (up/down, Move to…); the drag handle is for pointers only and hidden
+ * from assistive technology.
  */
 export function PlaceRow({
   place,
@@ -80,7 +83,12 @@ export function PlaceRow({
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const [editing, setEditing] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
   const name = place.name || t("unnamed");
+  const collab = useCollab();
+  const note = collab && noteOrNull(() => placeNote(collab.doc, place.id));
+  const peer = useEditingPeer(place.id);
+  usePublishEditing(place.id, actions !== null && (editing || noteOpen));
   const { setNodeRef: setDragRef, listeners, isDragging } = useDraggable({ id: place.id, disabled: !actions });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: placeDropId(place.id), disabled: !actions });
   const by = members.find((m) => m.id === place.addedBy);
@@ -94,11 +102,13 @@ export function PlaceRow({
         setDropRef(node);
       }}
       data-dimmed={dimmed || undefined}
+      style={editingOutline(peer)}
       // Dimmed by filters: a quieter row whose text keeps AA contrast (no opacity on text).
       className={`relative grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-xl border p-3 ${
         isOver && !isDragging ? "border-ink shadow-[0_0_0_1px_var(--color-ink)]" : "border-line"
       } ${dimmed ? "bg-line-2 text-ink-2" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
     >
+      {peer && <EditingTag peer={peer} />}
       <span className="flex items-center gap-1 pt-1">
         {actions && (
           <span aria-hidden="true" className="-ml-1 cursor-grab touch-none rounded p-0.5 text-ink-2 active:cursor-grabbing" {...listeners}>
@@ -140,6 +150,11 @@ export function PlaceRow({
         )}
       </div>
 
+      {note && (
+        <div className="col-span-full min-w-0">
+          <NoteEditor fragment={note} awareness={collab?.awareness ?? null} name={name} editable={actions !== null} onOpenChange={setNoteOpen} />
+        </div>
+      )}
       <div className="col-span-full flex flex-wrap items-center gap-1">
         <a href={placeUrl(place)} target="_blank" rel="noopener noreferrer" className={`${btn} ${btnSm} mr-auto`}>
           <GoogleMapsPin />

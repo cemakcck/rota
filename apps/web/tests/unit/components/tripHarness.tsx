@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { act } from "@testing-library/react";
 import * as Y from "yjs";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 import { initTrip, readTrip, upsertMember, type TripView } from "@rota/trip";
 import type { TripSession } from "@/client/sync/useTrip";
 import type { SyncStatus } from "@/client/sync/status";
@@ -16,7 +17,9 @@ type Fake = {
   closed: TripSession["closed"];
   firstOpenOffline: boolean;
   ready: boolean;
-  /** Awareness states by client id, as presence would publish them. */
+  /** This connection's presence (a real y-protocols Awareness on `doc`). */
+  awareness: Awareness;
+  /** Awareness states by client id, as presence would publish them (the awareness's own map). */
   states: Map<number, Record<string, unknown>>;
 };
 
@@ -35,6 +38,7 @@ export const fake: Fake = {
   closed: null,
   firstOpenOffline: false,
   ready: true,
+  awareness: new Awareness(new Y.Doc()),
   states: new Map(),
 };
 
@@ -51,7 +55,9 @@ export function newTrip({ days = 2 }: { days?: number } = {}): { doc: Y.Doc; day
   fake.closed = null;
   fake.firstOpenOffline = false;
   fake.ready = true;
-  fake.states = new Map();
+  fake.awareness.destroy();
+  fake.awareness = new Awareness(doc);
+  fake.states = fake.awareness.states;
   doc.on("update", () => {
     fake.view = readTrip(doc);
     notify();
@@ -88,6 +94,26 @@ export function remotePeer(as: string): { doc: Y.Doc; push(): void } {
   };
 }
 
+/**
+ * Another connection's presence arriving, as the server relays it: `set` publishes (or replaces) its
+ * state, `leave` removes it. Each peer is a separate client id, like another tab or device.
+ */
+export function presencePeer(): { clientId: number; set(state: Record<string, unknown>): void; leave(): void } {
+  const remote = new Awareness(new Y.Doc());
+  const relay = () => act(() => applyAwarenessUpdate(fake.awareness, encodeAwarenessUpdate(remote, [remote.clientID]), "remote"));
+  return {
+    clientId: remote.clientID,
+    set(state) {
+      remote.setLocalState(state);
+      relay();
+    },
+    leave() {
+      remote.setLocalState(null);
+      relay();
+    },
+  };
+}
+
 function subscribe(cb: () => void) {
   listeners.add(cb);
   return () => void listeners.delete(cb);
@@ -104,10 +130,7 @@ export function useFakeTrip(): TripSession {
     closed: fake.closed,
     firstOpenOffline: fake.firstOpenOffline,
     simulateOffline: () => undefined,
-    awareness: {
-      getStates: () => fake.states,
-      setLocalStateField: () => undefined,
-    } as unknown as TripSession["awareness"],
+    awareness: fake.awareness,
     userId: fake.userId,
   };
 }

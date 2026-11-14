@@ -1,13 +1,15 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
-import { dayUrls, type DayPatch, type DayView, type MemberView, type PlaceView, type TimelineEntry } from "@rota/trip";
+import { dayNote, dayUrls, type DayPatch, type DayView, type MemberView, type PlaceView, type TimelineEntry } from "@rota/trip";
 import { btn, btnSm } from "../ui";
 import { CommitInput } from "./CommitInput";
 import { GoogleMapsPin, Icon } from "./icons";
+import { NoteEditor, noteOrNull } from "./NoteEditor";
 import { PlaceRow, type PlaceActions } from "./PlaceRow";
+import { EditingTag, editingOutline, useCollab, useEditingPeer, usePublishEditing } from "./Presence";
 import { listDropId } from "./plan";
 
 const segment = "inline-flex h-[26px] items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2";
@@ -59,6 +61,22 @@ function DayControls({ day, title, onDay }: { day: DayView; title: string; onDay
   );
 }
 
+/** The day's shared note; outlined in a friend's colour while they edit it. */
+function DayNote({ day, title, editable }: { day: DayView; title: string; editable: boolean }) {
+  const collab = useCollab();
+  const [open, setOpen] = useState(false);
+  const peer = useEditingPeer(day.id);
+  usePublishEditing(day.id, editable && open);
+  const note = collab && noteOrNull(() => dayNote(collab.doc, day.id));
+  if (!note) return null;
+  return (
+    <div className="relative mx-4 mb-2.5 rounded-lg" style={editingOutline(peer)}>
+      {peer && <EditingTag peer={peer} />}
+      <NoteEditor fragment={note} awareness={collab?.awareness ?? null} name={title} editable={editable} onOpenChange={setOpen} />
+    </div>
+  );
+}
+
 /** A day (or Ideas, without `day`): heading, controls, and its places in order. Also a drop target. */
 export function DaySection({
   day,
@@ -93,6 +111,7 @@ export function DaySection({
         {subtitle && <span className="text-[13px] font-normal text-ink-2">{subtitle}</span>}
       </h2>
       {day && <DayControls day={day} title={title} onDay={onDay} />}
+      {day && <DayNote day={day} title={title} editable={onDay !== null} />}
       <div ref={setNodeRef} className={`mx-3 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
         {places.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{day ? t("dayEmpty") : t("ideasEmpty")}</p>

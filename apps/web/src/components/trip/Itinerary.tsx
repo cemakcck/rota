@@ -14,8 +14,9 @@ import { dropTarget, plannedLists, type ListId } from "./plan";
  * <id>" messages, and keyboard instructions for a keyboard sensor this screen does not use) is silenced
  * and rendered into a detached element. Dragging is pointer-only; keyboard and screen reader users move
  * places with the row buttons and the Move to… dialog, and others' moves come from the Announcer.
+ * The checklist does the same.
  */
-const SILENT: Announcements = {
+export const SILENT: Announcements = {
   onDragStart: () => undefined,
   onDragOver: () => undefined,
   onDragEnd: () => undefined,
