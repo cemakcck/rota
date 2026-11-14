@@ -41,6 +41,14 @@ export const auth = betterAuth({
       lastActiveAt: { type: "date", required: false, input: false },
     },
   },
+  databaseHooks: {
+    session: {
+      create: {
+        // Sessions keep only the HMAC hash of the client IP, never the address itself.
+        before: async (s) => ({ data: { ...s, ipAddress: s.ipAddress ? hashIp(s.ipAddress) : "" } }),
+      },
+    },
+  },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       const signUp = ctx.path === "/sign-up/email";

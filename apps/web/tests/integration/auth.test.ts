@@ -1,3 +1,4 @@
+import { hashIp } from "@/server/ipHash";
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -121,6 +122,7 @@ describe("password reset email", () => {
 });
 
 describe("the client IP Better Auth sees (its rate limiter and sessions)", () => {
+  // Sessions keep only the HMAC hash of the client IP (spec: IPs are stored only as hashes).
   /** Signs up through the app's auth route and returns the IP Better Auth resolved for the request. */
   async function resolvedIp(headers: Record<string, string>): Promise<string | null> {
     const res = await authRoute(
@@ -138,7 +140,7 @@ describe("the client IP Better Auth sees (its rate limiter and sessions)", () =>
 
   it("is the trusted end of a multi-entry X-Forwarded-For, like clientIp (one proxy hop by default)", async () => {
     const client = randomIp();
-    expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}` })).toBe(client);
+    expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}` })).toBe(hashIp(client));
   });
 
   it("follows TRUSTED_PROXY_HOPS", async () => {
@@ -146,7 +148,7 @@ describe("the client IP Better Auth sees (its rate limiter and sessions)", () =>
     const before = process.env.TRUSTED_PROXY_HOPS;
     process.env.TRUSTED_PROXY_HOPS = "2";
     try {
-      expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}, 10.0.0.1` })).toBe(client);
+      expect(await resolvedIp({ "x-forwarded-for": `203.0.113.9, ${client}, 10.0.0.1` })).toBe(hashIp(client));
     } finally {
       if (before === undefined) delete process.env.TRUSTED_PROXY_HOPS;
       else process.env.TRUSTED_PROXY_HOPS = before;
@@ -155,6 +157,6 @@ describe("the client IP Better Auth sees (its rate limiter and sessions)", () =>
 
   it("cannot be forged with the internal header", async () => {
     const client = randomIp();
-    expect(await resolvedIp({ "x-forwarded-for": client, "x-rota-client-ip": "198.51.100.7" })).toBe(client);
+    expect(await resolvedIp({ "x-forwarded-for": client, "x-rota-client-ip": "198.51.100.7" })).toBe(hashIp(client));
   });
 });
