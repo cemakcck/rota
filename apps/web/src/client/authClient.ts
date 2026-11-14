@@ -83,8 +83,12 @@ export function rememberedUser(): MemberView | null {
   }
 }
 
-/** Forgets the remembered user; the sign-out action calls it. */
+/**
+ * Forgets the remembered user; the sign-out action calls it. Not in a friend window: the remembered user
+ * is the visitor's (localStorage is shared by every window), and the friend is never remembered.
+ */
 export function forgetUser(): void {
+  if (isFriendWindow()) return;
   try {
     localStorage.removeItem(USER_KEY);
   } catch {
@@ -92,8 +96,12 @@ export function forgetUser(): void {
   }
 }
 
-/** Remembers the session's user, and forgets it once the session says nobody is signed in. */
+/**
+ * Remembers the session's user, and forgets it once the session says nobody is signed in. A friend
+ * window's session is the friend's bearer: it neither replaces nor forgets the visitor's.
+ */
 export function trackSessionUser(session: SessionState): void {
+  if (isFriendWindow()) return;
   try {
     const user = session.data?.user;
     if (user) {

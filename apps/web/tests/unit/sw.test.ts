@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerSw } from "@/client/registerSw";
 
-// public/sw.js runs as written, against a fake service worker global: `self` collects the event
-// handlers, and `caches` / `fetch` are stand-ins the tests control.
+// src/sw/sw.js runs as served (its build id filled in, see app/sw.js/route.ts), against a fake service
+// worker global: `self` collects the event handlers, and `caches` / `fetch` are stand-ins the tests control.
 
-const SOURCE = readFileSync(`${import.meta.dirname}/../../public/sw.js`, "utf8");
+const SOURCE = readFileSync(`${import.meta.dirname}/../../src/sw/sw.js`, "utf8");
 const ORIGIN = "https://rota.test";
 
 type FakeRequest = { url: string; method: string; mode: string };
@@ -50,7 +50,8 @@ function fakeCaches() {
   };
 }
 
-function loadSw() {
+/** The worker of build `build`; pass `caches` to install it over an earlier build's. */
+function loadSw({ build = "build-1", caches = fakeCaches() } = {}) {
   const handlers: Record<string, (e: Event) => void> = {};
   const self = {
     location: new URL(`${ORIGIN}/sw.js`),
@@ -58,14 +59,16 @@ function loadSw() {
     skipWaiting: vi.fn(async () => undefined),
     clients: { claim: vi.fn(async () => undefined) },
   };
-  const caches = fakeCaches();
-  const network = { online: true };
+  // `tag` marks what the server sends now; paths in `redirects` answer with a followed redirect.
+  const network = { online: true, tag: "", redirects: new Set<string>() };
   const fetch = vi.fn(async (input: string | FakeRequest) => {
     if (!network.online) throw new TypeError("Failed to fetch");
     const url = typeof input === "string" ? new URL(input, ORIGIN).href : input.url;
-    return new Response(`network ${url}`, { status: 200 });
+    const res = new Response(`network ${url}${network.tag}`, { status: 200 });
+    if (network.redirects.has(new URL(url).pathname)) Object.defineProperty(res, "redirected", { value: true });
+    return res;
   });
-  new Function("self", "caches", "fetch", SOURCE)(self, caches, fetch);
+  new Function("self", "caches", "fetch", SOURCE.replaceAll("__BUILD_ID__", build))(self, caches, fetch);
 
   /** Fires an event; resolves with what was passed to respondWith (undefined if nothing) after waitUntil settles. */
   async function fire(type: string, request?: FakeRequest): Promise<Response | undefined> {
@@ -135,6 +138,57 @@ describe("service worker", () => {
     expect(names).not.toContain("rota-pages-v0");
     expect(names).toContain("someone-else");
     expect(names.some((n) => n.startsWith("rota-pages-"))).toBe(true);
+  });
+
+  it("each build has its own static cache, and the next build's worker deletes it", async () => {
+    const first = loadSw({ build: "build-1" });
+    await first.fire("install");
+    await first.fire("activate");
+    await first.fire("fetch", first.get("/_next/static/chunks/old.js"));
+    await first.fire("fetch", first.get("https://tiles.openfreemap.org/planet/20260101/14/1/1.pbf"));
+
+    const second = loadSw({ build: "build-2", caches: first.caches });
+    await second.fire("install");
+    await second.fire("activate");
+    await second.fire("fetch", second.get("/_next/static/chunks/new.js"));
+    const statics = [...second.caches.store.entries()].filter(([name]) => name.startsWith("rota-static-"));
+    expect(statics).toHaveLength(1);
+    expect((await statics[0][1].keys()).map((k) => k.url)).toEqual([`${ORIGIN}/_next/static/chunks/new.js`]);
+    // Map tiles do not depend on the build: kept.
+    expect([...second.caches.store.keys()]).toContain("rota-tiles");
+  });
+
+  it("a redirected page is not precached", async () => {
+    const sw = loadSw();
+    sw.network.redirects.add("/en/trips");
+    await sw.fire("install");
+    sw.network.online = false;
+    // Offline, the redirect is not replayed (Chrome fails such a response); the offline page shows.
+    const res = await sw.fire("fetch", sw.get("/en/trips", "navigate"));
+    expect(await res!.text()).toBe(`network ${ORIGIN}/offline.html`);
+  });
+
+  it("the map style, TileJSON, glyphs and sprites are served stale while revalidated; only tiles are cache-first", async () => {
+    const sw = loadSw();
+    const assets = [
+      "https://tiles.openfreemap.org/styles/liberty",
+      "https://tiles.openfreemap.org/planet",
+      "https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf",
+      "https://tiles.openfreemap.org/sprites/ofm_f384/ofm.json",
+    ];
+    for (const url of assets) expect(await (await sw.fire("fetch", sw.get(url)))!.text()).toBe(`network ${url}`);
+
+    // The server moves on: the cached copy answers at once, and the new one replaces it for next time.
+    sw.network.tag = " (new)";
+    for (const url of assets) expect(await (await sw.fire("fetch", sw.get(url)))!.text()).toBe(`network ${url}`);
+    for (const url of assets) expect(await (await sw.fire("fetch", sw.get(url)))!.text()).toBe(`network ${url} (new)`);
+
+    // Offline, the last copy.
+    sw.network.online = false;
+    for (const url of assets) expect(await (await sw.fire("fetch", sw.get(url)))!.text()).toBe(`network ${url} (new)`);
+    // None of them takes a place in the capped tile cache.
+    const tiles = sw.caches.store.get("rota-tiles");
+    expect(tiles ? await tiles.keys() : []).toEqual([]);
   });
 });
 

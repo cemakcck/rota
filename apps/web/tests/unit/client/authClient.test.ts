@@ -88,6 +88,23 @@ describe("current user id", () => {
     expect(resolveUserId(signedIn)).toBe("u-deniz");
   });
 
+  it("a friend window never touches the visitor's remembered user", () => {
+    trackSessionUser(signedIn);
+    window.history.replaceState(null, "", "/en/t/x?friend=1");
+    sessionStorage.setItem("rota.friend", JSON.stringify({ token: "friend-token", user: deniz }));
+    // Its bearer session is Deniz: not remembered as the device's user.
+    trackSessionUser({ data: { user: deniz }, isPending: false, error: null });
+    expect(rememberedUser()).toEqual(ada);
+    // Its session settling signed out, or a sign-out there, does not forget the visitor.
+    trackSessionUser(signedOut);
+    forgetUser();
+    expect(rememberedUser()).toEqual(ada);
+    // Back in the visitor's window, offline: still the visitor.
+    sessionStorage.clear();
+    window.history.replaceState(null, "", "/en/t/x");
+    expect(resolveUserId(offline)).toBe("u-ada");
+  });
+
   it("forgetUser drops the remembered user (signing out)", () => {
     trackSessionUser(signedIn);
     forgetUser();

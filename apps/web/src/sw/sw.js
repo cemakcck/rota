@@ -1,18 +1,23 @@
-// Rota's service worker (spec §10), hand-written. The trips themselves live in IndexedDB; this keeps
-// the pages, the app's static files and the map tiles seen online, so the app opens offline.
+// Rota's service worker (spec §10), hand-written; served at /sw.js by app/sw.js/route.ts, which fills
+// in the build id. The trips themselves live in IndexedDB; this keeps the pages, the app's static files
+// and the map seen online, so the app opens offline.
 //
 // - Pages: network first, the last copy offline. Kept: the precached shell and My trips, and every trip
 //   page visited (/{locale}/t/{id}). A page never seen falls back to /offline.html.
-// - /_next/static/*, MapLibre's worker and the icons: cache first (their URLs change when they do).
-// - OpenFreeMap style, tiles, fonts and sprites: cache first, at most MAX_TILES entries, oldest out.
+// - /_next/static/*, MapLibre's worker and the icons: cache first (their URLs change when they do), in a
+//   cache per build: the next build's worker deletes it, so old chunks never pile up.
+// - OpenFreeMap vector tiles (.pbf under a dated path): cache first, at most MAX_TILES, oldest out.
+// - OpenFreeMap style, TileJSON, glyphs and sprites: stale while revalidate. They name the current tile
+//   paths, so a cached copy must not outlive them.
 // - /api/* and /sync: never touched.
 
-const VERSION = "v1";
+const VERSION = "__BUILD_ID__";
 const PAGES = `rota-pages-${VERSION}`;
 const STATIC = `rota-static-${VERSION}`;
-// Tiles do not change with the app, so a new version keeps them.
+// The map does not change with the app, so a new build keeps it.
 const TILES = "rota-tiles";
-const CURRENT = [PAGES, STATIC, TILES];
+const MAP = "rota-map";
+const CURRENT = [PAGES, STATIC, TILES, MAP];
 const MAX_TILES = 2000;
 const TILE_HOST = "tiles.openfreemap.org";
 const OFFLINE = "/offline.html";
@@ -53,14 +58,18 @@ self.addEventListener("fetch", (event) => {
       return event.respondWith(cacheFirst(STATIC, request, event));
     return;
   }
-  if (url.hostname === TILE_HOST) event.respondWith(cacheFirst(TILES, request, event));
+  if (url.hostname !== TILE_HOST) return;
+  // Glyphs are .pbf too, but under /fonts/ and not dated: revalidated like the style.
+  if (url.pathname.endsWith(".pbf") && !url.pathname.startsWith("/fonts/")) event.respondWith(cacheFirst(TILES, request, event));
+  else event.respondWith(staleWhileRevalidate(MAP, request, event));
 });
 
 /** Fetches `path` into `cache` if the server answers it; failures are ignored. */
 async function keep(cache, path) {
   try {
     const res = await fetch(path, { cache: "reload" });
-    if (res.ok) await cache.put(new URL(path, self.location.origin).href, res);
+    // A redirected response cannot answer a navigation (Chrome fails it): such a page is not kept.
+    if (res.ok && !res.redirected) await cache.put(new URL(path, self.location.origin).href, res);
   } catch {
     // Offline or refused: the page is cached on the next visit instead.
   }
@@ -72,7 +81,7 @@ async function page(request, url) {
   const key = url.origin + url.pathname;
   try {
     const res = await fetch(request);
-    if (res.ok && (TRIP_PAGE.test(url.pathname) || PRECACHE.includes(url.pathname))) {
+    if (res.ok && !res.redirected && (TRIP_PAGE.test(url.pathname) || PRECACHE.includes(url.pathname))) {
       const cache = await caches.open(PAGES);
       await cache.put(key, res.clone());
     }
@@ -102,6 +111,19 @@ async function cacheFirst(name, request, event) {
     }
   }
   return res;
+}
+
+/** The cached copy at once if there is one, while the network refreshes it for next time; else the network. */
+async function staleWhileRevalidate(name, request, event) {
+  const cache = await caches.open(name);
+  const hit = await cache.match(request.url);
+  const fresh = fetch(request).then(async (res) => {
+    if (res.ok) await cache.put(request.url, res.clone());
+    return res;
+  });
+  if (!hit) return fresh;
+  event.waitUntil(fresh.catch(() => undefined));
+  return hit;
 }
 
 async function trim(cache) {

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { startServer, type RunningServer } from "../../server";
@@ -41,7 +42,9 @@ describe("startServer (production build)", () => {
     const sw = await fetch(`${server.url}/sw.js`);
     expect(sw.status).toBe(200);
     expect(sw.headers.get("content-type")).toMatch(/javascript/);
-    expect(await sw.text()).toContain("rota-pages-");
+    // Named for this build, so the next build's worker deletes its caches.
+    const buildId = (await readFile(`${import.meta.dirname}/../../.next/BUILD_ID`, "utf8")).trim();
+    expect(await sw.text()).toContain(`const VERSION = "${buildId}";`);
 
     const manifest = await fetch(`${server.url}/manifest.webmanifest`);
     expect(manifest.status).toBe(200);
