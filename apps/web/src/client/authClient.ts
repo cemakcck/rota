@@ -120,3 +120,14 @@ export function useUserId(): string | null {
   useEffect(() => trackSessionUser(session), [session]);
   return resolveUserId(session);
 }
+
+/**
+ * The current user for pages that need one. `signedOut` is true only once the session has settled with
+ * nobody signed in and nobody remembered on the device: a failed session fetch (offline) is not signed out.
+ */
+export function useUserState(): { userId: string | null; signedOut: boolean } {
+  const session = authClient.useSession();
+  useEffect(() => trackSessionUser(session), [session]);
+  const userId = resolveUserId(session);
+  return { userId, signedOut: userId === null && !session.isPending && !session.error };
+}

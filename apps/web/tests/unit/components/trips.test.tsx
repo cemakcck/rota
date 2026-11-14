@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { renderIntl, stubFetch } from "./helpers";
 
+const replace = vi.fn();
+const userState = vi.hoisted(() => ({ value: { userId: "u1" as string | null, signedOut: false } }));
 vi.mock("@/i18n/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace }),
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -11,11 +13,12 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/client/authClient", () => ({
-  useUserId: () => "u1",
+  useUserState: () => userState.value,
   apiFetch: (...a: Parameters<typeof fetch>) => fetch(...a),
 }));
 
 import { MyTrips } from "@/components/trips/MyTrips";
+import { TripSettingsScreen } from "@/components/trip/TripSettingsScreen";
 import { cacheTrips, markOfflineCopy, type CachedTrip } from "@/client/myTrips";
 
 const trip = (id: string, name: string, startDate: string): CachedTrip => ({
@@ -35,7 +38,11 @@ const trip = (id: string, name: string, startDate: string): CachedTrip => ({
 const old = trip("a".repeat(22), "Old Rome", "2001-05-01");
 const soon = trip("b".repeat(22), "Future Lisbon", "2099-05-01");
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  userState.value = { userId: "u1", signedOut: false };
+  replace.mockReset();
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -63,5 +70,25 @@ describe("my trips", () => {
     renderIntl(<MyTrips />);
     expect(await screen.findByText("Future Lisbon")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("You are offline");
+  });
+
+  it("signed out (no session, nobody remembered) goes to sign in instead of loading forever", async () => {
+    userState.value = { userId: null, signedOut: true };
+    renderIntl(<MyTrips />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in?next=%2Ftrips"));
+  });
+
+  it("trip settings signed out goes to sign in, coming back to the settings", async () => {
+    userState.value = { userId: null, signedOut: true };
+    renderIntl(<TripSettingsScreen tripId={"c".repeat(22)} />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/sign-in?next=%2Ftrips%2F${"c".repeat(22)}%2Fsettings`));
+  });
+
+  it("a settled session with a remembered user (offline) does not redirect", async () => {
+    cacheTrips("u1", [soon]);
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
+    renderIntl(<MyTrips />);
+    await screen.findByText("Future Lisbon");
+    expect(replace).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { apiFetch, useUserId } from "@/client/authClient";
+import { apiFetch, useUserState } from "@/client/authClient";
 import { cacheTrips, cachedTrips, hasOfflineCopy, type CachedTrip } from "@/client/myTrips";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Avatar } from "../Avatar";
@@ -16,8 +16,12 @@ export function MyTrips() {
   const tc = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
-  const userId = useUserId();
+  const { userId, signedOut } = useUserState();
   const [state, setState] = useState<State>("loading");
+
+  useEffect(() => {
+    if (signedOut) router.replace("/sign-in?next=%2Ftrips");
+  }, [signedOut, router]);
 
   useEffect(() => {
     if (!userId) return;

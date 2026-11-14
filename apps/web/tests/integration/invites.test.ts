@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as createTrip } from "@/app/api/trips/route";
@@ -98,7 +99,7 @@ describe("invites", () => {
   it("a retried link creation (same token) still returns a working token", async () => {
     const ann = await signUpUser();
     const id = await newTrip(ann);
-    const token = "R".repeat(43);
+    const token = randomBytes(32).toString("base64url").slice(0, 43); // fresh per run: the test DB persists
     await createLinkInvite(id, ann.id, token);
     await createLinkInvite(id, ann.id, token); // the retry after a lost reply
     const bob = await signUpUser();

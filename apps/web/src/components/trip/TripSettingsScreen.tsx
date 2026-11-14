@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { apiFetch, useUserId } from "@/client/authClient";
+import { apiFetch, useUserState } from "@/client/authClient";
+import { useRouter } from "@/i18n/navigation";
 import { errorText } from "../ui";
 import type { TripMember } from "./MembersPanel";
 import { TripSettings, type TripMeta } from "./TripSettings";
@@ -14,8 +15,13 @@ export function TripSettingsScreen({ tripId }: { tripId: string }) {
   const t = useTranslations("settings");
   const tc = useTranslations("common");
   const locale = useLocale();
-  const userId = useUserId();
+  const { userId, signedOut } = useUserState();
+  const router = useRouter();
   const [trip, setTrip] = useState<Loaded | "loading" | "failed">("loading");
+
+  useEffect(() => {
+    if (signedOut) router.replace(`/sign-in?next=${encodeURIComponent(`/trips/${tripId}/settings`)}`);
+  }, [signedOut, router, tripId]);
 
   const [version, setVersion] = useState(0);
   useEffect(() => {

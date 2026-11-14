@@ -106,6 +106,7 @@ describe("sign in and out", () => {
 
   it("only follows return paths inside the app", () => {
     expect(safeNext("/invite/abc")).toBe("/invite/abc");
-    for (const bad of ["//evil.example", "https://evil.example", "/\\evil", undefined, ""]) expect(safeNext(bad)).toBe("/trips");
+    expect(safeNext("/invite/abc?x=1")).toBe("/invite/abc?x=1");
+    for (const bad of ["//evil.example", "https://evil.example", "/\\evil", "/\t/evil.com", "/\n/evil.com", "/\u0000x", "/ /evil.com", undefined, ""]) expect(safeNext(bad)).toBe("/trips");
   });
 });
