@@ -6,8 +6,8 @@ import * as Y from "yjs";
 //
 // Every tab keeps its own entry, `rota.pending.<tripId>.<tabId>` = { keys, heartbeat }, and clears only
 // that entry once its connection has the server's acknowledgement; the count is the union over all
-// tabs. Open tabs relay their edits to each other (useTrip's BroadcastChannel), so each tab's document,
-// and so what its provider sends, holds every tab's edits. A tab that stopped beating (frozen, crashed),
+// tabs. A user's open tabs relay their edits to each other (useTrip's BroadcastChannel), so each tab's
+// document, and so what its provider sends, holds that user's edits from every tab. A tab that stopped beating (frozen, crashed),
 // said it was closing, or cannot sync is adopted by a tab with a provider: that tab first re-reads
 // IndexedDB into its document, then takes the records over, so its next acknowledgement covers them.
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { IndexeddbPersistence, fetchUpdates } from "y-indexeddb";
 import * as Y from "yjs";
 import { newId, readTrip, type TripView } from "@rota/trip";
@@ -171,12 +171,6 @@ export function useTrip(tripId: string): TripSession {
     let frame: number | null = null;
 
     const recount = () => dispatch({ type: "unsynced", unsynced: pendingCount(tripId) });
-    // Open tabs of the trip relay their edits to each other, so every tab's provider sends everything.
-    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(`rota-trip-${tripId}`);
-    const onRelayed = ({ data }: MessageEvent) => {
-      if (ArrayBuffer.isView(data)) Y.applyUpdate(doc, new Uint8Array(data.buffer, data.byteOffset, data.byteLength), TAB_ORIGIN);
-    };
-
     /**
      * Records left by tabs that stopped beating become this tab's to deliver. IndexedDB is read again
      * first, so this document (which its provider sends) holds whatever such a tab stored there, and the
@@ -231,8 +225,7 @@ export function useTrip(tripId: string): TripSession {
       recount();
     };
 
-    const onUpdate = (update: Uint8Array, origin: unknown) => {
-      if (channel && origin !== provider && origin !== local && origin !== TAB_ORIGIN) channel.postMessage(update);
+    const onUpdate = () => {
       if (frame !== null) return;
       frame = requestAnimationFrame(() => {
         frame = null;
@@ -251,7 +244,6 @@ export function useTrip(tripId: string): TripSession {
       if (disposed) return;
       doc.on("update", onUpdate);
       doc.on("afterTransaction", onTransaction);
-      channel?.addEventListener("message", onRelayed);
       dispatch({ type: "local-loaded", view: readTrip(doc), hasContent: hasContent(doc) });
       // A friend window without its token yet must not connect with the visitor's cookie.
       if (token === null) return beat();
@@ -290,7 +282,6 @@ export function useTrip(tripId: string): TripSession {
       document.removeEventListener("visibilitychange", beat);
       window.removeEventListener("pagehide", onClosing);
       clearInterval(beating);
-      channel?.close();
       if (frame !== null) cancelAnimationFrame(frame);
       doc.off("update", onUpdate);
       doc.off("afterTransaction", onTransaction);
@@ -299,13 +290,60 @@ export function useTrip(tripId: string): TripSession {
     };
   }, [doc, tripId, token, tabId]);
 
+  // The same person's open tabs of the trip relay their edits to each other, so every tab's provider
+  // sends everything. Scoped per user: in the demo, the visitor's window and the friend window are two
+  // people, and one's offline edits must not reach the server through the other's connection. A tab
+  // with Simulate offline on behaves as an offline device: it neither sends nor applies relayed edits.
+  // A tab joining the relay, or coming back from Simulate offline, exchanges state vectors with the
+  // others so each catches up on what it missed (a later update cannot apply without the earlier ones).
+  const simulatedOffline = useRef(false);
+  const relayCatchUp = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (userId === null || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(`rota-trip-${tripId}-${userId}`);
+    const bytes = (v: ArrayBufferView) => new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    /** Asks the other tabs for what this tab lacks; `reply` asks them to send their state vector back. */
+    const catchUp = (reply = true) => channel.postMessage({ stateVector: Y.encodeStateVector(doc), reply });
+    const onRelayed = ({ data }: MessageEvent) => {
+      if (simulatedOffline.current) return;
+      if (ArrayBuffer.isView(data)) {
+        Y.applyUpdate(doc, bytes(data), TAB_ORIGIN);
+        return;
+      }
+      const { stateVector, reply } = (data ?? {}) as { stateVector?: unknown; reply?: unknown };
+      if (!ArrayBuffer.isView(stateVector)) return;
+      channel.postMessage(Y.encodeStateAsUpdate(doc, bytes(stateVector)));
+      if (reply === true) catchUp(false);
+    };
+    const onUpdate = (update: Uint8Array, origin: unknown) => {
+      // Only this tab's own edits: not the server's, the local copy's or another tab's.
+      if (simulatedOffline.current || origin === TAB_ORIGIN) return;
+      if (origin instanceof HocuspocusProvider || origin instanceof IndexeddbPersistence) return;
+      channel.postMessage(update);
+    };
+    channel.addEventListener("message", onRelayed);
+    doc.on("update", onUpdate);
+    relayCatchUp.current = catchUp;
+    if (!simulatedOffline.current) catchUp();
+    return () => {
+      relayCatchUp.current = null;
+      doc.off("update", onUpdate);
+      channel.close();
+    };
+  }, [doc, tripId, userId]);
+
   const { provider, closed } = state;
   const simulateOffline = useCallback(
     (on: boolean) => {
+      simulatedOffline.current = on;
       dispatch({ type: "simulate-offline", on });
-      if (on) provider?.disconnect();
+      if (on) {
+        provider?.disconnect();
+        return;
+      }
+      relayCatchUp.current?.();
       // A closed trip stays disconnected.
-      else if (!closed) void provider?.connect();
+      if (!closed) void provider?.connect();
     },
     [provider, closed],
   );

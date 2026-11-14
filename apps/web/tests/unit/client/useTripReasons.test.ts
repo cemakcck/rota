@@ -48,10 +48,15 @@ const { StubProvider } = await vi.hoisted(async () => {
 });
 
 vi.mock("@hocuspocus/provider", () => ({ HocuspocusProvider: StubProvider }));
-vi.mock("@/client/authClient", async (original) => ({
-  ...(await original<typeof import("@/client/authClient")>()),
-  useUserId: () => "u-ada",
-}));
+/** The user a hook instance signs in as: read on its first render and kept, like a real tab's session. */
+const signedIn = vi.hoisted(() => ({ userId: "u-ada" as string | null }));
+vi.mock("@/client/authClient", async (original) => {
+  const { useState } = await import("react");
+  return {
+    ...(await original<typeof import("@/client/authClient")>()),
+    useUserId: () => useState(() => signedIn.userId)[0],
+  };
+});
 
 async function seedLocalTrip(name: string): Promise<string> {
   const id = newTripId();
@@ -90,7 +95,10 @@ const pendingEntries = (tripId: string): { keys: string[]; heartbeat: number }[]
 
 const databaseNames = async () => (await indexedDB.databases()).map((d) => d.name);
 
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+
 afterEach(() => {
+  signedIn.userId = "u-ada";
   StubProvider.made = [];
   localStorage.clear();
 });
@@ -329,7 +337,7 @@ describe("useTrip", () => {
     const b = await openTrip(id);
     act(() => acknowledge(a.provider));
 
-    act(() => b.hook.result.current.simulateOffline(true));
+    // B's edit is not on the server yet (B's connection has not acknowledged it).
     act(() => {
       setTripMeta(b.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
     });
@@ -356,6 +364,60 @@ describe("useTrip", () => {
     expect(a.hook.result.current.status.pending).toBe(0);
     expect(readTrip(a.provider.configuration.document).name).toBe("Lisbon and Porto");
     a.hook.unmount();
+  });
+
+  it("tabs of different people (visitor and friend window) do not relay to each other", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const visitor = await openTrip(id);
+    signedIn.userId = "u-deniz";
+    const friend = await openTrip(id);
+    act(() => {
+      setTripMeta(friend.hook.result.current.doc, { name: "Deniz's Lisbon" }, "u-deniz");
+      setTripMeta(visitor.hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
+    });
+    await act(settle);
+    expect(readTrip(visitor.hook.result.current.doc).name).toBe("Lisbon");
+    expect(readTrip(friend.hook.result.current.doc).startDate).toBe("2026-12-04");
+    visitor.hook.unmount();
+    friend.hook.unmount();
+  });
+
+  it("a tab whose user is unknown joins no relay", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const known = await openTrip(id);
+    signedIn.userId = null;
+    const unknown = await openTrip(id);
+    act(() => {
+      setTripMeta(known.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+    });
+    await act(settle);
+    expect(readTrip(unknown.hook.result.current.doc).name).toBe("Lisbon");
+    known.hook.unmount();
+    unknown.hook.unmount();
+  });
+
+  it("a tab with Simulate offline on neither sends nor receives relayed edits, and resumes when it is off", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const a = await openTrip(id);
+    const b = await openTrip(id);
+    act(() => b.hook.result.current.simulateOffline(true));
+    act(() => {
+      setTripMeta(b.hook.result.current.doc, { name: "Offline name" }, "u-ada");
+      setTripMeta(a.hook.result.current.doc, { startDate: "2026-12-05" }, "u-ada");
+    });
+    await act(settle);
+    expect(readTrip(a.hook.result.current.doc).name).toBe("Lisbon");
+    expect(readTrip(b.hook.result.current.doc).startDate).toBe("2026-12-04");
+
+    act(() => b.hook.result.current.simulateOffline(false));
+    act(() => {
+      addChecklistItem(a.hook.result.current.doc, "Tickets", "u-ada");
+      setTripMeta(b.hook.result.current.doc, { name: "Back online" }, "u-ada");
+    });
+    await waitFor(() => expect(readTrip(b.hook.result.current.doc).checklist).toHaveLength(1));
+    await waitFor(() => expect(readTrip(a.hook.result.current.doc).name).toBe("Back online"));
+    a.hook.unmount();
+    b.hook.unmount();
   });
 
   it("before adopting, a tab re-reads IndexedDB, and only an ack after that clears the adopted records", async () => {
