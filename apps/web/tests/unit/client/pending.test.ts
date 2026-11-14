@@ -6,6 +6,7 @@ import {
   adoptStalePending,
   changedRecords,
   clearPending,
+  closePending,
   forgetPending,
   pendingCount,
   recordPending,
@@ -94,6 +95,29 @@ describe("pending records per tab", () => {
     const mine = JSON.parse(localStorage.getItem(`rota.pending.${tripId}.me`)!);
     expect(mine.keys.sort()).toEqual(["meta", "places:p1", "places:p2"]);
     expect(pendingCount(tripId)).toBe(4);
+  });
+
+  it("a hidden tab beating once a minute is not stale; three minutes without a beat is", () => {
+    expect(PENDING_STALE_MS).toBe(3 * 60_000);
+    const now = 1_000_000;
+    recordPending(tripId, "hidden-tab", ["meta"], now - 70_000);
+    recordPending(tripId, "gone-tab", ["places:p1"], now - 3 * 60_000 - 1);
+    adoptStalePending(tripId, "me", now);
+    expect(localStorage.getItem(`rota.pending.${tripId}.hidden-tab`)).not.toBeNull();
+    expect(localStorage.getItem(`rota.pending.${tripId}.gone-tab`)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(`rota.pending.${tripId}.me`)!).keys).toEqual(["places:p1"]);
+  });
+
+  it("a closed tab's records are adopted at once", () => {
+    const now = 1_000_000;
+    recordPending(tripId, "closing-tab", ["meta"], now);
+    closePending(tripId, "closing-tab");
+    closePending(tripId, "tab-without-entry");
+    expect(localStorage.getItem(`rota.pending.${tripId}.tab-without-entry`)).toBeNull();
+    expect(pendingCount(tripId)).toBe(1);
+    adoptStalePending(tripId, "me", now);
+    expect(localStorage.getItem(`rota.pending.${tripId}.closing-tab`)).toBeNull();
+    expect(pendingCount(tripId)).toBe(1);
   });
 
   it("survives corrupted entries and forgets every tab's entry for a trip", () => {

@@ -12,6 +12,7 @@ import {
   adoptStalePending,
   changedRecords,
   clearPending,
+  closePending,
   heartbeatPending,
   isPendingStorageKey,
   pendingCount,
@@ -178,6 +179,10 @@ export function useTrip(tripId: string): TripSession {
       if (isPendingStorageKey(tripId, event.key)) recount();
     };
     window.addEventListener("storage", onStorage);
+    // Hidden tabs beat rarely: beat as soon as one is shown again, and say so when it is closing.
+    const onClosing = () => closePending(tripId, tabId);
+    document.addEventListener("visibilitychange", adopt);
+    window.addEventListener("pagehide", onClosing);
 
     /** The server has everything this tab sent: its own records are no longer waiting. */
     const acknowledged = () => {
@@ -248,6 +253,8 @@ export function useTrip(tripId: string): TripSession {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", adopt);
+      window.removeEventListener("pagehide", onClosing);
       clearInterval(beat);
       if (frame !== null) cancelAnimationFrame(frame);
       doc.off("update", onUpdate);

@@ -6,11 +6,12 @@ import * as Y from "yjs";
 //
 // Every tab keeps its own entry, `rota.pending.<tripId>.<tabId>` = { keys, heartbeat }, and clears only
 // that entry once its connection has the server's acknowledgement; the count is the union over all
-// tabs. A tab that stopped beating (closed, crashed) is adopted by the next tab to open the trip: that
-// tab loaded the closed tab's edits from IndexedDB, so its own acknowledgement covers them.
+// tabs. A tab that stopped beating (crashed) or said it was closing is adopted by another tab of the
+// trip: that tab loaded the closed tab's edits from IndexedDB, so its own acknowledgement covers them.
 
 export const PENDING_HEARTBEAT_MS = 5000;
-export const PENDING_STALE_MS = 15_000;
+/** Hidden tabs' timers may run only once a minute, so a tab is presumed gone only after 3 minutes without a beat. */
+export const PENDING_STALE_MS = 3 * 60_000;
 
 /** Any shared type, whatever its event type. */
 type YType = (typeof Y.AbstractType)["prototype"];
@@ -115,6 +116,11 @@ export function heartbeatPending(tripId: string, tabId: string, now: number = Da
   const storageKey = prefix(tripId) + tabId;
   const mine = readEntry(storageKey);
   if (mine) writeEntry(storageKey, { keys: mine.keys, heartbeat: now });
+}
+
+/** The tab is closing: its entry (if any) is stale at once, so another tab adopts it at its next beat. */
+export function closePending(tripId: string, tabId: string): void {
+  heartbeatPending(tripId, tabId, 0);
 }
 
 /** This tab's changes are all on the server. */

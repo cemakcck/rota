@@ -221,6 +221,45 @@ describe("useTrip", () => {
     }
   });
 
+  it("a tab that is closing hands its changes over at once (pagehide)", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const first = await openTrip(id);
+    act(() => {
+      setTripMeta(first.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+    });
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    first.hook.unmount();
+
+    const next = await openTrip(id);
+    expect(next.hook.result.current.status.pending).toBe(1);
+    act(() => acknowledge(next.provider));
+    expect(next.hook.result.current.status.pending).toBe(0);
+    next.hook.unmount();
+  });
+
+  it("a hidden tab refreshes its heartbeat when it becomes visible", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const id = await seedLocalTrip("Lisbon");
+      const { hook } = await openTrip(id);
+      act(() => {
+        setTripMeta(hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+      });
+      const entryKey = Object.keys(localStorage).find((k) => k.startsWith(`rota.pending.${id}.`))!;
+      const before = JSON.parse(localStorage.getItem(entryKey)!).heartbeat;
+      vi.setSystemTime(Date.now() + 2 * 60_000);
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(JSON.parse(localStorage.getItem(entryKey)!).heartbeat).toBe(before + 2 * 60_000);
+      hook.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("typing into a place's note is one change waiting, not one per keystroke", async () => {
     const id = await seedLocalTrip("Lisbon");
     const { hook } = await openTrip(id);
