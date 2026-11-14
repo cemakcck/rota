@@ -8,8 +8,8 @@ export type DayForecast = { date: string; code: number; max: number; min: number
 export type DayWeather = { forecast: DayForecast } | { from: string };
 type Forecast = { days: DayForecast[]; availableFrom: string | null };
 
-/** How many days ahead a date's forecast appears (Open-Meteo covers today and 15 more). */
-const LEAD_DAYS = 15;
+/** How many days ahead a date's forecast appears (the proxy asks up to today + 14, see server/proxy/weather.ts). */
+const LEAD_DAYS = 14;
 
 const forecasts = createRemote<Forecast>(async ([key]) => {
   const [lat, lng, start, end] = key.split(",");

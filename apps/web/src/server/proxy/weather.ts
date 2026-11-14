@@ -14,8 +14,11 @@ type OpenMeteoResponse = {
   };
 };
 
-/** Open-Meteo forecasts today and the next 15 days. */
-const FORECAST_DAYS = 16;
+/**
+ * Open-Meteo forecasts today and the next 15 days, counted from the destination's local today
+ * (timezone=auto), which can be a day behind UTC's. Up to UTC today + 14 is inside that everywhere.
+ */
+const LAST_DAY = 14;
 const openMeteo = throttled("open-meteo");
 const forecasts = createCache<DayForecast[]>(1000, 3 * 3600 * 1000);
 
@@ -24,10 +27,10 @@ const forecasts = createCache<DayForecast[]>(1000, 3 * 3600 * 1000);
  * first date it does not cover yet comes into range (null when all are covered or already past).
  */
 export async function forecast(lat: number, lng: number, start: string, end: string, today: string = new Date().toISOString().slice(0, 10)): Promise<Forecast> {
-  const last = addDaysToDate(today, FORECAST_DAYS - 1);
+  const last = addDaysToDate(today, LAST_DAY);
   const from = start > today ? start : today;
   const to = end < last ? end : last;
-  const availableFrom = end > last ? addDaysToDate(start > last ? start : addDaysToDate(last, 1), -(FORECAST_DAYS - 1)) : null;
+  const availableFrom = end > last ? addDaysToDate(start > last ? start : addDaysToDate(last, 1), -LAST_DAY) : null;
   if (from > to) return { days: [], availableFrom };
 
   const [la, ln] = [Math.round(lat * 100) / 100, Math.round(lng * 100) / 100];

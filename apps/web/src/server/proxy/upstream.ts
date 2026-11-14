@@ -15,8 +15,9 @@ export class UpstreamUnavailable extends Error {}
 /** Too many of our own requests are already queued for the service. */
 export class UpstreamBusy extends UpstreamUnavailable {}
 
-// When each service may next be called.
+// When each service may next be called, and the requests on their way (shared by identical calls).
 const nextSlot = new Map<string, number>();
+const inflight = new Map<string, Promise<unknown>>();
 
 /** Forgets every queue; for tests, so one test's requests do not delay the next's. */
 export function resetThrottles(): void {
@@ -25,28 +26,38 @@ export function resetThrottles(): void {
 
 /**
  * Fetches JSON from a public service: at most one request per second per service (later ones wait
- * their turn, unless that would take over 2 s), a 5 s timeout, and our User-Agent.
+ * their turn, unless that would take over 2 s), a 5 s timeout, and our User-Agent. A request for a URL
+ * already on its way shares that answer instead of taking another turn.
  */
 export function throttled(service: string) {
-  return async function get<T>(url: string): Promise<T> {
-    const now = Date.now();
-    const slot = Math.max(now, nextSlot.get(service) ?? 0);
-    if (slot - now > MAX_WAIT_MS) throw new UpstreamBusy(service);
-    nextSlot.set(service, slot + SPACING_MS);
-    if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now));
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { "user-agent": USER_AGENT, accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-    } catch (err) {
-      throw new UpstreamUnavailable(`${service}: ${(err as Error).message}`);
+  return function get<T>(url: string): Promise<T> {
+    let request = inflight.get(url) as Promise<T> | undefined;
+    if (!request) {
+      request = fetchJson<T>(service, url).finally(() => inflight.delete(url));
+      inflight.set(url, request);
     }
-    if (!res.ok) throw new UpstreamUnavailable(`${service}: ${res.status}`);
-    try {
-      return (await res.json()) as T;
-    } catch {
-      throw new UpstreamUnavailable(`${service}: not JSON`);
-    }
+    return request;
   };
+}
+
+async function fetchJson<T>(service: string, url: string): Promise<T> {
+  const now = Date.now();
+  const slot = Math.max(now, nextSlot.get(service) ?? 0);
+  if (slot - now > MAX_WAIT_MS) throw new UpstreamBusy(service);
+  nextSlot.set(service, slot + SPACING_MS);
+  if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now));
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { "user-agent": USER_AGENT, accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (err) {
+    throw new UpstreamUnavailable(`${service}: ${(err as Error).message}`);
+  }
+  if (!res.ok) throw new UpstreamUnavailable(`${service}: ${res.status}`);
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new UpstreamUnavailable(`${service}: not JSON`);
+  }
 }
 
 /** Counts a request against the caller's per-minute limit for `name`; over it is a 429. */

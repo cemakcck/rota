@@ -5,6 +5,7 @@ import { GET as route } from "@/app/api/route/route";
 import { GET as hours } from "@/app/api/hours/route";
 import { GET as weather } from "@/app/api/weather/route";
 import { addDaysToDate } from "@rota/trip";
+import { createCache } from "@/server/proxy/cache";
 import { resetThrottles, throttled, UpstreamBusy, USER_AGENT } from "@/server/proxy/upstream";
 import { ORIGIN, signUpUser, type TestUser } from "./helpers";
 
@@ -147,7 +148,8 @@ describe("routing", () => {
 
   it("route returns legs and geometry and caches by coordinates", async () => {
     answer = () => json(osrm);
-    const coords = `28.97,41.0${Math.floor(Math.random() * 1e4)};28.975,41.025;28.98,41.03`;
+    // Random, and ending in 1 so it prints back the same (no trailing zero).
+    const coords = `28.97,41.0${Math.floor(Math.random() * 1e4)}1;28.975,41.025;28.98,41.03`;
     const res = await get(route, `/api/route?mode=walk&coords=${coords}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -218,6 +220,38 @@ describe("upstream", () => {
   });
 });
 
+describe("sharing and memory", () => {
+  it("identical concurrent requests share one upstream call", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    answer = async () => {
+      await gate;
+      return json({ type: "FeatureCollection", features: [photonFeature({ osm_type: "N", osm_id: 9, name: "Moda" }, [29.02, 40.98])] });
+    };
+    const path = `/api/geocode?q=Moda ${unique()}&lang=en`;
+    const both = Promise.all([get(geocode, path), get(geocode, path)]);
+    await vi.waitFor(() => expect(upstreamCalls()).toHaveLength(1));
+    release();
+    const [a, b] = await both;
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(await b.json()).toEqual(await a.json());
+    expect(upstreamCalls()).toHaveLength(1);
+  });
+
+  it("a cache with a byte cap evicts the least recently used entries to stay under it", () => {
+    const cache = createCache<string>(100, 60_000, { maxBytes: 1000, sizeOf: (v) => v.length });
+    cache.set("a", "x".repeat(400));
+    cache.set("b", "x".repeat(400));
+    cache.get("a");
+    cache.set("c", "x".repeat(400));
+    expect([cache.get("a") !== undefined, cache.get("b") !== undefined, cache.get("c") !== undefined]).toEqual([true, false, true]);
+    // One value over the cap is not kept at all.
+    cache.set("d", "x".repeat(1001));
+    expect(cache.get("d")).toBeUndefined();
+    expect(cache.get("a")).toBeDefined();
+  });
+});
+
 describe("opening hours", () => {
   it("hours batches ids into one Overpass query", async () => {
     const n = Math.floor(Math.random() * 1e9);
@@ -259,12 +293,14 @@ describe("weather", () => {
   it("weather beyond 16 days returns availableFrom", async () => {
     const start = addDaysToDate(today, 30);
     const res = await get(weather, `/api/weather?lat=41.01&lng=28.97&start=${start}&end=${addDaysToDate(start, 2)}`);
-    expect(await res.json()).toEqual({ days: [], availableFrom: addDaysToDate(start, -15) });
+    expect(await res.json()).toEqual({ days: [], availableFrom: addDaysToDate(start, -14) });
     expect(upstreamCalls()).toHaveLength(0);
   });
 
+  // Open-Meteo counts its 16 days from the destination's local today (timezone=auto), which can be a day
+  // behind UTC's: asking up to UTC today + 14 stays inside the range everywhere.
   it("weather within the forecast returns the days, and later days when they become available", async () => {
-    const start = addDaysToDate(today, 14);
+    const start = addDaysToDate(today, 13);
     const dates = [start, addDaysToDate(start, 1)];
     answer = () =>
       json({
@@ -284,7 +320,7 @@ describe("weather", () => {
     expect(url.searchParams.get("latitude")).toBe(String(Math.round(Number(lat) * 100) / 100));
     expect(url.searchParams.get("daily")).toBe("weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
     expect(url.searchParams.get("timezone")).toBe("auto");
-    expect([url.searchParams.get("start_date"), url.searchParams.get("end_date")]).toEqual([start, addDaysToDate(today, 15)]);
+    expect([url.searchParams.get("start_date"), url.searchParams.get("end_date")]).toEqual([start, addDaysToDate(today, 14)]);
   });
 });
 

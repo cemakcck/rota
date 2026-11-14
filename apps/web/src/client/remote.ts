@@ -1,30 +1,30 @@
 import { useEffect, useSyncExternalStore } from "react";
 
-/** After a failure, a key is asked for again no sooner than this. */
+/** After a failure, a key is asked for again no sooner than this (sooner when the connection returns). */
 const RETRY_MS = 60_000;
 
 type Entry<T> = { value: T } | { pending: true } | { failedAt: number };
 
 /**
  * A client-side cache of answers from one of our proxy routes, shared by every component on the page.
- * `load` fetches a batch of keys (at most `batch`) and resolves to the value of each. Failures (offline,
- * a 503) are not shown to anyone: callers keep their fallback, and the key is retried a minute later.
+ * `load` fetches a batch of keys (at most `batch`) and resolves to the value of each. Batches go one
+ * at a time, so a page asking for many keys at once does not burst past the service's one request a
+ * second (the proxy turns a burst away). Failures (offline, a 503) are not shown to anyone: callers
+ * keep their fallback, and the key is asked for again later (see useRemote).
  */
 export function createRemote<T>(load: (keys: string[]) => Promise<Map<string, T>>, batch = 1) {
   const entries = new Map<string, Entry<T>>();
   const listeners = new Set<() => void>();
+  const queue: string[][] = [];
+  let busy = false;
   let version = 0;
 
-  function request(keys: string[]): void {
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    const wanted = [...new Set(keys)].filter((key) => {
-      const entry = entries.get(key);
-      return !entry || ("failedAt" in entry && Date.now() - entry.failedAt > RETRY_MS);
-    });
-    for (let i = 0; i < wanted.length; i += batch) {
-      const chunk = wanted.slice(i, i + batch);
-      for (const key of chunk) entries.set(key, { pending: true });
-      load(chunk).then(
+  function next(): void {
+    const chunk = queue.shift();
+    if (!chunk) return void (busy = false);
+    busy = true;
+    load(chunk)
+      .then(
         (values) => {
           for (const key of chunk) {
             const value = values.get(key);
@@ -36,8 +36,23 @@ export function createRemote<T>(load: (keys: string[]) => Promise<Map<string, T>
         () => {
           for (const key of chunk) entries.set(key, { failedAt: Date.now() });
         },
-      );
+      )
+      .finally(next);
+  }
+
+  /** Queues the keys not known yet; failed keys too once they are due, or at once with `retryFailed`. */
+  function request(keys: string[], retryFailed = false): void {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    const wanted = [...new Set(keys)].filter((key) => {
+      const entry = entries.get(key);
+      return !entry || ("failedAt" in entry && (retryFailed || Date.now() - entry.failedAt >= RETRY_MS));
+    });
+    for (let i = 0; i < wanted.length; i += batch) {
+      const chunk = wanted.slice(i, i + batch);
+      for (const key of chunk) entries.set(key, { pending: true });
+      queue.push(chunk);
     }
+    if (!busy) next();
   }
 
   return {
@@ -57,14 +72,24 @@ export function createRemote<T>(load: (keys: string[]) => Promise<Map<string, T>
 export type Remote<T> = ReturnType<typeof createRemote<T>>;
 
 /**
- * Asks for `keys` (when they change) and re-renders as answers arrive. Returns the cache's reader and
- * its version, which changes whenever an answer arrives (for memo dependencies).
+ * Asks for `keys` when they change, again every minute for those that failed, and at once when the
+ * connection returns; re-renders as answers arrive. Returns the cache's reader and its version, which
+ * changes whenever an answer arrives (for memo dependencies).
  */
 export function useRemote<T>(remote: Remote<T>, keys: string[]): { get: (key: string) => T | undefined; version: number } {
   const version = useSyncExternalStore(remote.subscribe, remote.version, remote.version);
   const joined = keys.join("\n");
   useEffect(() => {
-    if (joined) remote.request(joined.split("\n"));
+    if (!joined) return;
+    const list = joined.split("\n");
+    remote.request(list);
+    const retry = setInterval(() => remote.request(list), RETRY_MS);
+    const online = () => remote.request(list, true);
+    window.addEventListener("online", online);
+    return () => {
+      clearInterval(retry);
+      window.removeEventListener("online", online);
+    };
   }, [remote, joined]);
   return { get: remote.get, version };
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
 import { renderIntl, stubFetch } from "./helpers";
 import { fake, newTrip, useFakeTrip } from "./tripHarness";
@@ -46,6 +46,50 @@ describe("travel times", () => {
     expect(within(day1()).getByText("12 min travel")).toBeTruthy();
     // The second stop's arrival follows the routed leg: 09:00, a 45 min stay, then 12 min.
     expect(within(day1()).getByText("around 09:57")).toBeTruthy();
+  });
+
+  it("a trip with five routed days gets road legs for every day, one request at a time", async () => {
+    const { doc, dayIds } = newTrip({ days: 5 });
+    dayIds.forEach((dayId, i) => {
+      addPlace(doc, { name: `Start ${i + 1}`, category: "sight", dayId, lat: 40.5, lng: 27 + i / 10 }, "u1");
+      addPlace(doc, { name: `End ${i + 1}`, category: "sight", dayId, lat: 40.51, lng: 27 + i / 10 }, "u1");
+    });
+    // Like the server's throttle under a burst: a request while another is in flight gets a 503.
+    let inFlight = 0;
+    const fn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (!url.startsWith("/api/route")) return new Response(null, { status: 503 });
+      if (inFlight > 0) return new Response(JSON.stringify({ error: "upstream_unavailable" }), { status: 503 });
+      inFlight++;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight--;
+      return new Response(JSON.stringify({ legs: [{ seconds: 300, meters: 400 }], geometry: { type: "LineString", coordinates: [] } }));
+    });
+    vi.stubGlobal("fetch", fn);
+    renderIntl(<TripScreen tripId="t1" />);
+    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m")).toHaveLength(5));
+    expect(screen.queryAllByTestId("travel-leg").filter((l) => l.textContent?.startsWith("≈"))).toHaveLength(0);
+    // Each day asked once: none turned away.
+    expect(fn.mock.calls.filter(([url]) => String(url).startsWith("/api/route"))).toHaveLength(5);
+  });
+
+  it("routes that could not be asked for offline are asked for when the connection returns", async () => {
+    const coords = twoStops(28.9542);
+    const { fn, calls } = stubFetch({
+      [`GET /api/route?mode=walk&coords=${coords}`]: () => ({ body: { legs: [{ seconds: 840, meters: 1100 }], geometry: { type: "LineString", coordinates: [] } } }),
+    });
+    vi.stubGlobal("fetch", fn);
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      renderIntl(<TripScreen tripId="t1" />);
+      expect(within(day1()).getByTestId("travel-leg").textContent).toMatch(/^≈/);
+      expect(calls).toHaveLength(0);
+      online.mockReturnValue(true);
+      act(() => void window.dispatchEvent(new Event("online")));
+      expect(await within(day1()).findByText("14 min walk · 1.1 km")).toBeTruthy();
+    } finally {
+      online.mockRestore();
+    }
   });
 
   it("approximate legs show ≈", async () => {
