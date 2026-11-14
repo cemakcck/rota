@@ -36,4 +36,28 @@ describe("startServer (production build)", () => {
     expect(res.headers.get("content-type")).toMatch(/javascript/);
     expect((await res.text()).length).toBeGreaterThan(1000);
   });
+
+  it("serves the service worker and the web manifest, and pages link them", async () => {
+    const sw = await fetch(`${server.url}/sw.js`);
+    expect(sw.status).toBe(200);
+    expect(sw.headers.get("content-type")).toMatch(/javascript/);
+    expect(await sw.text()).toContain("rota-pages-");
+
+    const manifest = await fetch(`${server.url}/manifest.webmanifest`);
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type")).toMatch(/^application\/manifest\+json/);
+    expect(await manifest.json()).toMatchObject({ name: "Rota", start_url: "/en/trips", display: "standalone" });
+
+    const offline = await fetch(`${server.url}/offline.html`);
+    expect(offline.status).toBe(200);
+
+    const html = await (await fetch(`${server.url}/en`)).text();
+    expect(html).toMatch(/<link rel="manifest" href="\/manifest.webmanifest"/);
+    // The friend handoff runs before the app renders anything: nothing renders (and so nothing is
+    // requested) without the page's flight data, which inline scripts after it deliver. Next puts its
+    // async chunk scripts ahead of it in <head>; they only define modules.
+    const handoff = html.indexOf("#rota-friend=");
+    expect(handoff).toBeGreaterThan(-1);
+    expect(handoff).toBeLessThan(html.indexOf("self.__next_f"));
+  });
 });

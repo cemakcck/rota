@@ -352,7 +352,8 @@
     "addHere": "Add a place here",
     "addHereHelp": "Right-click or long-press the map to add a place there.",
     "lookingUp": "Looking up the address…",
-    "add": "Add"
+    "add": "Add",
+    "incompleteOffline": "Map may be incomplete offline"
   },
   "categories": {
     "food": "Food",
@@ -384,5 +385,16 @@
       "snow": "Snow",
       "storm": "Thunderstorm"
     }
+  },
+  "demo": {
+    "label": "Demo",
+    "notice": "This is a demo. Demo accounts and trips are deleted after 7 days without activity.",
+    "simulateOffline": "Simulate offline",
+    "tryFriend": "Try it with a friend",
+    "sideBySide": "Side by side",
+    "closeSideBySide": "Close side by side",
+    "friendFailed": "The friend window could not open. Please try again.",
+    "friendWindow": "You're {name} in this window",
+    "friendFrame": "The same trip, signed in as {name}"
   }
 }

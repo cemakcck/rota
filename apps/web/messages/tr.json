@@ -352,7 +352,8 @@
     "addHere": "Buraya bir yer ekle",
     "addHereHelp": "Oraya bir yer eklemek için haritaya sağ tıklayın veya uzun basın.",
     "lookingUp": "Adres aranıyor…",
-    "add": "Ekle"
+    "add": "Ekle",
+    "incompleteOffline": "Harita çevrimdışıyken eksik olabilir"
   },
   "categories": {
     "food": "Yemek",
@@ -384,5 +385,16 @@
       "snow": "Karlı",
       "storm": "Gök gürültülü fırtına"
     }
+  },
+  "demo": {
+    "label": "Demo",
+    "notice": "Bu bir demo. Demo hesapları ve gezileri 7 gün işlem yapılmazsa silinir.",
+    "simulateOffline": "Çevrimdışı simülasyonu",
+    "tryFriend": "Bir arkadaşla dene",
+    "sideBySide": "Yan yana",
+    "closeSideBySide": "Yan yana görünümü kapat",
+    "friendFailed": "Arkadaş penceresi açılamadı. Lütfen tekrar deneyin.",
+    "friendWindow": "Bu pencerede {name} sizsiniz",
+    "friendFrame": "Aynı gezi, {name} olarak oturum açılmış"
   }
 }

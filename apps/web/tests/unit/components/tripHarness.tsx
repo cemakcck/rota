@@ -21,6 +21,8 @@ type Fake = {
   awareness: Awareness;
   /** Awareness states by client id, as presence would publish them (the awareness's own map). */
   states: Map<number, Record<string, unknown>>;
+  /** What the screen passed to `simulateOffline`, in order. */
+  simulated: boolean[];
 };
 
 const listeners = new Set<() => void>();
@@ -40,6 +42,7 @@ export const fake: Fake = {
   ready: true,
   awareness: new Awareness(new Y.Doc()),
   states: new Map(),
+  simulated: [],
 };
 
 /** A fresh trip ("Istanbul long weekend", 27 Nov 2026) with Ann (u1, the user) and Deniz (u2). */
@@ -58,6 +61,7 @@ export function newTrip({ days = 2 }: { days?: number } = {}): { doc: Y.Doc; day
   fake.awareness.destroy();
   fake.awareness = new Awareness(doc);
   fake.states = fake.awareness.states;
+  fake.simulated = [];
   doc.on("update", () => {
     fake.view = readTrip(doc);
     notify();
@@ -129,7 +133,7 @@ export function useFakeTrip(): TripSession {
     ready: fake.ready,
     closed: fake.closed,
     firstOpenOffline: fake.firstOpenOffline,
-    simulateOffline: () => undefined,
+    simulateOffline: (on) => void fake.simulated.push(on),
     awareness: fake.awareness,
     userId: fake.userId,
   };

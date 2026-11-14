@@ -34,6 +34,9 @@ import { useHours } from "@/client/useHours";
 import { useTravels } from "@/client/useTravel";
 import { useWeather } from "@/client/useWeather";
 import { useRouter } from "@/i18n/navigation";
+import { DemoBanner } from "../demo/DemoBanner";
+import type { FriendWindow } from "../demo/FriendButton";
+import { SideBySide } from "../demo/SideBySide";
 import { BottomSheet, type Snap } from "../map/BottomSheet";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
@@ -146,7 +149,7 @@ function TripScreenFor({ tripId }: Props) {
   const tm = useTranslations("map");
   const locale = useLocale();
   const router = useRouter();
-  const { doc, view, status, ready, closed, firstOpenOffline, awareness, userId } = useTrip(tripId);
+  const { doc, view, status, ready, closed, firstOpenOffline, awareness, userId, simulateOffline } = useTrip(tripId);
   // Edits need a known user (they are attributed and undone per person) and a trip that still syncs.
   const editor = closed === null ? userId : null;
   const undo = useUndo(doc, editor);
@@ -158,6 +161,8 @@ function TripScreenFor({ tripId }: Props) {
   // Phones: the full-screen map under the list's sheet, or the list alone.
   const [phoneView, setPhoneView] = useState<"map" | "list">("map");
   const [snap, setSnap] = useState<Snap>("half");
+  // Demo trips on wide screens: the friend's window beside this one.
+  const [friend, setFriend] = useState<FriendWindow | null>(null);
   const tabsId = useId();
   // What was deleted, and the element its Undo puts focus back on.
   const [toast, setToast] = useState<{ name: string; focus: string; at: number } | null>(null);
@@ -316,120 +321,128 @@ function TripScreenFor({ tripId }: Props) {
 
   return (
     <CollabContext.Provider value={collab}>
-      <div className="flex h-dvh flex-col">
-        <Header
-          view={view}
-          status={status}
-          history={undo && { canUndo: undo.canUndo(), canRedo: undo.canRedo(), undo: undo.undo, redo: undo.redo }}
-          onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
-          settings={<TripSettingsScreen tripId={tripId} />}
-          presence={<Presence self={userId ? (self ?? { id: userId, name: "", colour: "" }) : null} peers={peers} members={view.members} />}
-          weather={<WeatherStrip view={view} weather={weather} />}
-        />
-        {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
-        <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
-          {(["list", "map"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={phoneView === v}
-              onClick={() => setPhoneView(v)}
-              className="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-medium text-ink-2 aria-pressed:bg-ink aria-pressed:text-white"
-            >
-              {v === "list" ? tm("showList") : tm("showMap")}
-            </button>
-          ))}
-        </div>
-        <div className="relative grid min-h-0 flex-1 lg:grid-cols-[420px_minmax(0,1fr)]">
-          <BottomSheet off={phoneView === "list"} snap={snap} onSnap={setSnap}>
-            <main
-              id="main"
-              tabIndex={-1}
-              aria-label={t("plan")}
-              className="min-h-0 min-w-0 overflow-y-auto pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
-            >
-              <Tabs
-                id={tabsId}
-                tab={tab}
-                onTab={setTab}
-                labels={{
-                  plan: t("plan"),
-                  checklist: (
-                    <>
-                      {t("checklist")}
-                      {view.checklist.length > 0 && (
-                        <span className="rounded-md bg-line-2 px-1.5 font-mono text-[11.5px]">
-                          {done}/{view.checklist.length}
-                        </span>
-                      )}
-                    </>
-                  ),
-                }}
-              />
-              <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
-                {editor !== null && (
-                  <AddPlace
-                    lists={lists}
-                    full={full}
-                    near={centre}
-                    onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)}
-                    onSuggest={(place) => addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor)}
-                  />
-                )}
-                <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
-                <Itinerary
-                  view={view}
-                  visible={visible}
-                  travel={travel}
-                  warnings={warnings}
-                  weather={weather}
-                  listLabel={(list) => labelIn(view, list)}
-                  dayDate={dayDate}
-                  selectedId={selectedPlaceId}
-                  onSelect={select}
-                  actions={actions}
-                  userId={editor}
-                />
-              </div>
-              <div role="tabpanel" id={`${tabsId}-checklist`} aria-labelledby={`${tabsId}-checklist-tab`} hidden={tab !== "checklist"}>
-                <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
-              </div>
-            </main>
-          </BottomSheet>
-          <section aria-label={t("map")} className={`min-h-0 max-lg:absolute max-lg:inset-0 ${phoneView === "list" ? "max-lg:hidden" : ""}`}>
-            <TripMap
-              view={view}
-              hiddenIds={hiddenIds}
-              selectedDayId={selectedDayId}
-              selectedPlaceId={selectedPlaceId}
-              onSelectDay={setPickedDay}
-              onSelectPlace={selectPin}
-              routeGeometry={routeGeometry}
-              awareness={awareness}
-              userId={userId}
-              add={
-                editor === null || full
-                  ? null
-                  : { lists, reverseGeocode, onAdd: ({ name, category, dayId, lat, lng }) => select(addPlace(doc, { name, category, dayId, lat, lng }, editor)) }
-              }
-              sheet={phoneView === "map" ? snap : null}
-            />
-          </section>
-        </div>
-        {toast && undo && (
-          <UndoToast
-            key={toast.at}
-            name={toast.name}
-            onClose={closeToast}
-            onUndo={() => {
-              undo.undo();
-              setToast(null);
-              requestAnimationFrame(() => document.getElementById(toast.focus)?.focus());
-            }}
+      <SideBySide friend={friend} onClose={() => setFriend(null)}>
+        <div className="flex h-dvh flex-col">
+          <Header
+            view={view}
+            status={status}
+            history={undo && { canUndo: undo.canUndo(), canRedo: undo.canRedo(), undo: undo.undo, redo: undo.redo }}
+            onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
+            settings={<TripSettingsScreen tripId={tripId} />}
+            presence={<Presence self={userId ? (self ?? { id: userId, name: "", colour: "" }) : null} peers={peers} members={view.members} />}
+            weather={<WeatherStrip view={view} weather={weather} />}
           />
-        )}
-        <Announcer doc={doc} userId={userId} awareness={awareness} listLabel={labelIn} />
-      </div>
+          {view.isDemo && <DemoBanner tripId={tripId} simulateOffline={simulateOffline} onSideBySide={setFriend} />}
+          {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
+          <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
+            {(["list", "map"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={phoneView === v}
+                onClick={() => setPhoneView(v)}
+                className="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-medium text-ink-2 aria-pressed:bg-ink aria-pressed:text-white"
+              >
+                {v === "list" ? tm("showList") : tm("showMap")}
+              </button>
+            ))}
+          </div>
+          <div className="relative grid min-h-0 flex-1 lg:grid-cols-[420px_minmax(0,1fr)]">
+            <BottomSheet off={phoneView === "list"} snap={snap} onSnap={setSnap}>
+              <main
+                id="main"
+                tabIndex={-1}
+                aria-label={t("plan")}
+                className="min-h-0 min-w-0 overflow-y-auto pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
+              >
+                <Tabs
+                  id={tabsId}
+                  tab={tab}
+                  onTab={setTab}
+                  labels={{
+                    plan: t("plan"),
+                    checklist: (
+                      <>
+                        {t("checklist")}
+                        {view.checklist.length > 0 && (
+                          <span className="rounded-md bg-line-2 px-1.5 font-mono text-[11.5px]">
+                            {done}/{view.checklist.length}
+                          </span>
+                        )}
+                      </>
+                    ),
+                  }}
+                />
+                <div role="tabpanel" id={`${tabsId}-plan`} aria-labelledby={`${tabsId}-plan-tab`} hidden={tab !== "plan"}>
+                  {editor !== null && (
+                    <AddPlace
+                      lists={lists}
+                      full={full}
+                      near={centre}
+                      onAdd={(place, dayId) => addPlace(doc, { ...place, dayId }, editor)}
+                      onSuggest={(place) => addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor)}
+                    />
+                  )}
+                  <Filters view={view} filter={filter} hidden={hiddenIds.size} onChange={setFilter} />
+                  <Itinerary
+                    view={view}
+                    visible={visible}
+                    travel={travel}
+                    warnings={warnings}
+                    weather={weather}
+                    listLabel={(list) => labelIn(view, list)}
+                    dayDate={dayDate}
+                    selectedId={selectedPlaceId}
+                    onSelect={select}
+                    actions={actions}
+                    userId={editor}
+                  />
+                </div>
+                <div role="tabpanel" id={`${tabsId}-checklist`} aria-labelledby={`${tabsId}-checklist-tab`} hidden={tab !== "checklist"}>
+                  <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
+                </div>
+              </main>
+            </BottomSheet>
+            <section aria-label={t("map")} className={`relative min-h-0 max-lg:absolute max-lg:inset-0 ${phoneView === "list" ? "max-lg:hidden" : ""}`}>
+              <TripMap
+                view={view}
+                hiddenIds={hiddenIds}
+                selectedDayId={selectedDayId}
+                selectedPlaceId={selectedPlaceId}
+                onSelectDay={setPickedDay}
+                onSelectPlace={selectPin}
+                routeGeometry={routeGeometry}
+                awareness={awareness}
+                userId={userId}
+                add={
+                  editor === null || full
+                    ? null
+                    : { lists, reverseGeocode, onAdd: ({ name, category, dayId, lat, lng }) => select(addPlace(doc, { name, category, dayId, lat, lng }, editor)) }
+                }
+                sheet={phoneView === "map" ? snap : null}
+              />
+              {status.kind === "offline" && (
+                <p className="pointer-events-none absolute left-3 top-14 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
+                  {tm("incompleteOffline")}
+                </p>
+              )}
+            </section>
+          </div>
+          {toast && undo && (
+            <UndoToast
+              key={toast.at}
+              name={toast.name}
+              onClose={closeToast}
+              onUndo={() => {
+                undo.undo();
+                setToast(null);
+                requestAnimationFrame(() => document.getElementById(toast.focus)?.focus());
+              }}
+            />
+          )}
+          <Announcer doc={doc} userId={userId} awareness={awareness} listLabel={labelIn} />
+        </div>
+      </SideBySide>
     </CollabContext.Provider>
   );
 }
