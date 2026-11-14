@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -7,13 +8,15 @@ import { closeProviders, liveServerTests, watchForSecondYjs } from "./liveServer
 
 // The same live-server checks against a production build: which packages Next bundles into route
 // handlers differs between `next dev` and `next build`, and a second Yjs copy breaks live edits.
-// The build takes well under a minute.
+// The build takes well under a minute. CI builds once up front and sets ROTA_REUSE_BUILD=1 so this suite
+// and the e2e suite run against that build instead of each building again.
 describe("startServer (production build)", () => {
   let server: RunningServer;
   let yjs: ReturnType<typeof watchForSecondYjs>;
 
   beforeAll(async () => {
-    await promisify(execFile)("npx", ["next", "build"], {
+    const reuse = process.env.ROTA_REUSE_BUILD === "1" && existsSync(`${import.meta.dirname}/../../.next/BUILD_ID`);
+    if (!reuse) await promisify(execFile)("npx", ["next", "build"], {
       cwd: `${import.meta.dirname}/../..`,
       env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
       maxBuffer: 64 * 1024 * 1024,

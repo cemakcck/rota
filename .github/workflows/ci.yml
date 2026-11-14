@@ -14,6 +14,9 @@ jobs:
       DATABASE_URL: postgres://rota:rota@localhost:5434/rota
       # The integration global setup creates rota_test if missing.
       TEST_DATABASE_URL: postgres://rota:rota@localhost:5434/rota_test
+      # Built once by the "Production build" step; the production integration suite and the e2e
+      # server run against it instead of each running `next build` into the same .next.
+      ROTA_REUSE_BUILD: "1"
     services:
       postgres:
         image: postgres:17-alpine
@@ -37,14 +40,14 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: Production build
+        run: npm run build
       - name: Unit and integration tests
         run: npm test
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests
         run: npm run test:e2e -- --pass-with-no-tests
-      - name: Production build
-        run: npm run build
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

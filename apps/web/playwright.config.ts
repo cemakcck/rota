@@ -14,7 +14,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, baseURL: E2E_URL, trace: "retain-on-failure" },
   webServer: {
-    command: "npx next build && npx tsx server.ts",
+    // CI builds once before the test steps and sets ROTA_REUSE_BUILD=1; locally each run builds.
+    command: process.env.ROTA_REUSE_BUILD === "1" ? "npx tsx server.ts" : "npx next build && npx tsx server.ts",
     url: `${E2E_URL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
