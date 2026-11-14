@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import * as Y from "yjs";
 import { readTrip } from "@rota/trip";
 import { db } from "../db/client";
-import { tripInvites, trips, user } from "../db/schema";
+import { tripInvites, tripMembers, trips, user } from "../db/schema";
 import { sendEmail } from "../email";
 import { HttpError } from "../httpError";
 import { addMember, listMembers, loadState } from "./repo";
@@ -25,16 +25,16 @@ function newToken(): string {
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /** A new join link. Any active link for the trip is revoked in the same step (regenerate). */
-export async function createLinkInvite(tripId: string, byUserId: string): Promise<{ token: string }> {
-  const token = newToken();
+export async function createLinkInvite(tripId: string, byUserId: string, token: string = newToken()): Promise<{ token: string }> {
+  const hash = hashToken(token);
   await db.transaction(async (tx) => {
     await tx
       .update(tripInvites)
       .set({ revokedAt: new Date() })
-      .where(and(eq(tripInvites.tripId, tripId), eq(tripInvites.kind, "link"), isNull(tripInvites.revokedAt)));
+      .where(and(eq(tripInvites.tripId, tripId), eq(tripInvites.kind, "link"), isNull(tripInvites.revokedAt), ne(tripInvites.tokenHash, hash)));
     await tx
       .insert(tripInvites)
-      .values({ tripId, kind: "link", tokenHash: hashToken(token), createdBy: byUserId })
+      .values({ tripId, kind: "link", tokenHash: hash, createdBy: byUserId })
       .onConflictDoNothing();
   });
   return { token };
@@ -57,6 +57,12 @@ export async function acceptLink(token: string, userId: string): Promise<{ tripI
     .from(tripInvites)
     .where(and(eq(tripInvites.tokenHash, hashToken(token)), eq(tripInvites.kind, "link"), isNull(tripInvites.revokedAt)));
   if (!invite) throw new HttpError(404, "not_found");
+  // A link never brings back someone the owner removed; only an explicit owner action does.
+  const [removed] = await db
+    .select({ at: tripMembers.removedAt })
+    .from(tripMembers)
+    .where(and(eq(tripMembers.tripId, invite.tripId), eq(tripMembers.userId, userId)));
+  if (removed?.at) throw new HttpError(404, "not_found");
   await addMember(invite.tripId, userId, "member");
   return { tripId: invite.tripId };
 }

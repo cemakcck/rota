@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as createTrip } from "@/app/api/trips/route";
 import { GET as listInvites, POST as postInvite } from "@/app/api/trips/[id]/invites/route";
@@ -6,6 +6,8 @@ import { DELETE as deleteInvite } from "@/app/api/trips/[id]/invites/[inviteId]/
 import { POST as accept } from "@/app/api/invites/[token]/route";
 import { db } from "@/server/db/client";
 import { tripInvites, tripMembers } from "@/server/db/schema";
+import { createLinkInvite } from "@/server/trips/invites";
+import { DELETE as deleteMember } from "@/app/api/trips/[id]/members/[userId]/route";
 import * as email from "@/server/email";
 import { NEW_TRIP, call, signUpUser } from "./helpers";
 
@@ -91,5 +93,32 @@ describe("invites", () => {
     expect(await members(id)).toEqual([ann.id, joiner.id].sort());
     const [invite] = await db.select().from(tripInvites).where(eq(tripInvites.tripId, id));
     expect(invite.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it("a retried link creation (same token) still returns a working token", async () => {
+    const ann = await signUpUser();
+    const id = await newTrip(ann);
+    const token = "R".repeat(43);
+    await createLinkInvite(id, ann.id, token);
+    await createLinkInvite(id, ann.id, token); // the retry after a lost reply
+    const bob = await signUpUser();
+    expect((await call(accept, "POST", bob, { params: { token } })).status).toBe(200);
+  });
+
+  it("an invite link never re-activates a removed member, but an owner email invite does", async () => {
+    const ann = await signUpUser({ name: "Ann" });
+    const bob = await signUpUser({ name: "Bob" });
+    const id = await newTrip(ann);
+    const token = await link(ann, id);
+    await call(accept, "POST", bob, { params: { token } });
+    expect((await call(deleteMember, "DELETE", ann, { params: { id, userId: bob.id } })).status).toBe(204);
+
+    expect((await call(accept, "POST", bob, { params: { token } })).status).toBe(404);
+    const [row] = await db.select().from(tripMembers).where(and(eq(tripMembers.tripId, id), eq(tripMembers.userId, bob.id)));
+    expect(row.removedAt).toBeInstanceOf(Date);
+
+    await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: bob.email } });
+    const [again] = await db.select().from(tripMembers).where(and(eq(tripMembers.tripId, id), eq(tripMembers.userId, bob.id)));
+    expect(again.removedAt).toBeNull();
   });
 });
