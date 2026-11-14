@@ -75,11 +75,14 @@ export function dayTimeline(day: DayView, legs: readonly (Leg | null)[]): Timeli
 
 /**
  * The suggested time for a stop at position `index` of `day`: the previous stop's arrival + stay +
- * travel to the slot (`legs[index - 1]`, unknown = zero). Null when no timed stop comes before.
+ * travel to the slot (`legs[index - 1]`, unknown = zero). Null when no timed stop comes before, or
+ * when that would reach midnight (a suggestion never wraps to the next day).
  * `day` and `legs` describe the day as it is (or will be) around that slot.
  */
 export function suggestTime(day: DayView, legs: readonly (Leg | null)[], index: number): string | null {
   if (index <= 0) return null;
   const previous = spans({ ...day, places: day.places.slice(0, index) }, legs)[index - 1];
-  return previous ? clock(previous.leave + travel(legs[index - 1])) : null;
+  if (!previous) return null;
+  const at = previous.leave + travel(legs[index - 1]);
+  return Math.round(at) < DAY ? clock(at) : null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hoursWarning } from "../src";
+import { closedAllDay, hoursWarning } from "../src";
 
 // 2026-11-16 is a Monday.
 describe("hoursWarning", () => {
@@ -17,6 +17,14 @@ describe("hoursWarning", () => {
       kind: "closes-before",
       at: "17:00",
     });
+  });
+  it("closedAllDay needs only the date: true only when the place does not open that day", () => {
+    expect(closedAllDay("Tu-Su 09:00-17:00", "2026-11-16")).toBe(true);
+    expect(closedAllDay("Tu-Su 09:00-17:00", "2026-11-17")).toBe(false);
+    expect(closedAllDay("Mo-Su 10:00-18:00", "2026-11-16")).toBe(false);
+    expect(closedAllDay("24/7", "2026-11-16")).toBe(false);
+    expect(closedAllDay("not hours at all", "2026-11-16")).toBe(false);
+    expect(closedAllDay("Tu-Su 09:00-17:00", "")).toBe(false);
   });
   it("fits inside opening hours → null", () => {
     expect(hoursWarning("Mo-Su 09:00-17:00", "2026-11-16", "10:00", "11:00", "en")).toBeNull();

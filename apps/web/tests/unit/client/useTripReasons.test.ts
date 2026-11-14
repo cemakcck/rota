@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
-import { addChecklistItem, addPlace, initTrip, newTripId, placeNote, readTrip, setTripMeta } from "@rota/trip";
+import { addChecklistItem, addPlace, createUndo, initTrip, newTripId, placeNote, readTrip, setTripMeta } from "@rota/trip";
 import { PENDING_STALE_MS, recordPending } from "@/client/sync/pending";
 import { forgetTrip } from "@/client/myTrips";
 import { useTrip } from "@/client/sync/useTrip";
@@ -156,7 +156,7 @@ describe("useTrip", () => {
     hook.unmount();
   });
 
-  it("a legacy day's start time moves onto its first stop once the trip loads", async () => {
+  it("a legacy day's start time moves onto its first stop once the trip has synced, and Undo cannot revert it", async () => {
     const id = newTripId();
     const legacy = new Y.Doc();
     initTrip(legacy, { name: "Legacy", startDate: "2026-12-04", days: 1, locale: "en" }, "seed");
@@ -167,10 +167,17 @@ describe("useTrip", () => {
     await idb.whenSynced;
     await idb.destroy();
 
-    const { hook } = await openTrip(id);
+    const { hook, provider } = await openTrip(id);
     await waitFor(() => expect(hook.result.current.ready).toBe(true));
     const doc = hook.result.current.doc;
-    expect(readTrip(doc).days[0].places[0].time).toBe("07:30");
+    const undo = createUndo(doc, "u-ada");
+    // The device copy may be stale: nothing is migrated until the server sync is done.
+    await act(settle);
+    expect(readTrip(doc).days[0].places[0].time).toBeNull();
+    act(() => acknowledge(provider));
+    await waitFor(() => expect(readTrip(doc).days[0].places[0].time).toBe("07:30"));
+    expect(undo.canUndo()).toBe(false);
+    undo.destroy();
     expect(doc.getMap<Y.Map<unknown>>("days").get(day.id)!.has("startTime")).toBe(false);
     hook.unmount();
   });

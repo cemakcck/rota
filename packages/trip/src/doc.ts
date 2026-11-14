@@ -5,6 +5,7 @@ import { keyBetween, planSlot } from "./order";
 import {
   DEFAULT_TRAVEL_MODE,
   isTime,
+  type DayView,
   type Destination,
   type Locale,
   type PlaceStatus,
@@ -12,6 +13,8 @@ import {
   type TravelMode,
   type TripView,
 } from "./schema";
+import { suggestTime } from "./timeline";
+import { estimateLeg, type Leg } from "./travel";
 import { readTrip } from "./view";
 
 // Every mutation is one transaction whose origin is the acting user's id, so
@@ -288,10 +291,20 @@ export function setPlaceTime(doc: Y.Doc, id: string, time: string | null, origin
 }
 
 /**
+ * Origin for migrateDayStart when run on load: no user's undo tracks it, so
+ * nobody's Ctrl+Z brings a day start time back.
+ */
+export const MIGRATION_ORIGIN = "migration";
+
+/** The start time every day got before times were set per stop; never chosen by anyone, so not kept. */
+const LEGACY_DEFAULT_START = "09:00";
+
+/**
  * Moves the start time of days written before times were set per stop onto
  * each day's first stop, when that stop has no time of its own, then deletes
- * it. Writes nothing (no transaction) when there is nothing left to move, so
- * calling it on every load is cheap.
+ * it. The untouched 09:00 default is deleted without setting a time. Writes
+ * nothing (no transaction) when there is nothing left to move, so calling it
+ * on every load is cheap.
  */
 export function migrateDayStart(doc: Y.Doc, origin: string): void {
   const legacy: [string, YRecord][] = [];
@@ -304,10 +317,33 @@ export function migrateDayStart(doc: Y.Doc, origin: string): void {
     for (const [id, day] of legacy) {
       const start = day.get("startTime");
       const first = view.days.find((d) => d.id === id)?.places[0];
-      if (first && first.time === null && isTime(start)) record(places(doc), first.id)?.set("time", start);
+      if (first && first.time === null && isTime(start) && start !== LEGACY_DEFAULT_START) record(places(doc), first.id)?.set("time", start);
       day.delete("startTime");
     }
   }, origin);
+}
+
+/** Straight-line legs between a day's consecutive stops (null where a stop has no pin). */
+function estimatedLegs(day: DayView): (Leg | null)[] {
+  return day.places.slice(1).map((next, i) => {
+    const prev = day.places[i];
+    if (prev.lat === null || prev.lng === null || next.lat === null || next.lng === null) return null;
+    return estimateLeg({ lat: prev.lat, lng: prev.lng }, { lat: next.lat, lng: next.lng }, day.travelMode);
+  });
+}
+
+/**
+ * The time for a timed stop dropped at `index` of `day` (which already holds it there): the
+ * suggested time for that slot, or its old time when there is no suggestion, clamped between the
+ * timed stops before and after it so the order and the times never disagree.
+ */
+function retimeFor(day: DayView, index: number, old: string): string {
+  let time = suggestTime(day, estimatedLegs(day), index) ?? old;
+  const before = day.places.slice(0, index).findLast((p) => p.time !== null)?.time ?? null;
+  const after = day.places.slice(index + 1).find((p) => p.time !== null)?.time ?? null;
+  if (after !== null && time > after) time = after;
+  if (before !== null && time < before) time = before;
+  return time;
 }
 
 /**
@@ -316,12 +352,19 @@ export function migrateDayStart(doc: Y.Doc, origin: string): void {
  * for neighbours whose keys tie at the drop point), so concurrent moves
  * resolve to one winner instead of duplicating. Returns false, changing nothing, if the
  * place or the target day is gone.
+ *
+ * With `retime` (a drag in the UI), a timed stop dropped in a day keeps the
+ * dropped position and gets the time suggested for its new slot (previous
+ * stop's end + estimated travel; its old time when nothing timed comes
+ * before), clamped between the neighbouring timed stops; an untimed stop stays
+ * untimed. All in the same transaction, so it is one undo step.
  */
 export function movePlace(
   doc: Y.Doc,
   id: string,
   to: { dayId: string | null } & Slot,
   origin: string,
+  options: { retime?: boolean } = {},
 ): boolean {
   const place = record(places(doc), id);
   const list = plannedList(readTrip(doc), to.dayId);
@@ -329,6 +372,13 @@ export function movePlace(
   doc.transact(() => {
     place.set("dayId", to.dayId);
     place.set("order", slotKey(places(doc), list.filter((p) => p.id !== id), to));
+    if (!options.retime || to.dayId === null) return;
+    const day = readTrip(doc).days.find((d) => d.id === to.dayId);
+    const index = day?.places.findIndex((p) => p.id === id) ?? -1;
+    const old = day?.places[index]?.time ?? null;
+    if (!day || old === null) return;
+    const time = retimeFor(day, index, old);
+    if (time !== old) place.set("time", time);
   }, origin);
   return true;
 }

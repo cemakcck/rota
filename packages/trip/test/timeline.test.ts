@@ -58,4 +58,10 @@ describe("suggestTime", () => {
     expect(suggestTime(d, [leg(10), leg(15)], 3)).toBe("11:30");
     expect(suggestTime(day([]), [], 0)).toBeNull();
   });
+
+  it("suggestTime is null when the suggestion would pass midnight (no wrap)", () => {
+    expect(suggestTime(day([p("a", 90, "22:00")]), [leg(30)], 1)).toBeNull(); // 24:00
+    expect(suggestTime(day([p("a", 90, "22:00")]), [leg(29)], 1)).toBe("23:59");
+    expect(suggestTime(day([p("a", 600, "20:00"), p("b", 30)]), [leg(10)], 2)).toBeNull();
+  });
 });

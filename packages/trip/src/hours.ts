@@ -57,3 +57,12 @@ export function hoursWarning(
   if (next) return { kind: "opens-later", at: clock(next[0]) };
   return { kind: "closes-before", at: clock(today[today.length - 1][1]) };
 }
+
+/**
+ * Whether a place with these opening hours does not open at all on `date` (the "closed-day" warning),
+ * which needs no time: so an untimed stop can still be warned. False when unparseable or uncertain.
+ */
+export function closedAllDay(openingHours: string, date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  return hoursWarning(openingHours, date, "00:00", "23:59", "en")?.kind === "closed-day";
+}

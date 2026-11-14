@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { addPlace, initTrip, migrateDayStart, readTrip, setPlaceTime, type DayView } from "../src";
+import { addPlace, createUndo, initTrip, migrateDayStart, movePlace, readTrip, setPlaceTime, dayTimeline, type DayView } from "../src";
 
 function trip(days = 1): { doc: Y.Doc; dayId: string } {
   const doc = new Y.Doc();
@@ -140,5 +140,83 @@ describe("times set per stop", () => {
     migrateDayStart(doc, "alice");
     expect(Y.encodeStateVector(doc)).toEqual(before);
     expect(origins).toEqual(["alice"]);
+  });
+
+  it("migrateDayStart drops the untouched 09:00 default without setting a time", () => {
+    const { doc } = trip(2);
+    const [d1, d2] = readTrip(doc).days.map((d) => d.id);
+    const days = doc.getMap<Y.Map<unknown>>("days");
+    days.get(d1)!.set("startTime", "09:00");
+    days.get(d2)!.set("startTime", "09:01");
+    addPlace(doc, { name: "Default day", category: "food", dayId: d1 }, "alice");
+    addPlace(doc, { name: "Chosen day", category: "food", dayId: d2 }, "alice");
+    migrateDayStart(doc, "migration");
+    const view = readTrip(doc);
+    expect(view.days[0].places[0].time).toBeNull();
+    expect(view.days[1].places[0].time).toBe("09:01");
+    expect(days.get(d1)!.has("startTime")).toBe(false);
+    expect(days.get(d2)!.has("startTime")).toBe(false);
+  });
+});
+
+describe("movePlace with retime", () => {
+  function abc() {
+    const { doc, dayId } = trip();
+    const a = addPlace(doc, { name: "A", category: "sight", dayId, stayMinutes: 120, time: "10:00" }, "alice");
+    const c = addPlace(doc, { name: "C", category: "sight", dayId, stayMinutes: 60, time: "11:00" }, "alice");
+    const b = addPlace(doc, { name: "B", category: "sight", dayId, stayMinutes: 30, time: "15:00" }, "alice");
+    const u = addPlace(doc, { name: "U", category: "sight", dayId, stayMinutes: 30 }, "alice");
+    return { doc, dayId, a, b, c, u };
+  }
+
+  it("a timed stop dropped between A and C stays there, clamped to C's time, and C shows late", () => {
+    const { doc, dayId, a, b, c } = abc();
+    expect(names(day0(doc))).toEqual(["A", "C", "B", "U"]);
+    expect(movePlace(doc, b, { dayId, afterId: a }, "alice", { retime: true })).toBe(true);
+    const day = day0(doc);
+    expect(names(day)).toEqual(["A", "B", "C", "U"]);
+    // Suggested 12:00 (A 10:00 + 120 min), clamped to the next timed stop's 11:00.
+    expect(day.places[1].time).toBe("11:00");
+    const timeline = dayTimeline(day, []);
+    expect(timeline.find((e) => e.placeId === c)!.lateBy).toBe(30);
+  });
+
+  it("the retimed drop is one transaction and one undo step", () => {
+    const { doc, dayId, a, b } = abc();
+    const undo = createUndo(doc, "alice");
+    const origins: unknown[] = [];
+    doc.on("afterTransaction", (tr: Y.Transaction) => origins.push(tr.origin));
+    movePlace(doc, b, { dayId, afterId: a }, "alice", { retime: true });
+    expect(origins).toEqual(["alice"]);
+    undo.undo();
+    expect(names(day0(doc))).toEqual(["A", "C", "B", "U"]);
+    expect(day0(doc).places[2].time).toBe("15:00");
+  });
+
+  it("a timed stop takes the suggested time when it fits the slot", () => {
+    const { doc, dayId, b, c } = abc();
+    movePlace(doc, b, { dayId, afterId: c }, "alice", { retime: true });
+    // Nothing timed after: C 11:00 + 60 min.
+    expect(day0(doc).places.map((p) => [p.name, p.time])).toEqual([["A", "10:00"], ["C", "11:00"], ["B", "12:00"], ["U", null]]);
+  });
+
+  it("with no suggestion the old time is kept if it fits, else clamped", () => {
+    const { doc, dayId, a, b, c } = abc();
+    // First in the day: nothing before, so no suggestion; 15:00 is after A's 10:00, clamped to it.
+    movePlace(doc, b, { dayId, beforeId: a }, "alice", { retime: true });
+    expect(day0(doc).places.map((p) => [p.name, p.time]).slice(0, 2)).toEqual([["B", "10:00"], ["A", "10:00"]]);
+    setPlaceTime(doc, c, "09:30", "alice");
+    expect(names(day0(doc))).toEqual(["C", "B", "A", "U"]);
+    // C first again via a drop at the start: no suggestion, 09:30 fits before B, kept.
+    movePlace(doc, c, { dayId, beforeId: null, afterId: null }, "alice", { retime: true });
+    expect(day0(doc).places[0]).toMatchObject({ name: "C", time: "09:30" });
+  });
+
+  it("an untimed stop stays untimed, and without retime the time is untouched", () => {
+    const { doc, dayId, a, b, u } = abc();
+    movePlace(doc, u, { dayId, afterId: a }, "alice", { retime: true });
+    expect(day0(doc).places[1]).toMatchObject({ name: "U", time: null });
+    movePlace(doc, b, { dayId, beforeId: a }, "alice");
+    expect(day0(doc).places[0]).toMatchObject({ name: "B", time: "15:00" });
   });
 });

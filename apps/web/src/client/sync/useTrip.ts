@@ -4,7 +4,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { IndexeddbPersistence, fetchUpdates } from "y-indexeddb";
 import * as Y from "yjs";
-import { migrateDayStart, newId, readTrip, type TripView } from "@rota/trip";
+import { MIGRATION_ORIGIN, migrateDayStart, newId, readTrip, type TripView } from "@rota/trip";
 import { syncToken, useUserId } from "../authClient";
 import { markOfflineCopy, tripDatabaseName } from "../myTrips";
 import {
@@ -374,11 +374,13 @@ export function useTrip(tripId: string): TripSession {
     unsynced: state.unsynced,
   });
   const ready = state.localLoaded && state.hasContent;
-  // Days saved before times were set per stop: their start time becomes the first stop's time, once
-  // the trip has loaded and only by someone who can edit it (the same rule as the screen's editor).
+  // Days saved before times were set per stop: their start time becomes the first stop's time. Only
+  // once the server sync is done (this device's copy may be stale), only by someone who can edit it
+  // (the same rule as the screen's editor), and under an origin no one's undo tracks.
+  const { synced } = state;
   useEffect(() => {
-    if (ready && userId !== null && closed === null) migrateDayStart(doc, userId);
-  }, [ready, doc, userId, closed]);
+    if (ready && synced && userId !== null && closed === null) migrateDayStart(doc, MIGRATION_ORIGIN);
+  }, [ready, synced, doc, userId, closed]);
   return {
     doc,
     provider,
