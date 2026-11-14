@@ -32,6 +32,7 @@ export function AddPlace({
   onSuggest: (place: AddedPlace) => void;
 }) {
   const t = useTranslations("trip");
+  const tm = useTranslations("map");
   const id = useId();
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -129,10 +130,13 @@ export function AddPlace({
           {t("editorNameInvalid")}
         </p>
       )}
-      {full && (
+      {full ? (
         <p id={`${id}-full`} className={hint}>
           <strong className="font-semibold text-ink">{t("full")}</strong> {t("fullHelp")}
         </p>
+      ) : (
+        // The map's own way in (TripMap's AddHere) has no visible control, so it is named here.
+        <p className={hint}>{tm("addHereHelp")}</p>
       )}
     </form>
   );
