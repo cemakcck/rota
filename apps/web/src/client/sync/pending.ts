@@ -6,8 +6,10 @@ import * as Y from "yjs";
 //
 // Every tab keeps its own entry, `rota.pending.<tripId>.<tabId>` = { keys, heartbeat }, and clears only
 // that entry once its connection has the server's acknowledgement; the count is the union over all
-// tabs. A tab that stopped beating (crashed) or said it was closing is adopted by another tab of the
-// trip: that tab loaded the closed tab's edits from IndexedDB, so its own acknowledgement covers them.
+// tabs. Open tabs relay their edits to each other (useTrip's BroadcastChannel), so each tab's document,
+// and so what its provider sends, holds every tab's edits. A tab that stopped beating (frozen, crashed),
+// said it was closing, or cannot sync is adopted by a tab with a provider: that tab first re-reads
+// IndexedDB into its document, then takes the records over, so its next acknowledgement covers them.
 
 export const PENDING_HEARTBEAT_MS = 5000;
 /** Hidden tabs' timers may run only once a minute, so a tab is presumed gone only after 3 minutes without a beat. */
@@ -130,6 +132,16 @@ export function clearPending(tripId: string, tabId: string): void {
   } catch {
     // Storage blocked.
   }
+}
+
+/** True if another tab's entry is stale (or unreadable) and so waits to be adopted. */
+export function hasStalePending(tripId: string, tabId: string, now: number = Date.now()): boolean {
+  const own = prefix(tripId) + tabId;
+  return storageKeys(tripId).some((key) => {
+    if (key === own) return false;
+    const entry = readEntry(key);
+    return !entry || now - entry.heartbeat > PENDING_STALE_MS;
+  });
 }
 
 /** Takes over the records of tabs that stopped beating (and drops unreadable entries). */

@@ -2,7 +2,7 @@
 
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useCallback, useEffect, useReducer, useState } from "react";
-import { IndexeddbPersistence } from "y-indexeddb";
+import { IndexeddbPersistence, fetchUpdates } from "y-indexeddb";
 import * as Y from "yjs";
 import { newId, readTrip, type TripView } from "@rota/trip";
 import { syncToken, useUserId } from "../authClient";
@@ -13,6 +13,7 @@ import {
   changedRecords,
   clearPending,
   closePending,
+  hasStalePending,
   heartbeatPending,
   isPendingStorageKey,
   pendingCount,
@@ -39,6 +40,9 @@ export type TripSession = {
   /** Null when the user is not known (e.g. a friend window before its token): the UI blocks edits. */
   userId: string | null;
 };
+
+/** Origin of updates relayed from another open tab of the same trip. */
+export const TAB_ORIGIN = "tab";
 
 /** How long to wait for IndexedDB before syncing without a local copy (blocked or broken storage). */
 export const LOCAL_OPEN_TIMEOUT_MS = 3000;
@@ -167,21 +171,47 @@ export function useTrip(tripId: string): TripSession {
     let frame: number | null = null;
 
     const recount = () => dispatch({ type: "unsynced", unsynced: pendingCount(tripId) });
-    // Records left by tabs that closed before the server had them become this tab's to deliver.
-    const adopt = () => {
-      adoptStalePending(tripId, tabId);
-      heartbeatPending(tripId, tabId);
-      recount();
+    // Open tabs of the trip relay their edits to each other, so every tab's provider sends everything.
+    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(`rota-trip-${tripId}`);
+    const onRelayed = ({ data }: MessageEvent) => {
+      if (ArrayBuffer.isView(data)) Y.applyUpdate(doc, new Uint8Array(data.buffer, data.byteOffset, data.byteLength), TAB_ORIGIN);
     };
-    adopt();
-    const beat = setInterval(adopt, PENDING_HEARTBEAT_MS);
+
+    /**
+     * Records left by tabs that stopped beating become this tab's to deliver. IndexedDB is read again
+     * first, so this document (which its provider sends) holds whatever such a tab stored there, and the
+     * records are adopted only then: the next acknowledgement covers them.
+     */
+    let adopting = false;
+    const adopt = async () => {
+      if (adopting || !provider || !hasStalePending(tripId, tabId)) return;
+      adopting = true;
+      try {
+        if (local) await fetchUpdates(local);
+        if (disposed) return;
+        adoptStalePending(tripId, tabId);
+        recount();
+        acknowledged();
+      } finally {
+        adopting = false;
+      }
+    };
+    const beat = () => {
+      // A tab that cannot sync (no provider, e.g. a friend window waiting for its token) never delivers
+      // its records, so they stay adoptable by a tab that can.
+      if (provider) heartbeatPending(tripId, tabId);
+      else closePending(tripId, tabId);
+      recount();
+      void adopt();
+    };
+    const beating = setInterval(beat, PENDING_HEARTBEAT_MS);
     const onStorage = (event: StorageEvent) => {
       if (isPendingStorageKey(tripId, event.key)) recount();
     };
     window.addEventListener("storage", onStorage);
     // Hidden tabs beat rarely: beat as soon as one is shown again, and say so when it is closing.
     const onClosing = () => closePending(tripId, tabId);
-    document.addEventListener("visibilitychange", adopt);
+    document.addEventListener("visibilitychange", beat);
     window.addEventListener("pagehide", onClosing);
 
     /** The server has everything this tab sent: its own records are no longer waiting. */
@@ -192,15 +222,17 @@ export function useTrip(tripId: string): TripSession {
     };
 
     const onTransaction = (transaction: Y.Transaction) => {
-      // Updates from the server or from the local copy are not this device's changes.
-      if (transaction.origin === provider || transaction.origin === local) return;
+      // Updates from the server, the local copy or another tab are not this tab's changes.
+      const { origin } = transaction;
+      if (origin === provider || origin === local || origin === TAB_ORIGIN) return;
       const records = changedRecords(transaction);
       if (records.length === 0) return;
-      recordPending(tripId, tabId, records);
+      recordPending(tripId, tabId, records, provider ? Date.now() : 0);
       recount();
     };
 
-    const onUpdate = () => {
+    const onUpdate = (update: Uint8Array, origin: unknown) => {
+      if (channel && origin !== provider && origin !== local && origin !== TAB_ORIGIN) channel.postMessage(update);
       if (frame !== null) return;
       frame = requestAnimationFrame(() => {
         frame = null;
@@ -219,9 +251,10 @@ export function useTrip(tripId: string): TripSession {
       if (disposed) return;
       doc.on("update", onUpdate);
       doc.on("afterTransaction", onTransaction);
+      channel?.addEventListener("message", onRelayed);
       dispatch({ type: "local-loaded", view: readTrip(doc), hasContent: hasContent(doc) });
       // A friend window without its token yet must not connect with the visitor's cookie.
-      if (token === null) return;
+      if (token === null) return beat();
       provider = new HocuspocusProvider({ url: wsUrl("/sync"), name: tripId, document: doc, token });
       provider.on("status", ({ status }: { status: string }) => dispatch({ type: "connected", connected: status === "connected" }));
       provider.on("synced", ({ state: synced }: { state: boolean }) => {
@@ -234,6 +267,7 @@ export function useTrip(tripId: string): TripSession {
       // Refusals after authentication arrive as a close reason (code 4403, or Hocuspocus' reset 4205).
       provider.on("close", ({ event }: { event: { reason: string } }) => close(event.reason));
       dispatch({ type: "provider", provider });
+      beat();
     };
 
     localStorageWorks().then((works) => {
@@ -253,9 +287,10 @@ export function useTrip(tripId: string): TripSession {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("storage", onStorage);
-      document.removeEventListener("visibilitychange", adopt);
+      document.removeEventListener("visibilitychange", beat);
       window.removeEventListener("pagehide", onClosing);
-      clearInterval(beat);
+      clearInterval(beating);
+      channel?.close();
       if (frame !== null) cancelAnimationFrame(frame);
       doc.off("update", onUpdate);
       doc.off("afterTransaction", onTransaction);

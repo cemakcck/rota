@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { addChecklistItem, addPlace, initTrip, newTripId, placeNote, readTrip, setTripMeta } from "@rota/trip";
-import { PENDING_STALE_MS } from "@/client/sync/pending";
+import { PENDING_STALE_MS, recordPending } from "@/client/sync/pending";
 import { forgetTrip } from "@/client/myTrips";
 import { useTrip } from "@/client/sync/useTrip";
 
@@ -23,9 +23,14 @@ const { StubProvider } = await vi.hoisted(async () => {
     disconnects = 0;
     /** The trip's name as it was in the document when the provider was attached. */
     nameAtAttach: string;
+    /** Like the real provider: every update it did not apply itself is sent and waits for the server's ack. */
+    private countUnsynced = (_update: Uint8Array, origin: unknown) => {
+      if (origin !== this) this.unsyncedChanges++;
+    };
     constructor(readonly configuration: ProviderConfig) {
       super();
       this.nameAtAttach = readTrip(configuration.document).name;
+      configuration.document.on("update", this.countUnsynced);
       StubProvider.made.push(this);
     }
     connect() {
@@ -35,6 +40,7 @@ const { StubProvider } = await vi.hoisted(async () => {
       this.disconnects++;
     }
     destroy() {
+      this.configuration.document.off("update", this.countUnsynced);
       this.removeAllListeners();
     }
   }
@@ -62,6 +68,7 @@ async function seedLocalTrip(name: string): Promise<string> {
 function acknowledge(provider: InstanceType<typeof StubProvider>) {
   provider.emit("status", { status: "connected" });
   provider.synced = true;
+  provider.unsyncedChanges = 0;
   provider.emit("synced", { state: true });
   provider.emit("unsyncedChanges", { number: 0 });
 }
@@ -74,6 +81,12 @@ async function openTrip(id: string) {
   expect(provider.configuration.name).toBe(id);
   return { hook, provider };
 }
+
+/** This trip's pending entries in localStorage, one per tab. */
+const pendingEntries = (tripId: string): { keys: string[]; heartbeat: number }[] =>
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(`rota.pending.${tripId}.`))
+    .map((k) => JSON.parse(localStorage.getItem(k)!));
 
 const databaseNames = async () => (await indexedDB.databases()).map((d) => d.name);
 
@@ -308,6 +321,87 @@ describe("useTrip", () => {
     const reopened = await openTrip(id);
     expect(reopened.hook.result.current.status.pending).toBe(1);
     reopened.hook.unmount();
+  });
+
+  it("open tabs share edits: a closing tab's offline edits reach the other tab, whose ack covers them", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const a = await openTrip(id);
+    const b = await openTrip(id);
+    act(() => acknowledge(a.provider));
+
+    act(() => b.hook.result.current.simulateOffline(true));
+    act(() => {
+      setTripMeta(b.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+    });
+    // Tab A gets B's edit over the channel, as a change from another tab: not A's own pending change.
+    await waitFor(() => expect(a.hook.result.current.view.name).toBe("Lisbon and Porto"));
+    expect(a.provider.unsyncedChanges).toBe(1);
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.x` }));
+    });
+    expect(a.hook.result.current.status.pending).toBe(1);
+
+    // B closes; A adopts B's records at its next beat, and they wait for A's ack.
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    b.hook.unmount();
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    // Adopted: B's closed entry (heartbeat 0) is gone and A's own, live entry holds its records.
+    await waitFor(() => expect(pendingEntries(id).map((e) => e.heartbeat > 0)).toEqual([true]));
+    expect(a.hook.result.current.status.pending).toBe(1);
+    act(() => acknowledge(a.provider));
+    expect(a.hook.result.current.status.pending).toBe(0);
+    expect(readTrip(a.provider.configuration.document).name).toBe("Lisbon and Porto");
+    a.hook.unmount();
+  });
+
+  it("before adopting, a tab re-reads IndexedDB, and only an ack after that clears the adopted records", async () => {
+    const id = await seedLocalTrip("Lisbon");
+    const a = await openTrip(id);
+    act(() => acknowledge(a.provider));
+
+    // Another tab wrote to IndexedDB without the channel (e.g. it was frozen), then went stale.
+    const other = new Y.Doc();
+    const idb = new IndexeddbPersistence(`rota-trip-${id}`, other);
+    await idb.whenSynced;
+    setTripMeta(other, { name: "Lisbon and Porto" }, "u-ada");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await idb.destroy();
+    recordPending(id, "frozen-tab", ["meta"], 0);
+    expect(a.hook.result.current.view.name).toBe("Lisbon");
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(readTrip(a.provider.configuration.document).name).toBe("Lisbon and Porto"));
+    await waitFor(() => expect(localStorage.getItem(`rota.pending.${id}.frozen-tab`)).toBeNull());
+    // Re-read content went to the server but is not acknowledged yet.
+    expect(a.hook.result.current.status.pending).toBe(1);
+    act(() => acknowledge(a.provider));
+    expect(a.hook.result.current.status.pending).toBe(0);
+    a.hook.unmount();
+  });
+
+  it("a tab that cannot sync (friend window waiting for its token) leaves its changes adoptable", async () => {
+    window.history.replaceState(null, "", "/en/trips/x?friend=1");
+    try {
+      const id = await seedLocalTrip("Lisbon");
+      const hook = renderHook(() => useTrip(id));
+      await waitFor(() => expect(hook.result.current.ready).toBe(true));
+      act(() => {
+        setTripMeta(hook.result.current.doc, { name: "Lisbon and Porto" }, "u-deniz");
+      });
+      const entries = pendingEntries(id);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].heartbeat).toBe(0);
+      expect(hook.result.current.status.pending).toBe(1);
+      hook.unmount();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("a friend window waits for its token instead of syncing as the visitor", async () => {
