@@ -10,9 +10,9 @@ type Routed = { legs: { seconds: number; meters: number }[]; geometry: GeoJSON.L
 /** The route service takes at most 25 points per request. */
 const MAX_POINTS = 25;
 
-const routes = createRemote<Routed>(async ([key]) => {
+const routes = createRemote<Routed>(async ([key], signal) => {
   const [mode, coords] = key.split("|");
-  return new Map([[key, await getJson<Routed>(`/api/route?mode=${mode}&coords=${coords}`, apiFetch)]]);
+  return new Map([[key, await getJson<Routed>(`/api/route?mode=${mode}&coords=${coords}`, apiFetch, signal)]]);
 });
 
 type Point = { lat: number; lng: number };

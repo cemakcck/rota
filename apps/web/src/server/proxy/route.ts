@@ -8,7 +8,8 @@ type OsrmResponse = { code?: string; routes?: { geometry?: GeoJSON.LineString; l
 const PROFILES: Record<TravelMode, string> = { walk: "routed-foot", drive: "routed-car" };
 const osrm = throttled("osrm");
 // Full road geometry can run to hundreds of KB for a long drive, so the cache is capped by size too.
-const routes = createCache<RouteResult>(2000, 24 * 3600 * 1000, { maxBytes: 32 * 1024 * 1024, sizeOf: (r) => JSON.stringify(r).length });
+// The cap measures each route's JSON length, not its heap size (parsed coordinates take more).
+const routes = createCache<RouteResult>(2000, 24 * 3600 * 1000, { maxBytes: 16 * 1024 * 1024, sizeOf: (r) => JSON.stringify(r).length });
 
 /** Travel between consecutive points along roads or paths (FOSSGIS OSRM), as `[lng, lat]` pairs. */
 export async function routeBetween(mode: TravelMode, coords: [number, number][]): Promise<RouteResult> {

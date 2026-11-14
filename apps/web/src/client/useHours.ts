@@ -7,8 +7,8 @@ import { createRemote, getJson, useRemote } from "./remote";
 export type StopWarning = { warning: HoursWarning; date: string; arrive: string };
 
 // One request per batch of up to 25 OSM ids; each id's hours are kept on their own.
-const hours = createRemote<string | null>(async (ids) => {
-  const body = await getJson<{ hours: Record<string, string | null> }>(`/api/hours?ids=${ids.join(",")}`, apiFetch);
+const hours = createRemote<string | null>(async (ids, signal) => {
+  const body = await getJson<{ hours: Record<string, string | null> }>(`/api/hours?ids=${ids.join(",")}`, apiFetch, signal);
   return new Map(ids.map((id) => [id, body.hours[id] ?? null]));
 }, 25);
 

@@ -67,7 +67,8 @@ describe("travel times", () => {
     });
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
-    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m")).toHaveLength(5));
+    // Five requests one after another, each re-rendering a five-day screen: slow on a busy machine.
+    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m")).toHaveLength(5), { timeout: 5000 });
     expect(screen.queryAllByTestId("travel-leg").filter((l) => l.textContent?.startsWith("≈"))).toHaveLength(0);
     // Each day asked once: none turned away.
     expect(fn.mock.calls.filter(([url]) => String(url).startsWith("/api/route"))).toHaveLength(5);

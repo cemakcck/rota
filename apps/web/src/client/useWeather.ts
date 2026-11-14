@@ -11,9 +11,9 @@ type Forecast = { days: DayForecast[]; availableFrom: string | null };
 /** How many days ahead a date's forecast appears (the proxy asks up to today + 14, see server/proxy/weather.ts). */
 const LEAD_DAYS = 14;
 
-const forecasts = createRemote<Forecast>(async ([key]) => {
+const forecasts = createRemote<Forecast>(async ([key], signal) => {
   const [lat, lng, start, end] = key.split(",");
-  return new Map([[key, await getJson<Forecast>(`/api/weather?lat=${lat}&lng=${lng}&start=${start}&end=${end}`, apiFetch)]]);
+  return new Map([[key, await getJson<Forecast>(`/api/weather?lat=${lat}&lng=${lng}&start=${start}&end=${end}`, apiFetch, signal)]]);
 });
 
 /**
