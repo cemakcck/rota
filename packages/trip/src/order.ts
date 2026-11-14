@@ -1,4 +1,4 @@
-import { generateKeyBetween } from "fractional-indexing";
+import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 
 /** An order key strictly between `a` and `b` (null = open end). Requires a < b. */
 export function keyBetween(a: string | null, b: string | null): string {
@@ -24,14 +24,22 @@ export function isOrderKey(key: unknown): key is string {
 }
 
 /**
- * A key placing an item between neighbours `prev` and `next` of an already
- * sorted list. Concurrent inserts can leave neighbours with equal keys; then
- * no key fits strictly between, so the item goes just after the tied group.
+ * Keys for dropping an item at position `at` of a list sorted by compareOrder.
+ * Concurrent appends give equal keys, and no key fits strictly between equal
+ * keys; so when the drop point splits a tied group, the tied items after it
+ * get fresh keys too (`rekey`, to write in the same transaction). Each is a
+ * single last-writer-wins field on one record, so nothing can duplicate.
  */
-export function keyForSlot(sorted: readonly string[], prev: string | null, next: string | null): string {
-  if (prev !== null && next !== null && prev >= next) {
-    const after = sorted.find((k) => k > prev) ?? null;
-    return keyBetween(prev, after);
-  }
-  return keyBetween(prev, next);
+export function planSlot(
+  sorted: readonly { id: string; order: string }[],
+  at: number,
+): { key: string; rekey: { id: string; order: string }[] } {
+  const prev = sorted[at - 1]?.order ?? null;
+  const next = sorted[at]?.order ?? null;
+  if (prev === null || next === null || prev < next) return { key: keyBetween(prev, next), rekey: [] };
+  let end = at;
+  while (end < sorted.length && sorted[end].order <= prev) end++;
+  const tied = sorted.slice(at, end);
+  const [key, ...rest] = generateNKeysBetween(prev, sorted[end]?.order ?? null, tied.length + 1);
+  return { key, rekey: tied.map((item, i) => ({ id: item.id, order: rest[i] })) };
 }

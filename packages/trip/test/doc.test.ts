@@ -9,6 +9,7 @@ import {
   newId,
   newTripId,
   readTrip,
+  updatePlace,
   vote,
 } from "../src";
 
@@ -20,17 +21,20 @@ function trip(days = 2): Y.Doc {
 
 describe("trip document", () => {
   it("readTrip skips a malformed place instead of throwing", () => {
+    // Only a place that cannot be put in any list (no valid order key) is
+    // skipped; anything else is shown with defaults so no one's work vanishes.
     const doc = trip();
     const dayId = readTrip(doc).days[0].id;
     addPlace(doc, { name: "Galata Tower", lat: 41.0256, lng: 28.9741, category: "sight", dayId }, "u1");
     const places = doc.getMap<Y.Map<unknown>>("places");
     doc.transact(() => {
-      const noName = new Y.Map<unknown>();
-      noName.set("category", "food");
-      noName.set("order", "a5");
-      noName.set("dayId", dayId);
-      noName.set("status", "planned");
-      places.set("noname", noName);
+      const badOrder = new Y.Map<unknown>();
+      badOrder.set("name", "Unplaceable");
+      badOrder.set("category", "food");
+      badOrder.set("order", 42);
+      badOrder.set("dayId", dayId);
+      badOrder.set("status", "planned");
+      places.set("badorder", badOrder);
       const badCoords = new Y.Map<unknown>();
       badCoords.set("name", "Nowhere");
       badCoords.set("lat", Number.NaN);
@@ -44,7 +48,26 @@ describe("trip document", () => {
     });
     let view!: ReturnType<typeof readTrip>;
     expect(() => (view = readTrip(doc))).not.toThrow();
-    expect(view.days[0].places.map((p) => p.name)).toEqual(["Galata Tower"]);
+    expect(view.days[0].places.map((p) => p.name)).toEqual(["Galata Tower", "Nowhere"]);
+    expect(view.days[0].places[1]).toMatchObject({ lat: null, lng: null });
+    expect(view.placeCount).toBe(2);
+  });
+
+  it("a blank name never hides a place", () => {
+    const doc = trip();
+    const dayId = readTrip(doc).days[0].id;
+    expect(() => addPlace(doc, { name: "   ", category: "food", dayId }, "u1")).toThrow();
+    const id = addPlace(doc, { name: "  Karaköy Lokantası ", category: "food", dayId }, "u1");
+    updatePlace(doc, id, { name: "", stayMinutes: 50 }, "u1");
+    updatePlace(doc, id, { name: "  \t" }, "u1");
+    let place = readTrip(doc).days[0].places[0];
+    expect(place).toMatchObject({ id, name: "Karaköy Lokantası", stayMinutes: 50 });
+
+    // Written by an older or broken client: still listed, with an empty name.
+    doc.getMap<Y.Map<unknown>>("places").get(id)!.delete("name");
+    const view = readTrip(doc);
+    place = view.days[0].places[0];
+    expect(place).toMatchObject({ id, name: "" });
     expect(view.placeCount).toBe(1);
   });
 

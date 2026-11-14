@@ -83,16 +83,19 @@ function readVotes(value: unknown): Record<string, 1 | -1> {
   return votes;
 }
 
-/** A place, or null if it is too malformed to show. */
+/**
+ * A place, or null only if it cannot be put in any list (no valid order key).
+ * Anything else malformed is defaulted so no one's work becomes invisible:
+ * a missing/blank name reads as "" (the UI shows a fallback label), and
+ * coordinates that are not a finite pair read as unpinned.
+ */
 function readPlace(id: string, m: YRecord): PlaceView | null {
-  const name = m.get("name");
-  if (typeof name !== "string" || !name.trim()) return null;
-  const lat = m.get("lat") ?? null;
-  const lng = m.get("lng") ?? null;
-  const unpinned = lat === null && lng === null;
-  if (!unpinned && !(finite(lat) && finite(lng))) return null;
   const order = m.get("order");
   if (!isOrderKey(order)) return null;
+  const name = str(m.get("name"))?.trim() ?? "";
+  const lat = m.get("lat");
+  const lng = m.get("lng");
+  const pinned = finite(lat) && finite(lng);
 
   const rawCategory = m.get("category");
   const category = isCategory(rawCategory) ? rawCategory : "other";
@@ -105,8 +108,8 @@ function readPlace(id: string, m: YRecord): PlaceView | null {
   return {
     id,
     name,
-    lat: unpinned ? null : (lat as number),
-    lng: unpinned ? null : (lng as number),
+    lat: pinned ? lat : null,
+    lng: pinned ? lng : null,
     osmId: str(m.get("osmId")),
     address: str(m.get("address")),
     category,
@@ -140,7 +143,10 @@ function sortedDays(doc: Y.Doc): [string, YRecord][] {
   );
 }
 
-/** A plain snapshot of the trip. Never throws: malformed entries are skipped or defaulted. */
+/**
+ * A plain snapshot of the trip. Never throws: malformed entries are defaulted,
+ * and skipped only when they cannot be placed (non-map values, invalid order keys).
+ */
 export function readTrip(doc: Y.Doc): TripView {
   const meta = doc.getMap<unknown>("meta");
   const startDate = str(meta.get("startDate")) ?? "";

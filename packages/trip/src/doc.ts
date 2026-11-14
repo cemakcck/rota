@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { DEFAULT_STAY_MINUTES, normaliseTags, type Category } from "./categories";
 import { newId } from "./ids";
-import { keyBetween, keyForSlot } from "./order";
+import { keyBetween, planSlot } from "./order";
 import {
   DEFAULT_START_TIME,
   DEFAULT_TRAVEL_MODE,
@@ -66,14 +66,19 @@ function appendKey(orders: readonly string[]): string {
   return keyBetween(maxKey(orders), null);
 }
 
-/** Key for `slot` within a list already sorted by compareOrder. */
-function slotKey(sorted: readonly { id: string; order: string }[], slot: Slot): string {
+/**
+ * Order key for `slot` within `sorted` (a list sorted by compareOrder, without
+ * the item being placed). Call inside a transaction: tied neighbours in
+ * `container` may be given fresh keys so the item lands exactly where asked.
+ */
+function slotKey(container: Y.Map<unknown>, sorted: readonly { id: string; order: string }[], slot: Slot): string {
   const indexOf = (id: string | null | undefined) => (typeof id === "string" ? sorted.findIndex((x) => x.id === id) : -1);
   const after = indexOf(slot.afterId);
   const before = indexOf(slot.beforeId);
   const at = after >= 0 ? after + 1 : before >= 0 ? before : slot.afterId === null ? 0 : sorted.length;
-  const orders = sorted.map((x) => x.order);
-  return keyForSlot(orders, orders[at - 1] ?? null, orders[at] ?? null);
+  const { key, rekey } = planSlot(sorted, at);
+  for (const { id, order } of rekey) record(container, id)?.set("order", order);
+  return key;
 }
 
 /** The sorted planned list for `dayId` (null = Ideas); null if that day is gone. */
@@ -175,15 +180,20 @@ export function setDay(doc: Y.Doc, dayId: string, patch: DayPatch, origin: strin
   }, origin);
 }
 
-/** Adds a place at the end of its list (a day, Ideas, or Suggestions); returns its id. */
+/**
+ * Adds a place at the end of its list (a day, Ideas, or Suggestions); returns
+ * its id. The name is trimmed; a blank name throws.
+ */
 export function addPlace(doc: Y.Doc, input: NewPlace, origin: string): string {
+  const name = input.name.trim();
+  if (!name) throw new Error("A place needs a name");
   const id = newId();
   const status = input.status ?? "planned";
   // A planned place for a day that no longer exists goes to Ideas.
   const dayId = status === "planned" && !dayExists(doc, input.dayId) ? null : input.dayId;
   doc.transact(() => {
     const place = new Y.Map<unknown>();
-    place.set("name", input.name);
+    place.set("name", name);
     place.set("lat", input.lat ?? null);
     place.set("lng", input.lng ?? null);
     place.set("osmId", input.osmId ?? null);
@@ -203,11 +213,13 @@ export function addPlace(doc: Y.Doc, input: NewPlace, origin: string): string {
   return id;
 }
 
+/** Edits a place. A blank name is ignored (the rest of the patch still applies). */
 export function updatePlace(doc: Y.Doc, id: string, patch: PlacePatch, origin: string): void {
   const place = record(places(doc), id);
   if (!place) return;
   doc.transact(() => {
-    if (patch.name !== undefined) place.set("name", patch.name);
+    const name = patch.name?.trim();
+    if (name) place.set("name", name);
     if (patch.category !== undefined) place.set("category", patch.category);
     if (patch.tags !== undefined) place.set("tags", normaliseTags(patch.tags));
     if (patch.stayMinutes !== undefined && Number.isFinite(patch.stayMinutes)) {
@@ -218,8 +230,9 @@ export function updatePlace(doc: Y.Doc, id: string, patch: PlacePatch, origin: s
 
 /**
  * Moves a place to a day (or Ideas when `dayId` is null) next to the given
- * neighbours. Writes only `dayId` and `order`, so concurrent moves resolve to
- * one winner instead of duplicating. Returns false, changing nothing, if the
+ * neighbours. Writes only the place's `dayId` and `order` (plus fresh `order`s
+ * for neighbours whose keys tie at the drop point), so concurrent moves
+ * resolve to one winner instead of duplicating. Returns false, changing nothing, if the
  * place or the target day is gone.
  */
 export function movePlace(
@@ -233,7 +246,7 @@ export function movePlace(
   if (!place || !list) return false;
   doc.transact(() => {
     place.set("dayId", to.dayId);
-    place.set("order", slotKey(list.filter((p) => p.id !== id), to));
+    place.set("order", slotKey(places(doc), list.filter((p) => p.id !== id), to));
   }, origin);
   return true;
 }
@@ -317,7 +330,7 @@ export function moveChecklistItem(doc: Y.Doc, id: string, to: Slot, origin: stri
   const item = record(checklist(doc), id);
   if (!item) return false;
   const list = readTrip(doc).checklist.filter((i) => i.id !== id);
-  doc.transact(() => item.set("order", slotKey(list, to)), origin);
+  doc.transact(() => item.set("order", slotKey(checklist(doc), list, to)), origin);
   return true;
 }
 

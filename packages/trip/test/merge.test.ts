@@ -5,6 +5,7 @@ import {
   addPlace,
   deletePlace,
   initTrip,
+  moveChecklistItem,
   movePlace,
   placeNote,
   readTrip,
@@ -124,11 +125,35 @@ describe("merging concurrent edits", () => {
     expect(ids).toHaveLength(3);
     expect(ids.slice(1)).toEqual([fromA, fromB].sort());
 
-    // No key fits strictly between two equal keys, so a move "between" the tied
-    // pair must not throw; it lands right after the tied group.
-    const later = addPlace(a, { name: "Later", category: "other", dayId: null }, "alice");
-    expect(movePlace(a, later, { dayId: d1, afterId: ids[1], beforeId: ids[2] }, "alice")).toBe(true);
-    expect(readTrip(a).days[0].places.map((p) => p.id)).toEqual([...ids, later]);
+    // Dropping a place between the tied pair lands it between them (the tied
+    // neighbour gets a fresh key in the same transaction), on both replicas.
+    const between = addPlace(a, { name: "Between", category: "other", dayId: null }, "alice");
+    expect(movePlace(a, between, { dayId: d1, afterId: ids[1], beforeId: ids[2] }, "alice")).toBe(true);
+    sync(a, b);
+    expect(readTrip(a).days[0].places.map((p) => p.id)).toEqual([ids[0], ids[1], between, ids[2]]);
+    expect(readTrip(b)).toEqual(readTrip(a));
+  });
+
+  it("an item dropped into a group of three tied checklist items lands where asked", () => {
+    const a = trip();
+    const b = replica(a);
+    const c = replica(a);
+    const items = [
+      addChecklistItem(a, "Passports", "alice"),
+      addChecklistItem(b, "Tickets", "bob"),
+      addChecklistItem(c, "Adapter", "carol"),
+    ];
+    sync(a, b);
+    sync(a, c);
+    sync(a, b);
+    const tied = readTrip(a).checklist;
+    expect(new Set(tied.map((i) => i.order)).size).toBe(1);
+    const ids = tied.map((i) => i.id);
+
+    const sunscreen = addChecklistItem(a, "Sunscreen", "alice");
+    expect(moveChecklistItem(a, sunscreen, { afterId: ids[0], beforeId: ids[1] }, "alice")).toBe(true);
+    expect(readTrip(a).checklist.map((i) => i.id)).toEqual([ids[0], sunscreen, ids[1], ids[2]]);
+    expect(items.every((id) => readTrip(a).checklist.some((i) => i.id === id))).toBe(true);
   });
 
   it("concurrent edits to one note keep both", () => {
@@ -205,7 +230,9 @@ describe("merging concurrent edits", () => {
     expect(view.days.map((d) => d.id)).not.toContain(d2);
     expect(view.days.map((d) => d.date)).toEqual(["2026-11-30", "2026-12-01"]);
     expect(view.days[0].id).toBe(d1);
-    expect(view.ideas.slice(0, 3).map((p) => p.id)).toEqual([idea, p1, p2]);
+    // Bob's late place keeps the key it got in the removed day, so it may sort
+    // anywhere among the moved places; the others keep their relative order.
+    expect(view.ideas.map((p) => p.id).filter((id) => id !== late)).toEqual([idea, p1, p2]);
     expect(view.ideas.map((p) => p.id)).toContain(late);
     expect(view.placeCount).toBe(4);
   });
