@@ -36,6 +36,7 @@ export function PlaceEditor({ place, onSave, onCancel }: { place: PlaceView; onS
     <form
       onSubmit={save}
       noValidate
+      data-place-editor
       aria-label={t("editFor", { name: place.name || t("unnamed") })}
       className="col-span-full grid gap-4 border-t border-line-2 pt-3"
       onKeyDown={(e) => {

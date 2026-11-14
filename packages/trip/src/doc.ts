@@ -251,9 +251,18 @@ export function movePlace(
   return true;
 }
 
+/**
+ * Deletes a place. A Y.Map delete alone writes nothing under the deleter's client id (the delete set
+ * names the deleted items' authors), so the place is first stamped `deletedBy`: the update then carries
+ * the deleter's client, and peers can say who deleted it.
+ */
 export function deletePlace(doc: Y.Doc, id: string, origin: string): void {
-  if (!record(places(doc), id)) return;
-  doc.transact(() => places(doc).delete(id), origin);
+  const place = record(places(doc), id);
+  if (!place) return;
+  doc.transact(() => {
+    place.set("deletedBy", origin);
+    places(doc).delete(id);
+  }, origin);
 }
 
 /** Changes status (accept, dismiss, restore); the place goes to the end of its new list. */

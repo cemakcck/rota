@@ -63,9 +63,13 @@ function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
   return undo;
 }
 
-/** True when a key press belongs to a text field or editor, whose own undo must win. */
-function inEditor(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+/**
+ * True when Ctrl/Cmd+Z is not for the trip: typing in a field or editor (its own undo wins), or while a
+ * dialog (settings, Move to…) or a place editor is open, where undoing would change the trip unseen.
+ */
+function notForTrip(target: EventTarget | null): boolean {
+  if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return true;
+  return document.querySelector('[role="dialog"], [data-place-editor]') !== null;
 }
 
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
@@ -100,7 +104,7 @@ function TripScreenFor({ tripId, mapSlot, legsFor }: Props) {
   useEffect(() => {
     if (!undo) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "z" || inEditor(e.target)) return;
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "z" || notForTrip(e.target)) return;
       e.preventDefault();
       if (e.shiftKey) undo.redo();
       else undo.undo();

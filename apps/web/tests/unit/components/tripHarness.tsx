@@ -74,6 +74,20 @@ export function remoteEdit(as: string, edit: (doc: Y.Doc, origin: string) => voi
   act(() => Y.applyUpdate(fake.doc, Y.encodeStateAsUpdate(remote, before), "server"));
 }
 
+/** Another member's device that keeps its state (and its own undo) across edits; `push` delivers what it changed. */
+export function remotePeer(as: string): { doc: Y.Doc; push(): void } {
+  const remote = new Y.Doc();
+  Y.applyUpdate(remote, Y.encodeStateAsUpdate(fake.doc));
+  fake.states.set(remote.clientID, { user: { id: as } });
+  return {
+    doc: remote,
+    push() {
+      const update = Y.encodeStateAsUpdate(remote, Y.encodeStateVector(fake.doc));
+      act(() => Y.applyUpdate(fake.doc, update, "server"));
+    },
+  };
+}
+
 function subscribe(cb: () => void) {
   listeners.add(cb);
   return () => void listeners.delete(cb);

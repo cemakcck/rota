@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
-import { addPlace, dayUrls, deletePlace, movePlace, placeUrl, updatePlace } from "@rota/trip";
+import { addPlace, createUndo, dayUrls, deletePlace, movePlace, placeUrl, updatePlace } from "@rota/trip";
 import { renderIntl } from "./helpers";
-import { fake, newTrip, remoteEdit, useFakeTrip } from "./tripHarness";
+import { fake, newTrip, remoteEdit, remotePeer, useFakeTrip } from "./tripHarness";
 
 vi.mock("@/client/sync/useTrip", async (original) => ({ ...(await original<object>()), useTrip: () => useFakeTrip() }));
 vi.mock("@/client/authClient", () => ({
@@ -158,8 +158,86 @@ describe("itinerary", () => {
     fireEvent.blur(stay);
     expect(within(row("Karaköy Lokantası")).getByText("around 10:30")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Start time, Day 1"), { target: { value: "10:15" } });
+    const start = screen.getByLabelText("Start time, Day 1");
+    fireEvent.change(start, { target: { value: "10:15" } });
+    fireEvent.blur(start);
     expect(within(row("Karaköy Lokantası")).getByText("around 11:45")).toBeTruthy();
+  });
+
+  it("start time and stay fields keep focus and the typed value through saves and remote updates", () => {
+    const { doc, dayIds } = newTrip();
+    const id = addPlace(doc, { name: "Galata Tower", category: "sight", stayMinutes: 60, dayId: dayIds[0] }, "u1");
+    addPlace(doc, { name: "Karaköy Lokantası", category: "food", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+
+    const start = screen.getByLabelText("Start time, Day 1") as HTMLInputElement;
+    start.focus();
+    fireEvent.change(start, { target: { value: "10:00" } });
+    expect(document.activeElement).toBe(start);
+    fireEvent.keyDown(start, { key: "Enter" });
+    expect(fake.view.days[0].startTime).toBe("10:00");
+    expect(document.activeElement).toBe(start);
+
+    const stay = screen.getByLabelText("Stay at Galata Tower, in minutes") as HTMLInputElement;
+    stay.focus();
+    fireEvent.change(stay, { target: { value: "90" } });
+    fireEvent.keyDown(stay, { key: "Enter" });
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(90);
+    expect(document.activeElement).toBe(stay);
+
+    // Half-typed, then someone else changes the same stay: the field keeps what is being typed.
+    fireEvent.change(stay, { target: { value: "12" } });
+    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 30 }, origin));
+    expect(document.activeElement).toBe(stay);
+    expect(stay.value).toBe("12");
+    fireEvent.blur(stay);
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(12);
+
+    // Not focused: the field shows changes made elsewhere; focusing without typing never reverts them.
+    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 45 }, origin));
+    expect(stay.value).toBe("45");
+    stay.focus();
+    remoteEdit("u2", (d, origin) => updatePlace(d, id, { stayMinutes: 50 }, origin));
+    fireEvent.blur(stay);
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(50);
+  });
+
+  it("drag and drop adds no screen reader output of its own", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />, "tr");
+    expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/draggable|space bar/i);
+  });
+
+  it("a remote delete is announced with the member's name; my own delete from another device is not", () => {
+    const { doc, dayIds } = newTrip();
+    const a = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    const b = addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    const live = screen.getByTestId("announcer");
+    remoteEdit("u2", (d, origin) => deletePlace(d, a, origin));
+    expect(live.textContent).toBe("Deniz deleted Galata Tower");
+    remoteEdit("u1", (d, origin) => deletePlace(d, b, origin));
+    expect(names(day(1))).toEqual([]);
+    expect(live.textContent).toBe("Deniz deleted Galata Tower");
+  });
+
+  it("a restored place is announced as the restorer's, even when I added it", () => {
+    const { doc, dayIds } = newTrip();
+    const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    const live = screen.getByTestId("announcer");
+    const deniz = remotePeer("u2");
+    const undo = createUndo(deniz.doc, "u2");
+    deletePlace(deniz.doc, id, "u2");
+    deniz.push();
+    expect(live.textContent).toBe("Deniz deleted Galata Tower");
+    undo.undo();
+    deniz.push();
+    expect(names(day(1))).toEqual(["Galata Tower"]);
+    expect(live.textContent).toBe("Deniz added Galata Tower to Day 1");
+    undo.destroy();
   });
 
   it("Open in Google Maps links to the place URL in a new tab", () => {

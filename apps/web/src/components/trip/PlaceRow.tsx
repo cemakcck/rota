@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { placeUrl, type MemberView, type PlaceView } from "@rota/trip";
 import { btn, btnSm } from "../ui";
+import { CommitInput } from "./CommitInput";
 import { CategoryIcon, GoogleMapsPin, Icon } from "./icons";
 import { PlaceEditor, type PlaceEdit } from "./PlaceEditor";
 import { placeDropId } from "./plan";
@@ -26,18 +27,16 @@ export const placeMoveId = (id: string) => `place-move-${id}`;
 
 const ghost = "grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-40";
 
-/** The stay in minutes, saved when the field is left or Enter is pressed. Remounted (by key) when it changes elsewhere. */
+/** The stay in minutes, saved on Enter or when the field is left (see CommitInput). */
 function StayInput({ place, onSave }: { place: PlaceView; onSave: (minutes: number) => void }) {
   const t = useTranslations("trip");
-  const [value, setValue] = useState(String(place.stayMinutes));
-  const commit = () => {
-    const minutes = Number(value);
-    if (value.trim() === "" || !Number.isFinite(minutes) || minutes < 0 || minutes > 1440) return setValue(String(place.stayMinutes));
-    if (Math.round(minutes) !== place.stayMinutes) onSave(Math.round(minutes));
+  const save = (text: string) => {
+    const minutes = Math.round(Number(text));
+    if (text.trim() !== "" && Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440 && minutes !== place.stayMinutes) onSave(minutes);
   };
   return (
     <span className="inline-flex items-center gap-1 font-mono text-[11.5px] text-ink-2">
-      <input
+      <CommitInput
         type="number"
         min={0}
         max={1440}
@@ -45,12 +44,8 @@ function StayInput({ place, onSave }: { place: PlaceView; onSave: (minutes: numb
         inputMode="numeric"
         aria-label={t("stayFor", { name: place.name || t("unnamed") })}
         className="h-7 w-14 rounded-md border border-line bg-surface px-1.5 text-right font-mono text-[12px] text-ink"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-          if (e.key === "Enter") commit();
-        }}
+        value={String(place.stayMinutes)}
+        onCommit={save}
       />
       {t("minutes")}
     </span>
@@ -137,7 +132,7 @@ export function PlaceRow({
       <div className="grid justify-items-end gap-1 text-right">
         {arrival && <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums">{t("arrive", { time: arrival })}</span>}
         {actions ? (
-          <StayInput key={place.stayMinutes} place={place} onSave={(m) => actions.setStay(place.id, m)} />
+          <StayInput place={place} onSave={(m) => actions.setStay(place.id, m)} />
         ) : (
           <span className="font-mono text-[11.5px] text-ink-2">
             {place.stayMinutes} {t("minutes")}

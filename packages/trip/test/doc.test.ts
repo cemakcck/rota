@@ -4,6 +4,7 @@ import {
   CATEGORIES,
   DEFAULT_STAY_MINUTES,
   addPlace,
+  deletePlace,
   initTrip,
   isTripId,
   newId,
@@ -145,5 +146,22 @@ describe("trip document", () => {
   it("top-level shares are exactly meta, places, days, checklist, members", () => {
     const doc = trip();
     expect([...doc.share.keys()].sort()).toEqual(["checklist", "days", "members", "meta", "places"]);
+  });
+});
+
+describe("deletePlace authorship", () => {
+  it("the delete's update is written by the deleter's client, so peers can tell who deleted", () => {
+    const a = new Y.Doc();
+    initTrip(a, { name: "T", startDate: "2026-11-30", days: 1, locale: "en" }, "A");
+    const id = addPlace(a, { name: "Galata", category: "sight", dayId: null }, "A");
+    const b = new Y.Doc();
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    const before = Y.encodeStateVector(b);
+    deletePlace(b, id, "B");
+    const writers = Y.decodeStateVector(Y.encodeStateVector(b));
+    const old = Y.decodeStateVector(before);
+    expect((writers.get(b.clientID) ?? 0) > (old.get(b.clientID) ?? 0)).toBe(true);
+    Y.applyUpdate(a, Y.encodeStateAsUpdate(b, Y.encodeStateVector(a)));
+    expect(readTrip(a).placeCount).toBe(0);
   });
 });

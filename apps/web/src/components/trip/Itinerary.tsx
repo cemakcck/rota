@@ -1,13 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { dayTimeline, type DayPatch, type Leg, type PlaceView, type Slot, type TripView } from "@rota/trip";
 import { MoveDialog } from "./MoveDialog";
 import { placeMoveId, type PlaceActions } from "./PlaceRow";
 import { DaySection } from "./DaySection";
 import { dropTarget, plannedLists, type ListId } from "./plan";
+
+/**
+ * dnd-kit's own screen reader output (an assertive live region with English "Picked up draggable item
+ * <id>" messages, and keyboard instructions for a keyboard sensor this screen does not use) is silenced
+ * and rendered into a detached element. Dragging is pointer-only; keyboard and screen reader users move
+ * places with the row buttons and the Move to… dialog, and others' moves come from the Announcer.
+ */
+const SILENT: Announcements = {
+  onDragStart: () => undefined,
+  onDragOver: () => undefined,
+  onDragEnd: () => undefined,
+  onDragCancel: () => undefined,
+};
 
 export type ItineraryActions = PlaceActions & {
   move(id: string, to: { dayId: ListId } & Slot): boolean;
@@ -36,6 +49,7 @@ export function Itinerary({
   const t = useTranslations("trip");
   const [moving, setMoving] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [offscreen] = useState(() => (typeof document === "undefined" ? undefined : document.createElement("div")));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const lists = plannedLists(view);
@@ -63,7 +77,13 @@ export function Itinerary({
 
   const dragged = find(dragging)?.place;
   return (
-    <DndContext sensors={sensors} onDragStart={({ active }) => setDragging(String(active.id))} onDragCancel={() => setDragging(null)} onDragEnd={onDragEnd}>
+    <DndContext
+      accessibility={{ announcements: SILENT, screenReaderInstructions: { draggable: "" }, container: offscreen }}
+      sensors={sensors}
+      onDragStart={({ active }) => setDragging(String(active.id))}
+      onDragCancel={() => setDragging(null)}
+      onDragEnd={onDragEnd}
+    >
       {view.days.map((day) => (
         <DaySection
           key={day.id}

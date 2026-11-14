@@ -5,6 +5,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { useTranslations } from "next-intl";
 import { dayUrls, type DayPatch, type DayView, type MemberView, type PlaceView, type TimelineEntry } from "@rota/trip";
 import { btn, btnSm } from "../ui";
+import { CommitInput } from "./CommitInput";
 import { GoogleMapsPin, Icon } from "./icons";
 import { PlaceRow, type PlaceActions } from "./PlaceRow";
 import { listDropId } from "./plan";
@@ -22,14 +23,13 @@ function DayControls({ day, title, onDay }: { day: DayView; title: string; onDay
         <Icon name="clock" size={14} />
         {t("startTime")}
         <span className="sr-only">, {title}</span>
-        <input
+        <CommitInput
           id={id}
-          key={day.startTime}
           type="time"
-          defaultValue={day.startTime}
+          value={day.startTime}
           readOnly={!onDay}
           className="bg-transparent font-mono text-[12px] text-ink"
-          onChange={(e) => onDay?.({ startTime: e.target.value })}
+          onCommit={(startTime) => onDay?.({ startTime })}
         />
       </label>
       <div role="group" aria-label={t("travelMode", { n: day.index + 1 })} className="inline-flex rounded-[7px] border border-line bg-surface p-0.5">

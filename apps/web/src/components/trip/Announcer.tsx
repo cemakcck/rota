@@ -29,8 +29,9 @@ function writer(transaction: Y.Transaction): number | null {
 
 /**
  * A polite live region for structural changes made by others ("Deniz moved Galata Tower to Day 2"). Own
- * edits are never announced: the person already knows. Who made a change comes from the place's
- * `addedBy` for additions, else from presence (the awareness state of the peer that wrote the update).
+ * edits are never announced: the person already knows. Who made a change comes from presence: the
+ * awareness state of the one peer that wrote the update (deletes write a `deletedBy` stamp for this,
+ * see deletePlace), falling back to `addedBy` for a new place.
  */
 export function Announcer({
   doc,
@@ -66,7 +67,9 @@ export function Announcer({
       const state = client === null ? undefined : (awareness?.getStates().get(client) as { user?: { id?: unknown } } | undefined);
       const actorId = typeof state?.user?.id === "string" ? state.user.id : null;
       const nameOf = (id: string | null | undefined) => after.members.find((m) => m.id === id)?.name ?? t("someone");
-      const actor = (change: Change) => (change.kind === "added" && change.addedBy ? change.addedBy : actorId);
+      // The peer that wrote the update did it (a restored place's adder is not who restored it);
+      // `addedBy` is the fallback for a new place when presence does not know the peer.
+      const actor = (change: Change) => actorId ?? (change.kind === "added" ? (change.addedBy ?? null) : null);
       // This user's edits from another device arrive like anyone else's, but are still their own.
       const spoken = changes.filter((c) => userId === null || actor(c) !== userId);
       if (spoken.length === 0) return;

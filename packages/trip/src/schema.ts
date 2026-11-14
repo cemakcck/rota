@@ -6,7 +6,7 @@ import type { Category } from "./categories";
  * - meta: Y.Map { name, startDate, destination, isDemo, locale }
  * - places: Y.Map<placeId, Y.Map { name, lat, lng, osmId, address, category, tags,
  *     stayMinutes, dayId, order, addedBy, createdAt, status, votes: Y.Map<userId, 1 | -1>,
- *     note: Y.XmlFragment }>
+ *     note: Y.XmlFragment, deletedBy (set just before the place is deleted, see deletePlace) }>
  * - days: Y.Map<dayId, Y.Map { index, startTime, travelMode, note: Y.XmlFragment }>
  * - checklist: Y.Map<itemId, Y.Map { text, done, assignee, order }>
  * - members: Y.Map<userId, Y.Map { name, colour }>

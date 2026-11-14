@@ -92,6 +92,32 @@ describe("header", () => {
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
   });
 
+  it("the undo shortcut does nothing while the settings sheet or a place editor is open", async () => {
+    const { doc, dayIds } = newTrip();
+    const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    const trip = { id: "t1", name: "Istanbul long weekend", startDate: "2026-11-27", days: 2, members: [{ id: "u1", name: "Ann", colour: "#2563eb", role: "owner" }] };
+    vi.stubGlobal("fetch", async (url: string) => new Response(JSON.stringify(url.endsWith("/invites") ? [] : trip)));
+    renderIntl(<TripScreen tripId="t1" />);
+    updatePlace(doc, id, { name: "Galata Kulesi" }, "u1");
+    refresh();
+
+    fireEvent.click(screen.getByRole("button", { name: "Trip settings" }));
+    const dialog = await screen.findByRole("dialog", { name: "Trip settings" });
+    await waitFor(() => expect(dialog.querySelector("#settings-name")).toBeTruthy());
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    vi.unstubAllGlobals();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Kulesi" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Save" }), { key: "z", ctrlKey: true });
+    expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(fake.view.days[0].places[0].name).toBe("Galata Tower");
+  });
+
   it("the header shows the sync status from the session", () => {
     newTrip();
     fake.status = { kind: "offline", pending: 4 };
