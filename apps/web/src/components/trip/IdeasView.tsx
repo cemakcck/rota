@@ -23,6 +23,9 @@ export type RowProps = {
   openId: string | null;
   /** A place just added: its row is highlighted for a moment. */
   highlightId?: string | null;
+  /** The place hovered here or on the map, and who to tell when the pointer goes onto a row or off it. */
+  hoveredId?: string | null;
+  onHover?(id: string | null): void;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
 };
@@ -220,6 +223,8 @@ export function IdeasView({
                       selected={place.id === rows.selectedId}
                       open={place.id === rows.openId}
                       highlighted={place.id === rows.highlightId}
+                      hovered={place.id === rows.hoveredId}
+                      onHover={rows.onHover}
                       onOpen={rows.onOpen}
                       actions={rows.actions}
                       trailing={

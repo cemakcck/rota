@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import { DEFAULT_STAY_MINUTES, isCategory, normaliseTags } from "./categories";
 import { compareOrder, isOrderKey } from "./order";
 import {
+  DAY_TITLE_MAX,
   DEFAULT_TRAVEL_MODE,
   isTime,
   type ChecklistItemView,
@@ -162,6 +163,7 @@ export function readTrip(doc: Y.Doc): TripView {
     index,
     date: addDaysToDate(startDate, index),
     travelMode: m.get("travelMode") === "drive" ? "drive" : DEFAULT_TRAVEL_MODE,
+    title: (str(m.get("title")) ?? "").trim().slice(0, DAY_TITLE_MAX),
     places: [],
   }));
   const dayById = new Map(days.map((d) => [d.id, d]));

@@ -225,6 +225,8 @@ export function StopRow({
   selected,
   open,
   highlighted = false,
+  hovered = false,
+  onHover,
   onOpen,
   actions,
   trailing,
@@ -245,6 +247,10 @@ export function StopRow({
   open: boolean;
   /** Just added: highlighted for a moment (a colour fade, none under reduced motion). */
   highlighted?: boolean;
+  /** Its pin (or the row itself) is hovered. */
+  hovered?: boolean;
+  /** The pointer (mouse or pen) went onto the row, or off it (null): its pin is highlighted meanwhile. */
+  onHover?(id: string | null): void;
   onOpen(id: string, open: boolean): void;
   actions: StopActions | null;
   /** In place of the time and stay (an idea's "Add to day…"). */
@@ -283,14 +289,18 @@ export function StopRow({
       id={placeRowId(place.id)}
       data-dimmed={dimmed || undefined}
       data-highlighted={highlighted || undefined}
+      data-hovered={hovered || undefined}
       aria-current={selected || undefined}
       style={{ ...(selected || (isOver && !isDragging) ? { borderColor: colour, boxShadow: `0 0 0 3px ${colour}33` } : {}), ...editingOutline(peer) }}
+      // Mouse and pen only: a finger has no hover.
+      onPointerEnter={(e) => e.pointerType !== "touch" && onHover?.(place.id)}
+      onPointerLeave={(e) => e.pointerType !== "touch" && onHover?.(null)}
       // Pointer selection for the map; the list itself is the accessible view of the trip.
       onClick={(e) => {
         if (!(e.target instanceof Element && e.target.closest(CONTROLS)) && !open) onOpen(place.id, true);
       }}
       // Dimmed by filters: a quieter row whose text keeps AA contrast (no opacity on text).
-      className={`relative min-w-0 rounded-xl border border-line motion-safe:transition-colors motion-safe:duration-700 ${highlighted ? "bg-warn-bg" : dimmed ? "bg-line-2" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
+      className={`relative min-w-0 rounded-xl border border-line motion-safe:transition-colors motion-safe:duration-700 ${highlighted ? "bg-warn-bg" : dimmed ? "bg-line-2" : hovered ? "bg-hover" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
     >
       {peer && <EditingTag peer={peer} />}
       <div

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { addPlace, initTrip, MEMBER_COLOURS, readTrip, setPlaceStatus, type Destination } from "@rota/trip";
-import { CITY_PAD, DAY_COLOURS, IDEAS_COLOUR, ISTANBUL, mapFeatures } from "@/components/map/mapFeatures";
+import { CITY_PAD, DAY_COLOURS, IDEAS_COLOUR, ISTANBUL, LABEL_MIN_ZOOM, PIN_LABEL_MAX, labelledPins, mapFeatures, pinLabel } from "@/components/map/mapFeatures";
 
 function trip({ days = 2, destination = null }: { days?: number; destination?: Destination | null } = {}) {
   const doc = new Y.Doc();
@@ -307,5 +307,36 @@ describe("mapFeatures", () => {
         hiddenIds: none,
       }).bounds,
     ).toEqual([ISTANBUL.lng - CITY_PAD, ISTANBUL.lat - CITY_PAD, ISTANBUL.lng + CITY_PAD, ISTANBUL.lat + CITY_PAD]);
+  });
+});
+
+describe("pin labels", () => {
+  it("are the place's name, cut to about 18 characters", () => {
+    expect(PIN_LABEL_MAX).toBe(18);
+    expect(pinLabel("Karaköy Lokantası")).toBe("Karaköy Lokantası");
+    expect(pinLabel("Kadıköy Barlar Sokağı")).toBe("Kadıköy Barlar So…");
+    expect([...pinLabel("Kadıköy Barlar Sokağı")]).toHaveLength(18);
+    expect(pinLabel("  Galata Tower ")).toBe("Galata Tower");
+  });
+
+  const at = (id: string, x: number, y: number, label = "Galata Tower") => ({ id, x, y, label, idea: false });
+  const zoom = LABEL_MIN_ZOOM + 2;
+
+  it("all show when apart; a label that would overlap an earlier label, or cover a pin, hides", () => {
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300), at("c", 400, 100)], { zoom, keep: null })]).toEqual(["a", "b", "c"]);
+    // b sits just under a: their labels would overlap, so the earlier stop's shows.
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 110)], { zoom, keep: null })]).toEqual(["a"]);
+    // c's pin is where a's label would go: a's label hides, c's shows.
+    expect([...labelledPins([at("a", 100, 100), at("c", 150, 80)], { zoom, keep: null })]).toEqual(["c"]);
+  });
+
+  it("the selected pin's label always shows, first, and others give way to it", () => {
+    const shown = labelledPins([at("a", 100, 100), at("b", 100, 110)], { zoom, keep: "b" });
+    expect([...shown]).toEqual(["b"]);
+  });
+
+  it("at low zoom only the selected pin's label shows", () => {
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: null })]).toEqual([]);
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: "b" })]).toEqual(["b"]);
   });
 });

@@ -12,7 +12,7 @@ import type { PreviewPlace } from "../trip/SearchBar";
 import { AddHere, type NewMapPlace, type ReverseGeocode, type SuggestAt } from "./AddHere";
 import { PEEK_PX, type Snap } from "./BottomSheet";
 import { MapLoaderContext, type LngLat, type MapView, type Padding } from "./engine";
-import { mapFeatures, type MapShown, type Pin } from "./mapFeatures";
+import { labelledPins, mapFeatures, pinLabel, type MapShown, type Pin } from "./mapFeatures";
 
 export type { MapShown };
 import { RemoteCursors } from "./RemoteCursors";
@@ -51,6 +51,12 @@ type Props = {
   sheet: Snap | null;
   /** A search result hovered or arrowed to: a temporary pin, drawn on this map only (never saved or shared). */
   preview?: PreviewPlace | null;
+  /** The place hovered in the list or on the map: its pin is highlighted, its label shown. */
+  hoveredPlaceId?: string | null;
+  /** The pointer (mouse or pen) went onto a pin, or off it (null). */
+  onHoverPlace?(id: string | null): void;
+  /** A click on the empty map (not a pin or control, not the end of a pan). */
+  onMapClick?(): void;
 };
 
 /** How much of the map's left edge the details panel covers on wide screens (its 16 px inset and 340 px width). */
@@ -66,7 +72,23 @@ const MIN_FIT_WIDTH = 120;
  * list is brought into view. No controls on its left edge, where the details panel opens.
  * Visual only: the list is the accessible source of truth, so pins are hidden from assistive technology.
  */
-export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSelectPlace, routeGeometry, awareness, userId, add, sheet, preview = null }: Props) {
+export function TripMap({
+  view,
+  hiddenIds,
+  shown,
+  selectedPlaceId,
+  panel,
+  onSelectPlace,
+  routeGeometry,
+  awareness,
+  userId,
+  add,
+  sheet,
+  preview = null,
+  hoveredPlaceId = null,
+  onHoverPlace,
+  onMapClick,
+}: Props) {
   const tm = useTranslations("map");
   const load = useContext(MapLoaderContext);
   const container = useRef<HTMLDivElement>(null);
@@ -121,6 +143,27 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
   }, [load]);
 
   useEffect(() => map?.setRoutes(features.routes), [map, features.routes]);
+
+  // Which pins show their name: worked out again as the view moves (once a frame at most).
+  const [labelled, setLabelled] = useState<ReadonlySet<string>>(() => new Set());
+  const placeLabels = useEffectEvent((m: MapView) => {
+    const placed = features.pins.map((pin) => ({ id: pin.id, ...m.project(pin), label: pinLabel(pin.name), idea: pin.number === null }));
+    const next = labelledPins(placed, { zoom: m.zoom(), keep: selectedPlaceId });
+    setLabelled((was) => (was.size === next.size && [...next].every((id) => was.has(id)) ? was : next));
+  });
+  useEffect(() => {
+    if (!map) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measured from the map (an external system) once it, its pins or the selection change
+    placeLabels(map);
+    let frame: number | null = null;
+    const off = map.onMove(() => {
+      if (frame === null) frame = requestAnimationFrame(() => ((frame = null), placeLabels(map)));
+    });
+    return () => {
+      off();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [map, features.pins, selectedPlaceId]);
 
   // Fit what is shown once the map is there (its container has its final size by then), and again when
   // the view changes; otherwise bring a newly selected place into view if it is not.
@@ -184,9 +227,12 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
   const onSurface = (target: EventTarget) =>
     target instanceof Element && !!container.current?.contains(target) && !target.closest("[data-pin], .maplibregl-ctrl");
   const lastPointer = useRef("mouse");
+  // Where the last press began: a click that ends a pan is not a click on the map.
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
 
   function onPointerDown(e: ReactPointerEvent) {
     lastPointer.current = e.pointerType;
+    pressedAt.current = { x: e.clientX, y: e.clientY };
     cancelPress();
     if (!map || !add || e.pointerType !== "touch" || !e.isPrimary || !onSurface(e.target)) return;
     const at = map.unproject(local(e));
@@ -213,6 +259,13 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
         cancelPress();
         if (awareness && userId) setMapCursor(awareness, null);
       }}
+      onClick={(e) => {
+        const from = pressedAt.current;
+        pressedAt.current = null;
+        if (!onMapClick || !onSurface(e.target)) return;
+        if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) > LONG_PRESS_SLOP) return;
+        onMapClick();
+      }}
       onContextMenu={(e) => {
         // On touch screens the long-press handles it (and some browsers send this too).
         if (!map || !add || !onSurface(e.target)) return;
@@ -222,7 +275,19 @@ export function TripMap({ view, hiddenIds, shown, selectedPlaceId, panel, onSele
     >
       {/* Sized as well as placed: maplibre-gl.css makes the map container `position: relative`. */}
       <div ref={container} className="absolute inset-0 h-full w-full" />
-      {map && features.pins.map((pin) => <PinMarker key={pin.id} map={map} pin={pin} selected={pin.id === selectedPlaceId} onSelect={onSelectPlace} />)}
+      {map &&
+        features.pins.map((pin) => (
+          <PinMarker
+            key={pin.id}
+            map={map}
+            pin={pin}
+            selected={pin.id === selectedPlaceId}
+            hovered={pin.id === hoveredPlaceId}
+            labelled={labelled.has(pin.id)}
+            onSelect={onSelectPlace}
+            onHover={onHoverPlace}
+          />
+        ))}
       {map && preview && <PreviewMarker key={`${preview.lat},${preview.lng}`} map={map} place={preview} />}
       {map && <RemoteCursors map={map} awareness={awareness} userId={userId} />}
       {unavailable && <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-[13.5px] text-ink-2">{tm("unavailable")}</p>}
@@ -297,12 +362,32 @@ function PreviewMarker({ map, place }: { map: MapView; place: PreviewPlace }) {
 
 /**
  * One pin: a teardrop in its day's colour with the stop number (about 34 px; 42 px with a halo when
- * selected), or a small grey one for Ideas. Hovering shows a small card with the place's name.
+ * selected), or a small grey one for Ideas. Its short name label shows beside it when there is room
+ * (`labelled`), and always when it is selected or hovered (here or on its row); hovering a pin whose
+ * label is cut shows its full name in a small card above it.
  */
-function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; selected: boolean; onSelect(id: string): void }) {
+function PinMarker({
+  map,
+  pin,
+  selected,
+  hovered,
+  labelled,
+  onSelect,
+  onHover,
+}: {
+  map: MapView;
+  pin: Pin;
+  selected: boolean;
+  /** Its row (or the pin itself) is hovered. */
+  hovered: boolean;
+  /** There is room for its label. */
+  labelled: boolean;
+  onSelect(id: string): void;
+  onHover?(id: string | null): void;
+}) {
   const t = useTranslations("trip");
   const [element] = useState(() => document.createElement("div"));
-  const [hover, setHover] = useState(false);
+  const [pointer, setPointer] = useState(false);
   const marker = useRef<ReturnType<MapView["addMarker"]> | null>(null);
   const at = useEffectEvent(() => ({ lat: pin.lat, lng: pin.lng }));
   useEffect(() => {
@@ -314,31 +399,54 @@ function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; s
     };
   }, [map, element]);
   useEffect(() => marker.current?.move({ lat: pin.lat, lng: pin.lng }), [pin.lat, pin.lng]);
+  const hover = pointer || hovered;
   // The selected (or hovered) pin above the rest, Ideas under the days' pins.
   const layer = selected || hover ? "3" : pin.number === null ? "1" : "2";
   useEffect(() => {
     element.style.setProperty("z-index", layer);
   }, [element, layer]);
 
+  const name = pin.name || t("unnamed");
+  const label = pinLabel(name);
   const idea = pin.number === null;
   const px = idea ? (selected ? 32 : 24) : selected ? 42 : 34;
   const size = idea ? (selected ? "size-8" : "size-6") : selected ? "size-[42px]" : "size-[34px]";
   const shadow = "0 3px 8px rgba(0, 0, 0, 0.25)";
+  const halo = selected ? `0 0 0 5px ${tint(pin.colour, 0.25)}, ` : hover ? `0 0 0 4px ${tint(pin.colour, 0.2)}, ` : "";
   return createPortal(
     <div
       data-pin={pin.id}
       data-selected={selected || undefined}
+      data-hovered={hover || undefined}
       data-idea={idea || undefined}
       aria-hidden="true"
       onClick={() => onSelect(pin.id)}
       // Mouse and pen only: a finger has no hover, and the card would stay after the tap.
-      onPointerEnter={(e) => setHover(e.pointerType !== "touch")}
-      onPointerLeave={() => setHover(false)}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "touch") return;
+        setPointer(true);
+        onHover?.(pin.id);
+      }}
+      onPointerLeave={() => {
+        if (!pointer) return;
+        setPointer(false);
+        onHover?.(null);
+      }}
       className="relative flex cursor-pointer flex-col items-center"
     >
-      {hover && (
+      {pointer && label !== name && (
         <span className="pointer-events-none absolute bottom-full mb-2 max-w-[220px] truncate whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-semibold text-ink shadow-2">
-          {pin.name || t("unnamed")}
+          {name}
+        </span>
+      )}
+      {(labelled || selected || hover) && (
+        <span
+          data-pin-label
+          className="pointer-events-none absolute left-full ml-1 h-5 whitespace-nowrap rounded-md bg-surface/90 px-1.5 text-[12px] font-semibold leading-5 text-ink shadow-1"
+          // Centred on the head.
+          style={{ top: px / 2 - 10 }}
+        >
+          {label}
         </span>
       )}
       {/* A square with three round corners, turned so the sharp one points at the place. */}
@@ -347,7 +455,7 @@ function PinMarker({ map, pin, selected, onSelect }: { map: MapView; pin: Pin; s
         className={`grid -rotate-45 place-items-center rounded-[50%_50%_50%_4px] border-[3px] border-white ${size}`}
         style={{
           background: pin.colour,
-          boxShadow: selected ? `0 0 0 5px ${tint(pin.colour, 0.25)}, ${shadow}` : shadow,
+          boxShadow: `${halo}${shadow}`,
           // The turned tip reaches below the square's box: this puts it on the coordinate.
           marginBottom: Math.round(px * 0.21),
         }}

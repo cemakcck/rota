@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -174,6 +174,52 @@ function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFr
 }
 
 /**
+ * The collapsed note's text, cut to `lines` lines. With `more`, a "more" / "less" button shows the whole
+ * note when it is longer than that (measured, so it appears only when something is hidden).
+ */
+function Preview({ text, name, lines, more, onOpen }: { text: string; name: string; lines: 2 | 3; more: boolean; onOpen: (() => void) | undefined }) {
+  const t = useTranslations("trip");
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const box = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!more || !el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    // Measured while clamped: expanded, nothing is hidden and the button stays as it was.
+    if (!expanded) measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => !expanded && measure());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, more, expanded]);
+  const clamp = expanded ? "" : lines === 2 ? "line-clamp-2" : "line-clamp-3";
+  return (
+    <>
+      <p
+        ref={box}
+        data-note-text
+        className={`${clamp} whitespace-pre-line border-l-2 border-line pl-2.5 text-[13px] leading-normal text-ink-2 [overflow-wrap:anywhere]`}
+        onClick={onOpen}
+      >
+        {text}
+      </p>
+      {more && (overflows || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? t("noteLessFor", { name }) : t("noteMoreFor", { name })}
+          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline"
+          onClick={() => setExpanded((e) => !e)}
+        >
+          {expanded ? t("noteLess") : t("noteMore")}
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
  * A place's or day's note, written together: paragraphs, bold, italic and bullet lists, with others'
  * carets in their colour. Collapsed it is a quiet preview; it opens on "Add a note"/"Edit note" (or a
  * click on the preview) and collapses again when focus leaves it or on Escape.
@@ -184,6 +230,8 @@ export function NoteEditor({
   name,
   editable,
   onOpenChange,
+  lines = 3,
+  more = false,
 }: {
   fragment: Y.XmlFragment;
   awareness: Awareness | null;
@@ -191,6 +239,10 @@ export function NoteEditor({
   name: string;
   editable: boolean;
   onOpenChange(open: boolean): void;
+  /** How many lines the collapsed preview shows. */
+  lines?: 2 | 3;
+  /** Offer "more" to read the whole note when the preview cuts it. */
+  more?: boolean;
 }) {
   const t = useTranslations("trip");
   const text = useNoteText(fragment);
@@ -220,14 +272,7 @@ export function NoteEditor({
   if (!text && !editable) return null;
   return (
     <div className="grid justify-items-start gap-1">
-      {text && (
-        <p
-          className="line-clamp-3 whitespace-pre-line border-l-2 border-line pl-2.5 text-[13px] leading-normal text-ink-2 [overflow-wrap:anywhere]"
-          onClick={editable ? () => change(true) : undefined}
-        >
-          {text}
-        </p>
-      )}
+      {text && <Preview text={text} name={name} lines={lines} more={more} onOpen={editable ? () => change(true) : undefined} />}
       {editable && (
         <button
           ref={toggle}

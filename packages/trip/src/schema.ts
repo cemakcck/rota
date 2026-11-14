@@ -7,7 +7,7 @@ import type { Category } from "./categories";
  * - places: Y.Map<placeId, Y.Map { name, lat, lng, osmId, address, category, tags,
  *     stayMinutes, time ("HH:MM" or null = untimed), dayId, order, addedBy, createdAt, status, votes: Y.Map<userId, 1 | -1>,
  *     note: Y.XmlFragment, deletedBy (set just before the place is deleted, see deletePlace) }>
- * - days: Y.Map<dayId, Y.Map { index, travelMode, note: Y.XmlFragment }> (legacy days may
+ * - days: Y.Map<dayId, Y.Map { index, travelMode, title (≤ DAY_TITLE_MAX chars, "" = none), note: Y.XmlFragment }> (legacy days may
  *     still hold `startTime`; it is never read, and migrateDayStart moves it onto the first stop)
  * - checklist: Y.Map<itemId, Y.Map { text, done, assignee, order }>
  * - members: Y.Map<userId, Y.Map { name, colour }>
@@ -50,8 +50,13 @@ export type DayView = {
   /** YYYY-MM-DD, startDate + index. */
   date: string;
   travelMode: TravelMode;
+  /** A short name for the day ("Karaköy & Galata"); "" when it has none. */
+  title: string;
   places: PlaceView[];
 };
+
+/** The longest a day's title can be. */
+export const DAY_TITLE_MAX = 40;
 
 export type ChecklistItemView = {
   id: string;

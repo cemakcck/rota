@@ -4,11 +4,10 @@ import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
 import * as Y from "yjs";
-import { dayNote, type DayView, type TripView } from "@rota/trip";
+import type { DayView, TripView } from "@rota/trip";
 import { apiFetch } from "@/client/authClient";
 import { errorMessage, readError } from "@/client/apiError";
 import { dayColour } from "../map/mapFeatures";
-import { noteOrNull } from "./NoteEditor";
 import type { TripViewState } from "./view";
 
 /** Drop targets on the rail: dragging a row onto a day moves it there, onto Ideas unschedules it. */
@@ -90,12 +89,11 @@ function RailDropTab({ id, ...props }: TabProps & { id: string }) {
 
 /**
  * The trip's left rail (desktop; a scrolling strip on phones until the phone layout lands): each day
- * with its colour, date and a one-line summary, "Add a day", then Ideas & votes, the checklist and the
+ * with its colour, date and a one-line summary (its title, else how many stops), "Add a day", then Ideas & votes, the checklist and the
  * whole trip on the map, and the demo box at the bottom. Days and Ideas are drop targets for rows.
  */
 export function Rail({
   tripId,
-  doc,
   trip,
   selected,
   onSelect,
@@ -103,7 +101,6 @@ export function Rail({
   demo,
 }: {
   tripId: string;
-  doc: Y.Doc;
   trip: TripView;
   selected: TripViewState;
   onSelect(v: TripViewState): void;
@@ -150,21 +147,16 @@ export function Rail({
       aria-label={t("label")}
       className="flex gap-1.5 border-line bg-paper px-3 py-4 max-lg:relative max-lg:z-20 max-lg:items-center max-lg:overflow-x-auto max-lg:border-b max-lg:py-2 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
     >
-      {trip.days.map((day) => {
-        const fragment = noteOrNull(() => dayNote(doc, day.id));
-        const note = fragment ? noteFirstLine(fragment) : "";
-        const stops = t("stops", { count: day.places.length });
-        return (
-          <RailDay
-            key={day.id}
-            day={day}
-            label={t("day", { n: day.index + 1, date: date(day.date) })}
-            summary={note ? `${note} · ${stops}` : stops}
-            selected={selected.kind === "day" && selected.dayId === day.id}
-            onSelect={() => onSelect({ kind: "day", dayId: day.id })}
-          />
-        );
-      })}
+      {trip.days.map((day) => (
+        <RailDay
+          key={day.id}
+          day={day}
+          label={t("day", { n: day.index + 1, date: date(day.date) })}
+          summary={day.title || t("stops", { count: day.places.length })}
+          selected={selected.kind === "day" && selected.dayId === day.id}
+          onSelect={() => onSelect({ kind: "day", dayId: day.id })}
+        />
+      ))}
       {canAddDay && trip.days.length < 30 && (
         <button type="button" disabled={adding} onClick={addDay} className={`${entry} py-2 text-ink-2 disabled:opacity-60`}>
           {`+ ${t("addDay")}`}

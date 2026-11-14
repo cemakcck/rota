@@ -15,9 +15,11 @@ import {
   isTripFull,
   moveChecklistItem,
   movePlace,
+  readTrip,
   setDay,
   setPlaceStatus,
   setPlaceTime,
+  shiftDayTimes,
   vote,
   setTripMeta,
   updateChecklistItem,
@@ -46,7 +48,7 @@ import { ActionToastProvider, useActionToast } from "./ActionToast";
 import { Announcer } from "./Announcer";
 import { Checklist, checkFocusId, type ChecklistActions } from "./Checklist";
 import { ClosedNotice } from "./ClosedNotice";
-import { DayPlan, SILENT, type PlanActions } from "./DayPlan";
+import { DayPlan, SILENT, signedMinutes, type PlanActions } from "./DayPlan";
 import { DemoBox } from "./DemoBox";
 import { MoveDialog } from "./MoveDialog";
 import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
@@ -136,6 +138,8 @@ function TripScreenFor({ tripId }: Props) {
   // A stop just added (highlighted for a moment), and the search result previewed on the map.
   const [highlight, setHighlight] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewPlace | null>(null);
+  // The place under the pointer, in the list or on the map: its row and its pin are highlighted together.
+  const [hovered, setHovered] = useState<string | null>(null);
   // Who is here and what they edit; map cursors stay out, so their moves do not re-render the screen.
   const peers = usePeers(awareness, userId, { cursors: false });
   const self = view.members.find((m) => m.id === userId);
@@ -282,6 +286,7 @@ function TripScreenFor({ tripId }: Props) {
       showDeleted(place.name || t("unnamed"), placeFocusId(place.id));
     },
     setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
+    shiftTimes: (dayId, minutes) => shiftTimes(dayId, minutes, editor),
     vote: (id, value) => vote(doc, id, editor, value),
     // One transaction (one undo step, one announcement): planned, then into the chosen list; into a day
     // at the chosen time (to its place by time) and with the chosen stay.
@@ -303,6 +308,27 @@ function TripScreenFor({ tripId }: Props) {
     restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
   const controls = usePlaceControls(doc, view, actions);
+
+  // Every set time of a day moved at once: its own undo step, and a toast saying how many moved and which
+  // stopped at 00:00 / 23:59, whose Undo reverts just that.
+  function shiftTimes(dayId: string, minutes: number, origin: string) {
+    const before = view.days.find((d) => d.id === dayId);
+    if (!before) return;
+    undo?.stopCapturing();
+    const { clamped } = shiftDayTimes(doc, dayId, minutes, origin);
+    undo?.stopCapturing();
+    const after = new Map(readTrip(doc).days.find((d) => d.id === dayId)?.places.map((p) => [p.id, p.time]));
+    const moved = before.places.filter((p) => p.time !== null && after.has(p.id) && after.get(p.id) !== p.time).length;
+    const limit = minutes < 0 ? "00:00" : "23:59";
+    const day = labelIn(view, dayId);
+    if (moved === 0) return toast.show({ message: t("shiftUnchanged", { time: limit }) });
+    const message = [t("shifted", { count: moved, minutes: signedMinutes(minutes) }), clamped.length > 0 ? t("shiftClamped", { count: clamped.length, time: limit }) : ""];
+    toast.show({
+      message: message.filter(Boolean).join(" "),
+      undoLabel: t("undoShiftFor", { day }),
+      onUndo: undo ? () => undo.undo() : undefined,
+    });
+  }
 
   // "Galata Tower deleted. Undo": focus moves to Undo (the row's buttons are gone), and back to the restored row after.
   function showDeleted(name: string, focus: string) {
@@ -376,6 +402,13 @@ function TripScreenFor({ tripId }: Props) {
     const id = openId;
     setOpenId(null);
     if (id !== null) requestAnimationFrame(() => document.getElementById(placeFocusId(id))?.focus());
+  };
+  // A click on the empty map closes the details (the place stays selected); focus goes back to its row
+  // only if it was in the panel, so a pointer click elsewhere is not followed by a jump.
+  const closeOnMapClick = () => {
+    if (openId === null) return;
+    if (document.activeElement?.closest("#place-details")) closeDetails();
+    else setOpenId(null);
   };
   // A pin: its row is selected and brought into view (the sheet comes up if it was down), its details open.
   const selectPin = (id: string) => {
@@ -469,7 +502,6 @@ function TripScreenFor({ tripId }: Props) {
             <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[208px_400px_minmax(0,1fr)]">
               <Rail
                 tripId={tripId}
-                doc={doc}
                 trip={view}
                 selected={shown}
                 onSelect={show}
@@ -509,6 +541,8 @@ function TripScreenFor({ tripId }: Props) {
                         userId={editor}
                         highlightId={highlight}
                         onPreview={setPreview}
+                        hoveredId={hovered}
+                        onHover={setHovered}
                       />
                     )}
                   </main>
@@ -537,6 +571,9 @@ function TripScreenFor({ tripId }: Props) {
                     }
                     sheet={phoneView === "map" ? snap : null}
                     preview={preview}
+                    hoveredPlaceId={hovered}
+                    onHoverPlace={setHovered}
+                    onMapClick={closeOnMapClick}
                   />
                   {status.kind === "offline" && (
                     <p className="pointer-events-none absolute right-14 top-3 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">

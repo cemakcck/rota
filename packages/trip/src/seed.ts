@@ -113,9 +113,10 @@ export function seedDemoTrip(doc: Y.Doc, input: DemoSeedInput): void {
 
   const dayIds = doc.getMap<Y.Map<unknown>>("days");
   const orderedDays = [...dayIds.entries()].sort((a, b) => (a[1].get("index") as number) - (b[1].get("index") as number)).map(([id]) => id);
+  setDay(doc, orderedDays[0], { title: t("Karaköy & Galata", "Karaköy ve Galata") }, owner.id);
   // Days 2 and 3 cross the city: by car.
-  setDay(doc, orderedDays[1], { travelMode: "drive" }, owner.id);
-  setDay(doc, orderedDays[2], { travelMode: "drive" }, owner.id);
+  setDay(doc, orderedDays[1], { travelMode: "drive", title: t("Balat & the old city", "Balat ve tarihi yarımada") }, owner.id);
+  setDay(doc, orderedDays[2], { travelMode: "drive", title: t("Bosphorus & Kadıköy", "Boğaz ve Kadıköy") }, owner.id);
 
   for (const p of PLACES) {
     const by = who[p.by].id;

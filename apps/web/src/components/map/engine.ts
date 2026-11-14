@@ -23,6 +23,8 @@ export type MapView = {
   project(at: LngLat): ScreenPoint;
   unproject(point: ScreenPoint): LngLat;
   size(): { width: number; height: number };
+  /** The current zoom level (pin labels show only from street level). */
+  zoom(): number;
   fit(bounds: Bounds, options: { padding: Padding; animate: boolean }): void;
   /** Brings a coordinate to the middle of the (padded) view. */
   centre(at: LngLat, options: { padding: Padding; animate: boolean }): void;
@@ -145,6 +147,7 @@ export const loadMapLibre: LoadMap = async (container, { bounds, labels }) => {
       width: container.clientWidth,
       height: container.clientHeight,
     }),
+    zoom: () => map.getZoom(),
     fit: (b, { padding: p, animate }) => void map.fitBounds(b, { padding: p, maxZoom: MAX_FIT_ZOOM, animate }),
     centre: (at, { padding: p, animate }) => void map.easeTo({ center: [at.lng, at.lat], padding: p, animate }),
     setRoutes(next) {

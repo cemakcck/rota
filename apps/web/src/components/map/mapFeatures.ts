@@ -115,3 +115,59 @@ function pinOf(p: PlaceView & { lat: number; lng: number }, at: Pick<Pin, "dayId
     ...at,
   };
 }
+
+/** Pin labels are cut to about this many characters (spec §2). */
+export const PIN_LABEL_MAX = 18;
+/** Below this zoom the map is too far out for labels: only the selected (or hovered) pin's shows. */
+export const LABEL_MIN_ZOOM = 13;
+
+/** A pin's label: its name, cut to PIN_LABEL_MAX characters with an ellipsis. */
+export function pinLabel(name: string): string {
+  const chars = [...name.trim()];
+  return chars.length <= PIN_LABEL_MAX ? chars.join("") : `${chars.slice(0, PIN_LABEL_MAX - 1).join("").trimEnd()}…`;
+}
+
+/** A pin where it is on screen (container pixels of its tip), with its label. */
+export type PlacedPin = { id: string; x: number; y: number; label: string; idea: boolean };
+
+type Box = { left: number; top: number; right: number; bottom: number };
+const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+// Pin geometry (see PinMarker): a day pin's head is 34 px, an idea's 24 px, its tip 21% of that below it.
+// The label sits right of the head, centred on it: 20 px high, about 7 px a character at 12 px.
+const LABEL_HEIGHT = 20;
+const LABEL_GAP = 4;
+const labelWidth = (label: string) => [...label].length * 7 + 12;
+function headBox({ x, y, idea }: PlacedPin): Box {
+  const size = idea ? 24 : 34;
+  const bottom = y - Math.round(size * 0.21);
+  return { left: x - size / 2, top: bottom - size, right: x + size / 2, bottom };
+}
+function labelBox(pin: PlacedPin): Box {
+  const head = headBox(pin);
+  const middle = (head.top + head.bottom) / 2;
+  const left = head.right + LABEL_GAP;
+  return { left, top: middle - LABEL_HEIGHT / 2, right: left + labelWidth(pin.label), bottom: middle + LABEL_HEIGHT / 2 };
+}
+
+/**
+ * Which pins show their label: none below LABEL_MIN_ZOOM; otherwise each, in order (the stops' order),
+ * unless its label would overlap a label already shown or cover another pin. `keep` (the selected pin)
+ * always shows its label, and is placed first so the others give way to it.
+ */
+export function labelledPins(pins: readonly PlacedPin[], { zoom, keep }: { zoom: number; keep: string | null }): Set<string> {
+  const shown = new Set<string>();
+  const kept = pins.find((p) => p.id === keep);
+  if (kept) shown.add(kept.id);
+  if (zoom < LABEL_MIN_ZOOM) return shown;
+  const heads = pins.map((p) => ({ id: p.id, box: headBox(p) }));
+  const taken: Box[] = kept ? [labelBox(kept)] : [];
+  for (const pin of pins) {
+    if (pin.id === keep) continue;
+    const box = labelBox(pin);
+    if (taken.some((t) => overlaps(t, box)) || heads.some((h) => h.id !== pin.id && overlaps(h.box, box))) continue;
+    shown.add(pin.id);
+    taken.push(box);
+  }
+  return shown;
+}

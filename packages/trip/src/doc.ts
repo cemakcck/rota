@@ -3,6 +3,7 @@ import { DEFAULT_STAY_MINUTES, normaliseTags, type Category } from "./categories
 import { newId } from "./ids";
 import { keyBetween, planSlot } from "./order";
 import {
+  DAY_TITLE_MAX,
   DEFAULT_TRAVEL_MODE,
   isTime,
   type DayView,
@@ -46,7 +47,8 @@ export type NewPlace = {
 };
 
 export type PlacePatch = Partial<{ name: string; category: Category; tags: string[]; stayMinutes: number }>;
-export type DayPatch = Partial<{ travelMode: TravelMode }>;
+/** `title` is trimmed and cut to DAY_TITLE_MAX characters; "" clears it. */
+export type DayPatch = Partial<{ travelMode: TravelMode; title: string }>;
 export type ChecklistPatch = Partial<{ text: string; done: boolean; assignee: string | null }>;
 /** Neighbours in the target list; null = the open end. Neither given: append. */
 export type Slot = { beforeId?: string | null; afterId?: string | null };
@@ -203,6 +205,10 @@ export function setDay(doc: Y.Doc, dayId: string, patch: DayPatch, origin: strin
   if (!day) return;
   doc.transact(() => {
     if (patch.travelMode === "walk" || patch.travelMode === "drive") day.set("travelMode", patch.travelMode);
+    if (typeof patch.title === "string") {
+      const title = patch.title.trim().slice(0, DAY_TITLE_MAX);
+      if (day.get("title") !== title) day.set("title", title);
+    }
   }, origin);
 }
 
@@ -288,6 +294,47 @@ export function setPlaceTime(doc: Y.Doc, id: string, time: string | null, origin
     if (to !== at) place.set("order", keyAt(places(doc), others, to));
   }, origin);
   return true;
+}
+
+/** The last minute of the day, 23:59: a shifted time never goes past it (nor before 00:00). */
+const LAST_MINUTE = 24 * 60 - 1;
+
+const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+const toTime = (total: number) => `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+
+/**
+ * Moves every set time in a day by `minutes` (rounded to whole minutes), in one transaction, so it is
+ * one undo step. Untimed stops are untouched. A time that would go before 00:00 or past 23:59 stops
+ * there; those places' ids are returned in `clamped`, in the day's order. The timed stops are then put
+ * back in chronological order the way setPlaceTime does (only `order`s are written; untimed stops keep
+ * their places). Nothing is written for an unknown day, 0 minutes or a day without set times.
+ */
+export function shiftDayTimes(doc: Y.Doc, dayId: string, minutes: number, origin: string): { clamped: string[] } {
+  const clamped: string[] = [];
+  const by = Math.round(minutes);
+  const timed = readTrip(doc).days.find((d) => d.id === dayId)?.places.filter((p) => p.time !== null) ?? [];
+  if (!Number.isFinite(by) || by === 0 || timed.length === 0) return { clamped };
+  doc.transact(() => {
+    for (const p of timed) {
+      const wanted = toMinutes(p.time!) + by;
+      const total = Math.min(LAST_MINUTE, Math.max(0, wanted));
+      if (total !== wanted) clamped.push(p.id);
+      const time = toTime(total);
+      if (time !== p.time) record(places(doc), p.id)?.set("time", time);
+    }
+    // Shifting keeps the order of times, but a stop out of order beforehand (concurrent edits) is put
+    // in its place, one at a time, as setPlaceTime would.
+    for (const { id } of timed) {
+      const current = readTrip(doc).days.find((d) => d.id === dayId)?.places ?? [];
+      const at = current.findIndex((p) => p.id === id);
+      const time = current[at]?.time;
+      if (at < 0 || !time) continue;
+      const others = current.filter((p) => p.id !== id);
+      const to = chronologicalIndex(others, time, at);
+      if (to !== at) record(places(doc), id)?.set("order", keyAt(places(doc), others, to));
+    }
+  }, origin);
+  return { clamped };
 }
 
 /**

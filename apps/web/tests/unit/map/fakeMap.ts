@@ -2,10 +2,11 @@ import type { Bounds, Route } from "@/components/map/mapFeatures";
 import type { LngLat, LoadMap, MapView, Padding } from "@/components/map/engine";
 
 /**
- * A stand-in for MapLibre (jsdom has no WebGL): a flat 800 (or `width`) × 600 view where 1° is 100 px, with the
- * top-left corner at (lng 28, lat 42). Markers are put into the container, so pins can be queried.
+ * A stand-in for MapLibre (jsdom has no WebGL): a flat 800 (or `width`) × 600 view where 1° is 100 px (or
+ * `scale`), with the top-left corner at (lng 28, lat 42). Markers are put into the container, so pins can be
+ * queried. Its zoom is 7 (about 100 px a degree, too far out for pin labels) unless given.
  */
-export function fakeMap({ width = 800 }: { width?: number } = {}) {
+export function fakeMap({ width = 800, zoom = 7, scale = 100 }: { width?: number; zoom?: number; scale?: number } = {}) {
   const state = {
     container: null as HTMLElement | null,
     start: null as { bounds: Bounds } | null,
@@ -16,17 +17,19 @@ export function fakeMap({ width = 800 }: { width?: number } = {}) {
     centred: [] as LngLat[],
     removed: false,
     origin: { lng: 28, lat: 42 },
+    zoom,
     listeners: new Set<() => void>(),
   };
   const view: MapView = {
     project: ({ lng, lat }) => ({
-      x: (lng - state.origin.lng) * 100,
-      y: (state.origin.lat - lat) * 100,
+      x: (lng - state.origin.lng) * scale,
+      y: (state.origin.lat - lat) * scale,
     }),
     unproject: ({ x, y }) => ({
-      lng: state.origin.lng + x / 100,
-      lat: state.origin.lat - y / 100,
+      lng: state.origin.lng + x / scale,
+      lat: state.origin.lat - y / scale,
     }),
+    zoom: () => state.zoom,
     size: () => ({ width, height: 600 }),
     fit: (bounds, options) => {
       state.fits.push(bounds);
@@ -54,5 +57,10 @@ export function fakeMap({ width = 800 }: { width?: number } = {}) {
     state.origin = to;
     state.listeners.forEach((l) => l());
   };
-  return { state, load, pan };
+  /** Zooms (as the wheel would) and tells listeners. */
+  const zoomTo = (to: number) => {
+    state.zoom = to;
+    state.listeners.forEach((l) => l());
+  };
+  return { state, load, pan, zoomTo };
 }

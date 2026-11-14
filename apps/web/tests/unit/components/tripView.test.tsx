@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as Y from "yjs";
-import { addChecklistItem, addPlace, dayNote, readTrip, removeDay, setTripMeta, updateChecklistItem } from "@rota/trip";
+import { addChecklistItem, addPlace, dayNote, readTrip, removeDay, setDay, setTripMeta, updateChecklistItem } from "@rota/trip";
 import { dropTarget } from "@/components/trip/plan";
 import { renderIntl, stubFetch } from "./helpers";
 import { fake, newTrip, refresh, remoteEdit, useFakeTrip } from "./tripHarness";
@@ -151,22 +151,22 @@ describe("trip view", () => {
     expect(dropTarget(fake.view, id, `rail:day:${dayIds[1]}`)).toBeNull();
   });
 
-  it("rail shows each day with colour, date and stop count and marks the selected one", () => {
+  it("rail shows each day with colour, date and its title (else its stop count) and marks the selected one", () => {
     const { doc, dayIds } = newTrip({ days: 3 });
     addPlace(doc, { name: "Karaköy Güllüoğlu", category: "food", dayId: dayIds[0] }, "u1");
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
     addPlace(doc, { name: "Balat", category: "sight", dayId: dayIds[1] }, "u1");
+    setDay(doc, dayIds[0], { title: "Karaköy & Galata" }, "u1");
+    // The day's note is not the rail's summary.
     doc.transact(() => {
       const p = new Y.XmlElement("paragraph");
-      p.insert(0, [new Y.XmlText("Karaköy & Galata")]);
-      const q = new Y.XmlElement("paragraph");
-      q.insert(0, [new Y.XmlText("Second line is not shown")]);
-      dayNote(doc, dayIds[0]).insert(0, [p, q]);
+      p.insert(0, [new Y.XmlText("Not on the rail")]);
+      dayNote(doc, dayIds[1]).insert(0, [p]);
     }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
 
     const days = within(rail()).getAllByRole("button", { name: /^Day \d · / });
-    expect(days.map((d) => d.textContent)).toEqual(["Day 1 · Fri 27Karaköy & Galata · 2 stops", "Day 2 · Sat 281 stop", "Day 3 · Sun 29No stops yet"]);
+    expect(days.map((d) => d.textContent)).toEqual(["Day 1 · Fri 27Karaköy & Galata", "Day 2 · Sat 281 stop", "Day 3 · Sun 29No stops yet"]);
     const swatches = days.map((d) => (d.querySelector("[data-day-colour]") as HTMLElement).style.backgroundColor);
     expect(swatches).toEqual(["rgb(30, 58, 138)", "rgb(159, 18, 57)", "rgb(22, 101, 52)"]);
     expect(days.map((d) => d.getAttribute("aria-current"))).toEqual(["true", null, null]);

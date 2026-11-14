@@ -54,9 +54,9 @@ function trip() {
   return { doc, view: readTrip(doc), dayIds, tower, lokanta, loti };
 }
 
-function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}, { width }: { width?: number } = {}) {
+function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}, map: Parameters<typeof fakeMap>[0] = {}) {
   const { view, dayIds, ...ids } = trip();
-  const fake = fakeMap({ width });
+  const fake = fakeMap(map);
   const props = {
     view,
     hiddenIds: new Set<string>(),
@@ -94,6 +94,10 @@ function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}, { width }
 }
 
 const pins = () => [...document.querySelectorAll<HTMLElement>("[data-pin]")];
+const labels = () => [...document.querySelectorAll<HTMLElement>("[data-pin-label]")].map((l) => l.textContent);
+const pinOf = (id: string) => document.querySelector<HTMLElement>(`[data-pin="${id}"]`)!;
+/** Zoomed in to street level: 20 000 px a degree puts Galata Tower and Karaköy Lokantası about 90 px apart. */
+const street = { zoom: 15, scale: 20000 };
 
 describe("TripMap", () => {
   it("map uses the positron style", () => {
@@ -350,5 +354,64 @@ describe("TripMap", () => {
     expect(awareness.getLocalState()?.cursor).toBeNull();
     awareness.destroy();
     friend.destroy();
+  });
+
+  it("pins show a short name label when zoomed in and apart; none when zoomed out, except the selected pin's", async () => {
+    const { fake, rerenderWith, tower } = setup({}, street);
+    await waitFor(() => expect(labels()).toEqual(["Galata Tower", "Karaköy Lokantası"]));
+    // Visual only, like the pins.
+    expect(pinOf(tower).getAttribute("aria-hidden")).toBe("true");
+    act(() => fake.zoomTo(10));
+    await waitFor(() => expect(labels()).toEqual([]));
+    rerenderWith({ selectedPlaceId: tower });
+    expect(labels()).toEqual(["Galata Tower"]);
+    act(() => fake.zoomTo(15));
+    await waitFor(() => expect(labels()).toHaveLength(2));
+  });
+
+  it("a long name is cut on its label, the full name in the hover card", async () => {
+    const { doc, dayIds } = trip();
+    addPlace(doc, { name: "Kadıköy Barlar Sokağı", category: "drinks", dayId: dayIds[1], lat: 41.0, lng: 29.03 }, "u1");
+    setup({ view: readTrip(doc), shown: { kind: "all" } }, street);
+    await waitFor(() => expect(labels()).toContain("Kadıköy Barlar So…"));
+    const long = pins().find((p) => p.textContent?.includes("Kadıköy Barlar So…"))!;
+    fireEvent.pointerEnter(long, { pointerType: "mouse" });
+    expect(screen.getByText("Kadıköy Barlar Sokağı")).toBeTruthy();
+  });
+
+  it("hovering a pin reports it, and the pin of a hovered row is highlighted with its label", async () => {
+    const onHoverPlace = vi.fn();
+    const { rerenderWith, tower, lokanta } = setup({ onHoverPlace });
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    fireEvent.pointerEnter(pinOf(tower), { pointerType: "mouse" });
+    expect(onHoverPlace).toHaveBeenLastCalledWith(tower);
+    fireEvent.pointerLeave(pinOf(tower));
+    expect(onHoverPlace).toHaveBeenLastCalledWith(null);
+    // A finger has no hover.
+    onHoverPlace.mockClear();
+    fireEvent.pointerEnter(pinOf(tower), { pointerType: "touch" });
+    expect(onHoverPlace).not.toHaveBeenCalled();
+
+    rerenderWith({ onHoverPlace, hoveredPlaceId: lokanta });
+    expect(pinOf(lokanta).dataset.hovered).toBe("true");
+    expect(pinOf(tower).dataset.hovered).toBeUndefined();
+    // Zoomed out, but the hovered pin's label shows.
+    expect(labels()).toEqual(["Karaköy Lokantası"]);
+  });
+
+  it("a click on the empty map is reported; a click on a pin, or the end of a pan, is not", async () => {
+    const onMapClick = vi.fn();
+    const { fake } = setup({ onMapClick });
+    await waitFor(() => expect(pins()).toHaveLength(2));
+    const surface = fake.state.container!;
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerType: "mouse" });
+    fireEvent.click(surface, { clientX: 10, clientY: 10 });
+    expect(onMapClick).toHaveBeenCalledTimes(1);
+    fireEvent.click(pins()[0]);
+    expect(onMapClick).toHaveBeenCalledTimes(1);
+    // A drag that pans the map ends with a click too: not an empty-map click.
+    fireEvent.pointerDown(surface, { clientX: 10, clientY: 10, pointerType: "mouse" });
+    fireEvent.click(surface, { clientX: 90, clientY: 60 });
+    expect(onMapClick).toHaveBeenCalledTimes(1);
   });
 });
