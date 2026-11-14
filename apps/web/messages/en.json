@@ -24,6 +24,7 @@
     "retry": "Try again"
   },
   "errors": {
+    "rate_limited": "Too many requests. Please wait a while and try again.",
     "generic": "Something went wrong. Please try again.",
     "offline": "You seem to be offline. Try again when you are back online.",
     "trip_full": "This trip already has the most members it can have.",

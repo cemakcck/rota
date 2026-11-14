@@ -10,7 +10,7 @@ import { tripInvites, tripMembers } from "@/server/db/schema";
 import { createLinkInvite } from "@/server/trips/invites";
 import { DELETE as deleteMember } from "@/app/api/trips/[id]/members/[userId]/route";
 import * as email from "@/server/email";
-import { NEW_TRIP, call, signUpUser } from "./helpers";
+import { NEW_TRIP, call, randomIp, signUpUser } from "./helpers";
 
 const sent: email.EmailMessage[] = [];
 beforeEach(() => {
@@ -121,5 +121,40 @@ describe("invites", () => {
     await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: bob.email } });
     const [again] = await db.select().from(tripMembers).where(and(eq(tripMembers.tripId, id), eq(tripMembers.userId, bob.id)));
     expect(again.removedAt).toBeNull();
+  });
+
+  it("email invites are limited to 20 a day per user, and an address with a pending invite is not emailed again", async () => {
+    const ann = await signUpUser({ name: "Ann" });
+    const id = await newTrip(ann);
+    const address = `pending-${randomBytes(6).toString("hex")}@test.rota`;
+    const invite = (email: string) => call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email } });
+    expect((await invite(address)).status).toBe(201);
+    const again = await invite(address);
+    expect(again.status).toBe(201);
+    expect(await again.json()).toEqual({ status: "pending" });
+    expect(sent).toHaveLength(1);
+
+    for (let i = 2; i < 20; i++) expect((await invite(`spam-${i}-${randomBytes(6).toString("hex")}@test.rota`)).status).toBe(201);
+    const refused = await invite(`spam-21-${randomBytes(6).toString("hex")}@test.rota`);
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: "rate_limited" });
+    expect(sent).toHaveLength(19);
+    // Link invites are not counted.
+    expect((await call(postInvite, "POST", ann, { params: { id }, body: { kind: "link" } })).status).toBe(201);
+  });
+
+  it("email invites are limited per IP too, across accounts", async () => {
+    const ip = randomIp();
+    const users = [await signUpUser({ ip }), await signUpUser({ ip }), await signUpUser({ ip })];
+    const statuses: number[] = [];
+    for (const u of users) {
+      const id = await newTrip(u);
+      for (let i = 0; i < 20; i++) {
+        const res = await call(postInvite, "POST", u, { params: { id }, body: { kind: "email", email: `ip-${randomBytes(6).toString("hex")}@test.rota` } });
+        statuses.push(res.status);
+      }
+    }
+    expect(statuses.filter((s) => s === 201)).toHaveLength(40);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(20);
   });
 });

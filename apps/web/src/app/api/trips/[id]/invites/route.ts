@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { parseBody, route } from "@/server/http";
+import { clientIp } from "@/server/ipHash";
 import { requireOwner } from "@/server/trips/access";
-import { createLinkInvite, inviteEmail, listInvites } from "@/server/trips/invites";
+import { createLinkInvite, inviteEmail, limitEmailInvites, listInvites } from "@/server/trips/invites";
 import { tripIdParam } from "../route";
 
 const body = z.discriminatedUnion("kind", [
@@ -20,5 +21,6 @@ export const POST = route(async ({ req, user, params }) => {
   await requireOwner(user.id, id);
   const input = await parseBody(req, body);
   if (input.kind === "link") return { status: 201, body: await createLinkInvite(id, user.id) };
+  await limitEmailInvites(user.id, clientIp(req));
   return { status: 201, body: await inviteEmail(id, input.email, user.id) };
 });

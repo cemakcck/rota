@@ -24,6 +24,7 @@
     "retry": "Tekrar dene"
   },
   "errors": {
+    "rate_limited": "Çok fazla istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.",
     "generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
     "offline": "Çevrimdışı görünüyorsunuz. Bağlantınız gelince tekrar deneyin.",
     "trip_full": "Bu gezi, olabilecek en fazla üyeye zaten sahip.",

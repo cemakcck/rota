@@ -6,6 +6,8 @@ import { db } from "../db/client";
 import { tripInvites, tripMembers, trips, user } from "../db/schema";
 import { sendEmail } from "../email";
 import { HttpError } from "../httpError";
+import { hashIp } from "../ipHash";
+import { hit } from "../rateLimit";
 import { loadState } from "./docStore";
 import { addMember, listMembers } from "./repo";
 
@@ -106,6 +108,21 @@ async function tripLocale(tripId: string): Promise<string> {
   return readTrip(doc).locale;
 }
 
+const EMAIL_INVITES_PER_USER_PER_DAY = 20;
+// Higher than per user: people behind one NAT (a household, an office) share an address.
+const EMAIL_INVITES_PER_IP_PER_DAY = 40;
+const DAY_SEC = 86_400;
+
+/**
+ * Every email invite may send an email to an address the inviter chose, so it is counted per user and
+ * per IP; over either limit it is a 429. Keeps a signed-up user from using Rota to send spam.
+ */
+export async function limitEmailInvites(userId: string, ip: string): Promise<void> {
+  const byUser = await hit(`invite:user:${userId}`, EMAIL_INVITES_PER_USER_PER_DAY, DAY_SEC);
+  const byIp = await hit(`invite:ip:${hashIp(ip)}`, EMAIL_INVITES_PER_IP_PER_DAY, DAY_SEC);
+  if (!byUser.ok || !byIp.ok) throw new HttpError(429, "rate_limited");
+}
+
 /** Existing account: added now and told by email. Otherwise a pending invite plus a sign-up email. */
 export async function inviteEmail(tripId: string, rawEmail: string, byUserId: string): Promise<{ status: "added" | "already_member" | "pending" }> {
   const email = rawEmail.trim().toLowerCase();
@@ -128,7 +145,9 @@ export async function inviteEmail(tripId: string, rawEmail: string, byUserId: st
     .select({ id: tripInvites.id })
     .from(tripInvites)
     .where(and(eq(tripInvites.tripId, tripId), eq(tripInvites.kind, "email"), eq(tripInvites.email, email), isNull(tripInvites.revokedAt)));
-  if (!pending) await db.insert(tripInvites).values({ tripId, kind: "email", email, createdBy: byUserId });
+  // Already invited: no second email, so repeating the invite cannot be used to flood an inbox.
+  if (pending) return { status: "pending" };
+  await db.insert(tripInvites).values({ tripId, kind: "email", email, createdBy: byUserId });
   await sendInviteEmail({
     to: email,
     tripName: trip.name,
