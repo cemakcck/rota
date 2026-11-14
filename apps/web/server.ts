@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import next from "next";
 import { startCleanup } from "./src/server/cleanup";
 import { startFriends, stopFriends } from "./src/server/friend";
+import { exitOnSignals } from "./src/server/shutdown";
 import { createSyncServer, serveSync } from "./src/server/sync";
 
 /** apps/web: this file's directory, or the one above when it runs bundled from dist/ (the container). */
@@ -71,5 +72,8 @@ export async function startServer({ port, dev }: { port: number; dev: boolean })
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 3400);
   const dev = process.env.NODE_ENV !== "production";
-  startServer({ port, dev }).then(({ url }) => console.log(`Rota ready on ${url}`));
+  startServer({ port, dev }).then((server) => {
+    exitOnSignals(server);
+    console.log(`Rota ready on ${server.url}`);
+  });
 }

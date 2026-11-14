@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import { and, eq } from "drizzle-orm";
+import { EventEmitter } from "node:events";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import * as Y from "yjs";
@@ -9,6 +10,7 @@ import { addDay, addPlace, newTripId, readTrip, setTripMeta } from "@rota/trip";
 import { startServer, type RunningServer } from "../../server";
 import { db } from "@/server/db/client";
 import { tripMembers, user } from "@/server/db/schema";
+import { exitOnSignals } from "@/server/shutdown";
 import { createSyncServer, serveSync } from "@/server/sync";
 import { loadState, storeState } from "@/server/trips/docStore";
 import { addMember, createTrip, deleteTrip, removeMember } from "@/server/trips/repo";
@@ -335,5 +337,24 @@ describe("sync server restart", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("SIGTERM (a deploy) stores the document still inside the store debounce, then exits", async () => {
+    const ann = await signUpUser({ name: "Ann" });
+    const id = await newTrip(ann);
+    const server = await startSyncOnly();
+    const proc = new EventEmitter();
+    const exit = vi.fn();
+    exitOnSignals(server, { proc, exit, log: () => {} });
+    const a = connect(server, id, as(ann));
+    await a.synced;
+    setTripMeta(a.doc, { name: "Before SIGTERM" }, ann.id);
+    await vi.waitFor(() => expect(a.provider.hasUnsyncedChanges).toBe(false));
+
+    proc.emit("SIGTERM");
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, (await loadState(id))!);
+    expect(readTrip(doc).name).toBe("Before SIGTERM");
   });
 });
