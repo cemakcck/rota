@@ -92,7 +92,7 @@ type State = {
 };
 
 type Action =
-  | { type: "open"; tripId: string }
+  | { type: "open"; tripId: string; userId: string | null }
   | { type: "local-loaded"; view: TripView; hasContent: boolean }
   | { type: "provider"; provider: HocuspocusProvider }
   | { type: "view"; view: TripView; hasContent: boolean }
@@ -106,7 +106,7 @@ type Action =
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "open":
-      return initialState(action.tripId);
+      return initialState(action);
     case "local-loaded":
       return { ...state, localLoaded: true, view: action.view, hasContent: action.hasContent };
     case "provider":
@@ -128,7 +128,7 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-function initialState(tripId: string): State {
+function initialState({ tripId, userId }: { tripId: string; userId: string | null }): State {
   const doc = new Y.Doc();
   return {
     tripId,
@@ -141,7 +141,7 @@ function initialState(tripId: string): State {
     simulatedOffline: false,
     connected: false,
     synced: false,
-    unsynced: pendingCount(tripId),
+    unsynced: userId === null ? 0 : pendingCount(tripId, userId),
     closed: null,
   };
 }
@@ -157,11 +157,11 @@ const hasContent = (doc: Y.Doc) => doc.store.clients.size > 0;
 export function useTrip(tripId: string): TripSession {
   const userId = useUserId();
   const token = syncToken();
-  const [state, dispatch] = useReducer(reducer, tripId, initialState);
+  const [state, dispatch] = useReducer(reducer, { tripId, userId }, initialState);
   /** This tab's key for its pending changes (see pending.ts). */
   const [tabId] = useState(newId);
   // Another trip: start over with a fresh document (React re-renders before committing this one).
-  if (state.tripId !== tripId) dispatch({ type: "open", tripId });
+  if (state.tripId !== tripId) dispatch({ type: "open", tripId, userId });
   const { doc } = state;
 
   useEffect(() => {
@@ -170,7 +170,10 @@ export function useTrip(tripId: string): TripSession {
     let provider: HocuspocusProvider | null = null;
     let frame: number | null = null;
 
-    const recount = () => dispatch({ type: "unsynced", unsynced: pendingCount(tripId) });
+    // This device's copy and pending changes belong to the user; while the user is unknown the tab keeps
+    // neither (online only) and opens its copy once the id is known.
+    const user = userId;
+    const recount = () => dispatch({ type: "unsynced", unsynced: user === null ? 0 : pendingCount(tripId, user) });
     /**
      * Records left by tabs that stopped beating become this tab's to deliver. IndexedDB is read again
      * first, so this document (which its provider sends) holds whatever such a tab stored there, and the
@@ -178,12 +181,12 @@ export function useTrip(tripId: string): TripSession {
      */
     let adopting = false;
     const adopt = async () => {
-      if (adopting || !provider || !hasStalePending(tripId, tabId)) return;
+      if (adopting || !provider || user === null || !hasStalePending(tripId, user, tabId)) return;
       adopting = true;
       try {
         if (local) await fetchUpdates(local);
         if (disposed) return;
-        adoptStalePending(tripId, tabId);
+        adoptStalePending(tripId, user, tabId);
         recount();
         acknowledged();
       } finally {
@@ -193,35 +196,40 @@ export function useTrip(tripId: string): TripSession {
     const beat = () => {
       // A tab that cannot sync (no provider, e.g. a friend window waiting for its token) never delivers
       // its records, so they stay adoptable by a tab that can.
-      if (provider) heartbeatPending(tripId, tabId);
-      else closePending(tripId, tabId);
+      if (user !== null) {
+        if (provider) heartbeatPending(tripId, user, tabId);
+        else closePending(tripId, user, tabId);
+      }
       recount();
       void adopt();
     };
     const beating = setInterval(beat, PENDING_HEARTBEAT_MS);
     const onStorage = (event: StorageEvent) => {
-      if (isPendingStorageKey(tripId, event.key)) recount();
+      if (user !== null && isPendingStorageKey(tripId, user, event.key)) recount();
     };
     window.addEventListener("storage", onStorage);
     // Hidden tabs beat rarely: beat as soon as one is shown again, and say so when it is closing.
-    const onClosing = () => closePending(tripId, tabId);
+    const onClosing = () => {
+      if (user !== null) closePending(tripId, user, tabId);
+    };
     document.addEventListener("visibilitychange", beat);
     window.addEventListener("pagehide", onClosing);
 
     /** The server has everything this tab sent: its own records are no longer waiting. */
     const acknowledged = () => {
-      if (!provider?.synced || provider.unsyncedChanges !== 0) return;
-      clearPending(tripId, tabId);
+      if (!provider?.synced || provider.unsyncedChanges !== 0 || user === null) return;
+      clearPending(tripId, user, tabId);
       recount();
     };
 
     const onTransaction = (transaction: Y.Transaction) => {
       // Updates from the server, the local copy or another tab are not this tab's changes.
       const { origin } = transaction;
+      if (user === null) return;
       if (origin === provider || origin === local || origin === TAB_ORIGIN) return;
       const records = changedRecords(transaction);
       if (records.length === 0) return;
-      recordPending(tripId, tabId, records, provider ? Date.now() : 0);
+      recordPending(tripId, user, tabId, records, provider ? Date.now() : 0);
       recount();
     };
 
@@ -251,7 +259,7 @@ export function useTrip(tripId: string): TripSession {
       provider.on("status", ({ status }: { status: string }) => dispatch({ type: "connected", connected: status === "connected" }));
       provider.on("synced", ({ state: synced }: { state: boolean }) => {
         dispatch({ type: "synced", synced });
-        if (synced) markOfflineCopy(tripId);
+        if (synced && user !== null) markOfflineCopy(tripId, user);
         acknowledged();
       });
       provider.on("unsyncedChanges", acknowledged);
@@ -264,8 +272,8 @@ export function useTrip(tripId: string): TripSession {
 
     localStorageWorks().then((works) => {
       if (disposed) return;
-      if (!works) return attach();
-      local = new IndexeddbPersistence(tripDatabaseName(tripId), doc);
+      if (!works || user === null) return attach();
+      local = new IndexeddbPersistence(tripDatabaseName(tripId, user), doc);
       local.whenSynced.then(attach);
     });
 
@@ -288,7 +296,7 @@ export function useTrip(tripId: string): TripSession {
       provider?.destroy();
       void local?.destroy();
     };
-  }, [doc, tripId, token, tabId]);
+  }, [doc, tripId, token, tabId, userId]);
 
   // The same person's open tabs of the trip relay their edits to each other, so every tab's provider
   // sends everything. Scoped per user: in the demo, the visitor's window and the friend window are two

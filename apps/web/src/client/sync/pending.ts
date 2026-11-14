@@ -4,9 +4,9 @@ import * as Y from "yjs";
 // acknowledged yet: each place, day and checklist item once, and the trip's settings once. Typing a
 // note is one change to its place, not one per keystroke.
 //
-// Every tab keeps its own entry, `rota.pending.<tripId>.<tabId>` = { keys, heartbeat }, and clears only
-// that entry once its connection has the server's acknowledgement; the count is the union over all
-// tabs. A user's open tabs relay their edits to each other (useTrip's BroadcastChannel), so each tab's
+// Entries are per user (in the demo one browser holds two people). Each of the user's tabs keeps its
+// own entry, `rota.pending.<tripId>.<userId>.<tabId>` = { keys, heartbeat }, and clears only that entry
+// once its connection has the server's acknowledgement; the count is the union over the user's tabs. A user's open tabs relay their edits to each other (useTrip's BroadcastChannel), so each tab's
 // document, and so what its provider sends, holds that user's edits from every tab. A tab that stopped beating (frozen, crashed),
 // said it was closing, or cannot sync is adopted by a tab with a provider: that tab first re-reads
 // IndexedDB into its document, then takes the records over, so its next acknowledgement covers them.
@@ -20,7 +20,7 @@ type YType = (typeof Y.AbstractType)["prototype"];
 
 type Entry = { keys: string[]; heartbeat: number };
 
-const prefix = (tripId: string) => `rota.pending.${tripId}.`;
+const prefix = (tripId: string, userId: string) => `rota.pending.${tripId}.${userId}.`;
 
 /** Record key for the top-level share entry a change sits under; null for changes that are not counted. */
 function recordKey(share: string, key: string | null): string | null {
@@ -81,12 +81,12 @@ function writeEntry(storageKey: string, entry: Entry): void {
   }
 }
 
-function storageKeys(tripId: string): string[] {
+function storageKeys(tripId: string, userId: string): string[] {
   const out: string[] = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith(prefix(tripId))) out.push(key);
+      if (key?.startsWith(prefix(tripId, userId))) out.push(key);
     }
   } catch {
     // Storage blocked.
@@ -95,49 +95,49 @@ function storageKeys(tripId: string): string[] {
 }
 
 /** True if a storage event key belongs to this trip's pending entries (null: storage was cleared). */
-export function isPendingStorageKey(tripId: string, key: string | null): boolean {
-  return key === null || key.startsWith(prefix(tripId));
+export function isPendingStorageKey(tripId: string, userId: string, key: string | null): boolean {
+  return key === null || key.startsWith(prefix(tripId, userId));
 }
 
 /** Distinct records waiting across every tab. */
-export function pendingCount(tripId: string): number {
+export function pendingCount(tripId: string, userId: string): number {
   const all = new Set<string>();
-  for (const key of storageKeys(tripId)) for (const record of readEntry(key)?.keys ?? []) all.add(record);
+  for (const key of storageKeys(tripId, userId)) for (const record of readEntry(key)?.keys ?? []) all.add(record);
   return all.size;
 }
 
 /** Adds records to this tab's entry. */
-export function recordPending(tripId: string, tabId: string, keys: string[], now: number = Date.now()): void {
-  const storageKey = prefix(tripId) + tabId;
+export function recordPending(tripId: string, userId: string, tabId: string, keys: string[], now: number = Date.now()): void {
+  const storageKey = prefix(tripId, userId) + tabId;
   const mine = readEntry(storageKey)?.keys ?? [];
   writeEntry(storageKey, { keys: [...new Set([...mine, ...keys])], heartbeat: now });
 }
 
 /** Marks this tab's entry (if any) as alive. */
-export function heartbeatPending(tripId: string, tabId: string, now: number = Date.now()): void {
-  const storageKey = prefix(tripId) + tabId;
+export function heartbeatPending(tripId: string, userId: string, tabId: string, now: number = Date.now()): void {
+  const storageKey = prefix(tripId, userId) + tabId;
   const mine = readEntry(storageKey);
   if (mine) writeEntry(storageKey, { keys: mine.keys, heartbeat: now });
 }
 
 /** The tab is closing: its entry (if any) is stale at once, so another tab adopts it at its next beat. */
-export function closePending(tripId: string, tabId: string): void {
-  heartbeatPending(tripId, tabId, 0);
+export function closePending(tripId: string, userId: string, tabId: string): void {
+  heartbeatPending(tripId, userId, tabId, 0);
 }
 
 /** This tab's changes are all on the server. */
-export function clearPending(tripId: string, tabId: string): void {
+export function clearPending(tripId: string, userId: string, tabId: string): void {
   try {
-    localStorage.removeItem(prefix(tripId) + tabId);
+    localStorage.removeItem(prefix(tripId, userId) + tabId);
   } catch {
     // Storage blocked.
   }
 }
 
 /** True if another tab's entry is stale (or unreadable) and so waits to be adopted. */
-export function hasStalePending(tripId: string, tabId: string, now: number = Date.now()): boolean {
-  const own = prefix(tripId) + tabId;
-  return storageKeys(tripId).some((key) => {
+export function hasStalePending(tripId: string, userId: string, tabId: string, now: number = Date.now()): boolean {
+  const own = prefix(tripId, userId) + tabId;
+  return storageKeys(tripId, userId).some((key) => {
     if (key === own) return false;
     const entry = readEntry(key);
     return !entry || now - entry.heartbeat > PENDING_STALE_MS;
@@ -145,20 +145,20 @@ export function hasStalePending(tripId: string, tabId: string, now: number = Dat
 }
 
 /** Takes over the records of tabs that stopped beating (and drops unreadable entries). */
-export function adoptStalePending(tripId: string, tabId: string, now: number = Date.now()): void {
-  const own = prefix(tripId) + tabId;
+export function adoptStalePending(tripId: string, userId: string, tabId: string, now: number = Date.now()): void {
+  const own = prefix(tripId, userId) + tabId;
   const adopted: string[] = [];
-  for (const key of storageKeys(tripId)) {
+  for (const key of storageKeys(tripId, userId)) {
     if (key === own) continue;
     const entry = readEntry(key);
     if (entry && now - entry.heartbeat <= PENDING_STALE_MS) continue;
     adopted.push(...(entry?.keys ?? []));
-    clearPending(tripId, key.slice(prefix(tripId).length));
+    clearPending(tripId, userId, key.slice(prefix(tripId, userId).length));
   }
-  if (adopted.length > 0) recordPending(tripId, tabId, adopted, now);
+  if (adopted.length > 0) recordPending(tripId, userId, tabId, adopted, now);
 }
 
 /** Removes every tab's entry for the trip (the trip is gone from this device). */
-export function forgetPending(tripId: string): void {
-  for (const key of storageKeys(tripId)) clearPending(tripId, key.slice(prefix(tripId).length));
+export function forgetPending(tripId: string, userId: string): void {
+  for (const key of storageKeys(tripId, userId)) clearPending(tripId, userId, key.slice(prefix(tripId, userId).length));
 }

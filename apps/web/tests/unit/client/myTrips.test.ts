@@ -21,32 +21,54 @@ async function databaseNames(): Promise<string[]> {
   return (await indexedDB.databases()).map((d) => d.name ?? "");
 }
 
+const user = "u-ada";
+
 afterEach(() => localStorage.clear());
 
 describe("my trips cache", () => {
   it("round-trips the trip list", () => {
     const list = [trip(newTripId(), "Istanbul"), trip(newTripId(), "Lisbon")];
-    cacheTrips(list);
-    expect(cachedTrips()).toEqual(list);
+    cacheTrips(user, list);
+    expect(cachedTrips(user)).toEqual(list);
+    expect(cachedTrips("u-deniz")).toEqual([]);
   });
 
   it("cachedTrips survives corrupted storage", () => {
-    localStorage.setItem("rota.myTrips", "{not json");
-    expect(cachedTrips()).toEqual([]);
-    localStorage.setItem("rota.myTrips", JSON.stringify({ trips: "nope" }));
-    expect(cachedTrips()).toEqual([]);
-    localStorage.setItem("rota.myTrips", JSON.stringify([trip(newTripId(), "ok"), { id: 7 }, null]));
-    expect(cachedTrips().map((t) => t.name)).toEqual(["ok"]);
-    localStorage.setItem("rota.offlineTrips", "[[[");
-    expect(hasOfflineCopy(newTripId())).toBe(false);
+    localStorage.setItem(`rota.myTrips.${user}`, "{not json");
+    expect(cachedTrips(user)).toEqual([]);
+    localStorage.setItem(`rota.myTrips.${user}`, JSON.stringify({ trips: "nope" }));
+    expect(cachedTrips(user)).toEqual([]);
+    localStorage.setItem(`rota.myTrips.${user}`, JSON.stringify([trip(newTripId(), "ok"), { id: 7 }, null]));
+    expect(cachedTrips(user).map((t) => t.name)).toEqual(["ok"]);
+    localStorage.setItem(`rota.offlineTrips.${user}`, "[[[");
+    expect(hasOfflineCopy(newTripId(), user)).toBe(false);
+  });
+
+  it("is per user: another person's list, offline copies and trip copy are untouched", async () => {
+    const id = newTripId();
+    cacheTrips("u-deniz", [trip(id, "Deniz's Istanbul")]);
+    markOfflineCopy(id, "u-deniz");
+    const doc = new Y.Doc();
+    doc.getMap("meta").set("name", "Istanbul");
+    const idb = new IndexeddbPersistence(`rota-trip-${id}-u-deniz`, doc);
+    await idb.whenSynced;
+    await idb.destroy();
+    expect(cachedTrips(user)).toEqual([]);
+    expect(hasOfflineCopy(id, user)).toBe(false);
+
+    await forgetTrip(id, user);
+
+    expect(await databaseNames()).toContain(`rota-trip-${id}-u-deniz`);
+    expect(hasOfflineCopy(id, "u-deniz")).toBe(true);
+    expect(cachedTrips("u-deniz").map((t) => t.id)).toEqual([id]);
   });
 
   it("remembers which trips have an offline copy", () => {
     const id = newTripId();
-    expect(hasOfflineCopy(id)).toBe(false);
-    markOfflineCopy(id);
-    markOfflineCopy(id);
-    expect(hasOfflineCopy(id)).toBe(true);
+    expect(hasOfflineCopy(id, user)).toBe(false);
+    markOfflineCopy(id, user);
+    markOfflineCopy(id, user);
+    expect(hasOfflineCopy(id, user)).toBe(true);
   });
 
   it("forgetTrip deletes the trip's IndexedDB database", async () => {
@@ -55,23 +77,23 @@ describe("my trips cache", () => {
     for (const tripId of [id, other]) {
       const doc = new Y.Doc();
       doc.getMap("meta").set("name", "Istanbul");
-      const idb = new IndexeddbPersistence(`rota-trip-${tripId}`, doc);
+      const idb = new IndexeddbPersistence(`rota-trip-${tripId}-${user}`, doc);
       await idb.whenSynced;
       await idb.destroy();
     }
-    cacheTrips([trip(id, "Istanbul"), trip(other, "Lisbon")]);
-    markOfflineCopy(id);
-    recordPending(id, "tab-a", ["meta"], Date.now());
-    recordPending(other, "tab-a", ["meta"], Date.now());
-    expect(await databaseNames()).toContain(`rota-trip-${id}`);
+    cacheTrips(user, [trip(id, "Istanbul"), trip(other, "Lisbon")]);
+    markOfflineCopy(id, user);
+    recordPending(id, user, "tab-a", ["meta"], Date.now());
+    recordPending(other, user, "tab-a", ["meta"], Date.now());
+    expect(await databaseNames()).toContain(`rota-trip-${id}-${user}`);
 
-    await forgetTrip(id);
+    await forgetTrip(id, user);
 
-    expect(await databaseNames()).not.toContain(`rota-trip-${id}`);
-    expect(await databaseNames()).toContain(`rota-trip-${other}`);
-    expect(hasOfflineCopy(id)).toBe(false);
-    expect(pendingCount(id)).toBe(0);
-    expect(pendingCount(other)).toBe(1);
-    expect(cachedTrips().map((t) => t.id)).toEqual([other]);
+    expect(await databaseNames()).not.toContain(`rota-trip-${id}-${user}`);
+    expect(await databaseNames()).toContain(`rota-trip-${other}-${user}`);
+    expect(hasOfflineCopy(id, user)).toBe(false);
+    expect(pendingCount(id, user)).toBe(0);
+    expect(pendingCount(other, user)).toBe(1);
+    expect(cachedTrips(user).map((t) => t.id)).toEqual([other]);
   });
 });

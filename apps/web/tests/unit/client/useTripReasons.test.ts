@@ -48,24 +48,27 @@ const { StubProvider } = await vi.hoisted(async () => {
 });
 
 vi.mock("@hocuspocus/provider", () => ({ HocuspocusProvider: StubProvider }));
-/** The user a hook instance signs in as: read on its first render and kept, like a real tab's session. */
+/** The user a hook instance signs in as: kept from its first render like a real tab's session (an unknown user can become known later). */
 const signedIn = vi.hoisted(() => ({ userId: "u-ada" as string | null }));
 vi.mock("@/client/authClient", async (original) => {
   const { useState } = await import("react");
   return {
     ...(await original<typeof import("@/client/authClient")>()),
-    useUserId: () => useState(() => signedIn.userId)[0],
+    useUserId: () => useState(() => signedIn.userId)[0] ?? signedIn.userId,
   };
 });
 
-async function seedLocalTrip(name: string): Promise<string> {
+/** A trip already on this device, in each listed user's own copy. */
+async function seedLocalTrip(name: string, users: string[] = ["u-ada"]): Promise<string> {
   const id = newTripId();
   const doc = new Y.Doc();
   initTrip(doc, { name, startDate: "2026-12-04", days: 3, locale: "en" }, "seed");
   addPlace(doc, { name: "Galata Tower", category: "sight", dayId: null }, "seed");
-  const idb = new IndexeddbPersistence(`rota-trip-${id}`, doc);
-  await idb.whenSynced;
-  await idb.destroy();
+  for (const user of users) {
+    const idb = new IndexeddbPersistence(`rota-trip-${id}-${user}`, doc);
+    await idb.whenSynced;
+    await idb.destroy();
+  }
   return id;
 }
 
@@ -88,9 +91,9 @@ async function openTrip(id: string) {
 }
 
 /** This trip's pending entries in localStorage, one per tab. */
-const pendingEntries = (tripId: string): { keys: string[]; heartbeat: number }[] =>
+const pendingEntries = (tripId: string, user = "u-ada"): { keys: string[]; heartbeat: number }[] =>
   Object.keys(localStorage)
-    .filter((k) => k.startsWith(`rota.pending.${tripId}.`))
+    .filter((k) => k.startsWith(`rota.pending.${tripId}.${user}.`))
     .map((k) => JSON.parse(localStorage.getItem(k)!));
 
 const databaseNames = async () => (await indexedDB.databases()).map((d) => d.name);
@@ -130,11 +133,11 @@ describe("useTrip", () => {
     act(() => hook.result.current.simulateOffline(false));
     expect(provider.connects).toBe(0);
     expect(readTrip(hook.result.current.doc).name).toBe("Istanbul long weekend");
-    expect(await databaseNames()).toContain(`rota-trip-${id}`);
+    expect(await databaseNames()).toContain(`rota-trip-${id}-u-ada`);
 
     hook.unmount();
-    await forgetTrip(id);
-    expect(await databaseNames()).not.toContain(`rota-trip-${id}`);
+    await forgetTrip(id, "u-ada");
+    expect(await databaseNames()).not.toContain(`rota-trip-${id}-u-ada`);
   });
 
   it.each([
@@ -268,7 +271,7 @@ describe("useTrip", () => {
       act(() => {
         setTripMeta(hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
       });
-      const entryKey = Object.keys(localStorage).find((k) => k.startsWith(`rota.pending.${id}.`))!;
+      const entryKey = Object.keys(localStorage).find((k) => k.startsWith(`rota.pending.${id}.u-ada.`))!;
       const before = JSON.parse(localStorage.getItem(entryKey)!).heartbeat;
       vi.setSystemTime(Date.now() + 2 * 60_000);
       act(() => {
@@ -306,7 +309,7 @@ describe("useTrip", () => {
     const a = await openTrip(id);
     const b = await openTrip(id);
     /** The browser tells other tabs about localStorage writes; jsdom has one window, so the test does. */
-    const tellOtherTabs = () => window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.x` }));
+    const tellOtherTabs = () => window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.u-ada.x` }));
 
     act(() => {
       setTripMeta(a.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
@@ -345,7 +348,7 @@ describe("useTrip", () => {
     await waitFor(() => expect(a.hook.result.current.view.name).toBe("Lisbon and Porto"));
     expect(a.provider.unsyncedChanges).toBe(1);
     act(() => {
-      window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.x` }));
+      window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.u-ada.x` }));
     });
     expect(a.hook.result.current.status.pending).toBe(1);
 
@@ -367,7 +370,7 @@ describe("useTrip", () => {
   });
 
   it("tabs of different people (visitor and friend window) do not relay to each other", async () => {
-    const id = await seedLocalTrip("Lisbon");
+    const id = await seedLocalTrip("Lisbon", ["u-ada", "u-deniz"]);
     const visitor = await openTrip(id);
     signedIn.userId = "u-deniz";
     const friend = await openTrip(id);
@@ -382,6 +385,58 @@ describe("useTrip", () => {
     friend.hook.unmount();
   });
 
+  it("visitor and friend in one browser: separate copies, separate counts, no takeover of the other's changes", async () => {
+    const id = await seedLocalTrip("Lisbon", ["u-ada"]);
+    const visitor = await openTrip(id);
+    signedIn.userId = "u-deniz";
+    const friend = await openTrip(id);
+    // The friend has no copy of their own yet: theirs is not the visitor's.
+    expect(await databaseNames()).toContain(`rota-trip-${id}-u-deniz`);
+    expect(friend.hook.result.current.ready).toBe(false);
+
+    act(() => {
+      setTripMeta(visitor.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
+      addChecklistItem(friend.hook.result.current.doc, "Tickets", "u-deniz");
+      addChecklistItem(friend.hook.result.current.doc, "Sunscreen", "u-deniz");
+      window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.u-deniz.x` }));
+      window.dispatchEvent(new StorageEvent("storage", { key: `rota.pending.${id}.u-ada.x` }));
+    });
+    expect(visitor.hook.result.current.status.pending).toBe(1);
+    expect(friend.hook.result.current.status.pending).toBe(2);
+
+    // The friend window closes; the visitor's tab must not take over Deniz's changes.
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    friend.hook.unmount();
+    act(() => acknowledge(visitor.provider));
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(settle);
+    expect(visitor.hook.result.current.status.pending).toBe(0);
+    expect(pendingEntries(id, "u-deniz")).toHaveLength(1);
+    expect(readTrip(visitor.provider.configuration.document).checklist).toHaveLength(0);
+    visitor.hook.unmount();
+  });
+
+  it("a tab whose user is unknown keeps no copy and records nothing, until the user is known", async () => {
+    const id = newTripId();
+    signedIn.userId = null;
+    const unknown = await openTrip(id);
+    act(() => {
+      setTripMeta(unknown.hook.result.current.doc, { name: "Lisbon" }, "someone");
+    });
+    expect(Object.keys(localStorage).filter((k) => k.startsWith(`rota.pending.${id}`))).toEqual([]);
+    expect((await databaseNames()).filter((n) => n?.startsWith(`rota-trip-${id}`))).toEqual([]);
+    expect(unknown.hook.result.current.status.pending).toBe(0);
+
+    signedIn.userId = "u-ada";
+    unknown.hook.rerender();
+    await waitFor(async () => expect(await databaseNames()).toContain(`rota-trip-${id}-u-ada`));
+    unknown.hook.unmount();
+  });
+
   it("a tab whose user is unknown joins no relay", async () => {
     const id = await seedLocalTrip("Lisbon");
     const known = await openTrip(id);
@@ -391,7 +446,8 @@ describe("useTrip", () => {
       setTripMeta(known.hook.result.current.doc, { name: "Lisbon and Porto" }, "u-ada");
     });
     await act(settle);
-    expect(readTrip(unknown.hook.result.current.doc).name).toBe("Lisbon");
+    // Nothing relayed, and no local copy either (the user is unknown): the document stays empty.
+    expect(readTrip(unknown.hook.result.current.doc).name).toBe("");
     known.hook.unmount();
     unknown.hook.unmount();
   });
@@ -427,19 +483,19 @@ describe("useTrip", () => {
 
     // Another tab wrote to IndexedDB without the channel (e.g. it was frozen), then went stale.
     const other = new Y.Doc();
-    const idb = new IndexeddbPersistence(`rota-trip-${id}`, other);
+    const idb = new IndexeddbPersistence(`rota-trip-${id}-u-ada`, other);
     await idb.whenSynced;
     setTripMeta(other, { name: "Lisbon and Porto" }, "u-ada");
     await new Promise((resolve) => setTimeout(resolve, 20));
     await idb.destroy();
-    recordPending(id, "frozen-tab", ["meta"], 0);
+    recordPending(id, "u-ada", "frozen-tab", ["meta"], 0);
     expect(a.hook.result.current.view.name).toBe("Lisbon");
 
     act(() => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await waitFor(() => expect(readTrip(a.provider.configuration.document).name).toBe("Lisbon and Porto"));
-    await waitFor(() => expect(localStorage.getItem(`rota.pending.${id}.frozen-tab`)).toBeNull());
+    await waitFor(() => expect(localStorage.getItem(`rota.pending.${id}.u-ada.frozen-tab`)).toBeNull());
     // Re-read content went to the server but is not acknowledged yet.
     expect(a.hook.result.current.status.pending).toBe(1);
     act(() => acknowledge(a.provider));
