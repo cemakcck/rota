@@ -19,7 +19,11 @@ export function plannedLists(view: TripView): { id: ListId; places: PlaceView[] 
 export function dropTarget(view: TripView, activeId: string, overId: string): ({ dayId: ListId } & Slot) | null {
   // The rail's entries (a day, Ideas): at the end of that list.
   if (overId === "rail:ideas") return { dayId: null };
-  if (overId.startsWith("rail:day:")) return { dayId: overId.slice("rail:day:".length) };
+  if (overId.startsWith("rail:day:")) {
+    // A day removed meanwhile (by someone else, mid-drag) takes nothing.
+    const dayId = overId.slice("rail:day:".length);
+    return view.days.some((d) => d.id === dayId) ? { dayId } : null;
+  }
   if (overId.startsWith("list:")) {
     const key = overId.slice("list:".length);
     return { dayId: key === "ideas" ? null : key };

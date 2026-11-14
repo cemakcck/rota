@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import * as Y from "yjs";
-import { addChecklistItem, addPlace, dayNote, removeDay, setTripMeta, updateChecklistItem } from "@rota/trip";
+import { addChecklistItem, addPlace, dayNote, readTrip, removeDay, setTripMeta, updateChecklistItem } from "@rota/trip";
+import { dropTarget } from "@/components/trip/plan";
 import { renderIntl, stubFetch } from "./helpers";
-import { fake, newTrip, remoteEdit, useFakeTrip } from "./tripHarness";
+import { fake, newTrip, refresh, remoteEdit, useFakeTrip } from "./tripHarness";
 
 vi.mock("@/client/sync/useTrip", async (original) => ({ ...(await original<object>()), useTrip: () => useFakeTrip() }));
 vi.mock("@/client/authClient", async (original) => ({
@@ -124,6 +125,32 @@ describe("trip view", () => {
     expect(window.location.search).toBe("?view=ideas");
   });
 
+  it("a deep link to a day survives the trip loading", () => {
+    const { dayIds } = newTrip({ days: 3 });
+    const loaded = fake.view;
+    at(`?view=day&day=${dayIds[1]}`);
+    // Before the local copy is read: no days yet.
+    fake.ready = false;
+    fake.view = readTrip(new Y.Doc());
+    renderIntl(<TripScreen tripId="t1" />);
+    expect(window.location.search).toBe(`?view=day&day=${dayIds[1]}`);
+
+    fake.view = loaded;
+    fake.ready = true;
+    refresh();
+    expect(dayButton(2).getAttribute("aria-current")).toBe("true");
+    expect(window.location.search).toBe(`?view=day&day=${dayIds[1]}`);
+  });
+
+  it("a drop on a rail day that is gone does nothing", () => {
+    const { doc, dayIds } = newTrip({ days: 2 });
+    const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    expect(dropTarget(fake.view, id, `rail:day:${dayIds[1]}`)).toEqual({ dayId: dayIds[1] });
+    expect(dropTarget(fake.view, id, "rail:ideas")).toEqual({ dayId: null });
+    removeDay(doc, dayIds[1], "u2");
+    expect(dropTarget(fake.view, id, `rail:day:${dayIds[1]}`)).toBeNull();
+  });
+
   it("rail shows each day with colour, date and stop count and marks the selected one", () => {
     const { doc, dayIds } = newTrip({ days: 3 });
     addPlace(doc, { name: "Karaköy Güllüoğlu", category: "food", dayId: dayIds[0] }, "u1");
@@ -211,6 +238,8 @@ describe("trip view", () => {
     expect(within(header).getByRole("heading", { level: 1, name: "Istanbul long weekend" })).toBeTruthy();
     expect(within(header).getByText("Fri, Nov 27 – Sun, Nov 29 · 3 days · 2 places")).toBeTruthy();
     const weather = await within(header).findByRole("group", { name: "Weather" });
+    // Shown on every desktop width (from 1024 px).
+    expect(weather.className).toMatch(/(^| )lg:flex( |$)/);
     expect(
       within(weather)
         .getAllByRole("img")

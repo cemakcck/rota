@@ -62,39 +62,30 @@ function RailDay({ day, label, summary, selected, onSelect }: { day: DayView; la
   );
 }
 
-function RailTab({
-  label,
-  name,
-  count,
-  selected,
-  drop,
-  onSelect,
-}: {
-  label: string;
-  name?: string;
-  count?: string;
-  selected: boolean;
-  drop?: string;
-  onSelect(): void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: drop ?? "rail:none",
-    disabled: !drop,
-  });
+type TabProps = { label: string; name?: string; count?: string; selected: boolean; onSelect(): void };
+
+/** A rail entry that is not a day: Ideas & votes, the checklist, the whole trip. */
+function RailTab({ label, name, count, selected, onSelect, drop }: TabProps & { drop?: { id: string; ref(el: HTMLElement | null): void; over: boolean } }) {
   return (
     <button
-      ref={drop ? setNodeRef : undefined}
+      ref={drop?.ref}
       type="button"
-      data-drop={drop}
+      data-drop={drop?.id}
       aria-label={name}
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
-      className={`${entry} flex items-center justify-between gap-2 py-2 text-ink-2 aria-[current=true]:font-medium aria-[current=true]:text-ink ${isOver ? overLook : ""}`}
+      className={`${entry} flex items-center justify-between gap-2 py-2 text-ink-2 aria-[current=true]:font-medium aria-[current=true]:text-ink ${drop?.over ? overLook : ""}`}
     >
       {label}
       {count !== undefined && <span className="rounded-full bg-paper px-2 text-[12px] text-ink-2">{count}</span>}
     </button>
   );
+}
+
+/** A rail entry rows can be dropped on (Ideas). */
+function RailDropTab({ id, ...props }: TabProps & { id: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return <RailTab {...props} drop={{ id, ref: setNodeRef, over: isOver }} />;
 }
 
 /**
@@ -185,11 +176,11 @@ export function Rail({
         </p>
       )}
       <hr className="mx-1 my-2 border-line max-lg:hidden" />
-      <RailTab
+      <RailDropTab
         label={t("ideas")}
         name={t("ideasCount", { count: ideas })}
         count={String(ideas)}
-        drop={RAIL_IDEAS_DROP_ID}
+        id={RAIL_IDEAS_DROP_ID}
         selected={selected.kind === "ideas"}
         onSelect={() => onSelect({ kind: "ideas" })}
       />

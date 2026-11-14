@@ -105,7 +105,7 @@ function TripScreenFor({ tripId }: Props) {
   const undo = useUndo(doc, editor);
   const [filter, setFilter] = useState(NO_FILTER);
   // What the list and the map show (mirrored in the address), and the place selected in the list or on the map.
-  const [shown, show] = useTripView(view);
+  const [shown, show] = useTripView(view, ready);
   const [picked, setPicked] = useState<string | null>(null);
   // Phones: the full-screen map under the list's sheet, or the list alone.
   const [phoneView, setPhoneView] = useState<"map" | "list">("map");

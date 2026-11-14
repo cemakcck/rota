@@ -66,8 +66,9 @@ function writeView(v: TripViewState) {
  * reloads and shared links land in the same place. Without one: the first day (today's while the trip
  * is on). When the selected day disappears (removed elsewhere), the nearest remaining day takes over
  * (the one now at its position, else the last), or Ideas when no day is left; the address follows.
+ * Nothing is resolved before `ready` (the trip read from this device), so deep links survive loading.
  */
-export function useTripView(trip: TripView): [TripViewState, (v: TripViewState) => void] {
+export function useTripView(trip: TripView, ready = true): [TripViewState, (v: TripViewState) => void] {
   const search = useSyncExternalStore(
     subscribe,
     () => window.location.search,
@@ -78,7 +79,10 @@ export function useTripView(trip: TripView): [TripViewState, (v: TripViewState) 
 
   const asked = parseView(search);
   let state: TripViewState;
-  if (!asked) state = defaultView(trip);
+  // Until the trip is read (its first view has no days), the address is taken as it is: nothing is
+  // resolved against the empty trip, and nothing is written back.
+  if (!ready) state = asked ?? defaultView(trip);
+  else if (!asked) state = defaultView(trip);
   else if (asked.kind !== "day" || trip.days.some((d) => d.id === asked.dayId)) state = asked;
   else if (shown?.dayId === asked.dayId) {
     const day = trip.days[Math.min(shown.index, trip.days.length - 1)];
@@ -87,8 +91,8 @@ export function useTripView(trip: TripView): [TripViewState, (v: TripViewState) 
 
   // The address asked for something that is gone: it now names what is shown. Until it does, the
   // day last shown stays remembered, so the fallback holds steady.
-  const stale = asked !== null && !sameView(asked, state);
-  if (state.kind === "day" && !stale) {
+  const stale = ready && asked !== null && !sameView(asked, state);
+  if (ready && state.kind === "day" && !stale) {
     const index = trip.days.findIndex((d) => d.id === (state as { dayId: string }).dayId);
     if (shown?.dayId !== state.dayId || shown.index !== index) setShown({ dayId: state.dayId, index });
   }

@@ -101,7 +101,7 @@ function WeatherStrip({ view, weather }: { view: TripView; weather: Record<strin
   const next = view.days.map((d) => weather[d.date]).find((w) => w && "from" in w);
   if (days.length === 0 && !next) return null;
   return (
-    <div role="group" aria-label={tw("label")} className="hidden gap-1.5 xl:flex">
+    <div role="group" aria-label={tw("label")} className="hidden gap-1.5 lg:flex">
       {days.length > 0 ? days.map((d) => <WeatherChip key={d.id} weather={weather[d.date]} day={d.date} />) : next && <WeatherChip weather={next} />}
     </div>
   );
