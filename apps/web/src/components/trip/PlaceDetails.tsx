@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { placeNote, placeUrl, type Leg, type MemberView, type PlaceView, type TimelineEntry, type TravelMode } from "@rota/trip";
+import { normaliseTags, placeNote, placeUrl, type Leg, type MemberView, type PlaceView, type TimelineEntry, type TravelMode } from "@rota/trip";
 import type { StopHours, StopWarning } from "@/client/useHours";
 import { btn, btnSm, errorText } from "../ui";
 import { CategoryPicker } from "./CategoryPicker";
@@ -16,8 +16,86 @@ import { TagInput } from "./TagInput";
 import { Approximate, TravelLeg, useStay } from "./TravelLeg";
 import { parseTime } from "./plan";
 
-/** Stay lengths offered in the details (the place's own one is added when it is not among them). */
-const STAYS = [15, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300, 360, 480];
+/** Stay lengths offered in the details (the place's own one is added when it is not among them; any other via Custom…). */
+const STAYS = [0, 5, 10, 15, 20, 30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480];
+
+/** Wide screens (the desktop layout, ≥ 1024 px): the details are a card beside the plan, not a modal sheet. */
+const WIDE = "(min-width: 1024px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia?.(WIDE);
+      query?.addEventListener?.("change", onChange);
+      return () => query?.removeEventListener?.("change", onChange);
+    },
+    () => window.matchMedia?.(WIDE).matches ?? true,
+    () => true,
+  );
+}
+
+const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea, [contenteditable=true]";
+
+/** A stay of any length, typed in minutes: kept within 0–1440 in 5-minute steps. Null when not a number. */
+function customStay(text: string): number | null {
+  const minutes = Number(text);
+  if (text.trim() === "" || !Number.isFinite(minutes)) return null;
+  return Math.min(1440, Math.max(0, Math.round(minutes / 5) * 5));
+}
+
+/** The stay: common lengths in a compact select, and Custom… for any other (a minutes field). */
+function StayField({ id, value, onSave }: { id: string; value: number; onSave: (minutes: number) => void }) {
+  const t = useTranslations("trip");
+  const stay = useStay();
+  const [custom, setCustom] = useState<string | null>(null);
+  const stays = [...new Set([...STAYS, value])].sort((a, b) => a - b);
+  const commit = () => {
+    const minutes = custom === null ? null : customStay(custom);
+    setCustom(null);
+    if (minutes !== null && minutes !== value) onSave(minutes);
+    requestAnimationFrame(() => document.getElementById(id)?.focus());
+  };
+  return (
+    <div className="grid gap-1">
+      <select
+        id={id}
+        value={custom === null ? value : "custom"}
+        onChange={(e) => (e.target.value === "custom" ? setCustom(String(value)) : onSave(Number(e.target.value)))}
+        className="h-8 max-w-full rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold"
+      >
+        {stays.map((m) => (
+          <option key={m} value={m}>
+            {stay(m)}
+          </option>
+        ))}
+        <option value="custom">{t("customStay")}</option>
+      </select>
+      {custom !== null && (
+        <input
+          autoFocus
+          type="number"
+          min={0}
+          max={1440}
+          step={5}
+          inputMode="numeric"
+          aria-label={t("stayMinutes")}
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              setCustom(null);
+            }
+          }}
+          onBlur={commit}
+          className="h-8 w-24 rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-normal tabular-nums"
+        />
+      )}
+    </div>
+  );
+}
 
 /** Where the stop is: its day (number, colour, timeline) or Ideas. */
 export type DetailsWhere =
@@ -107,8 +185,9 @@ function TimeField({ id, place, estimate, onSet }: { id: string; place: PlaceVie
  * A stop's details (spec §2): its category chip with number and day, name, who added it; tiles for
  * Arrive (its time), Stay, the travel from the stop before and today's opening hours (with any
  * warning); tags; the shared note; Google Maps; Move up/down, Move to… and Delete. On wide screens a
- * card over the map's left edge, on phones a full-height sheet; a labelled region that takes focus when
- * it opens and closes with ✕ or Escape (the caller puts focus back on the row). Read-only without
+ * card over the map's left edge (a labelled, non-modal region); on phones a full-height sheet that is a
+ * modal dialog (focus stays in it). It takes focus when it opens and closes with ✕ or Escape (the
+ * caller puts focus back on the row). Read-only without
  * `actions`. While it is open, the place's row tells others it is being edited. The caller keys it by
  * place, so switching places starts afresh.
  */
@@ -138,12 +217,23 @@ export function PlaceDetails({
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
   const stay = useStay();
+  const wide = useWide();
   const collab = useCollab();
   const base = useId();
   const panel = useRef<HTMLElement>(null);
   const [picking, setPicking] = useState(false);
   // A tag being typed; the tags themselves save as they are added or removed.
   const [tagDraft, setTagDraft] = useState("");
+  // A tag typed but not yet confirmed (no Enter or comma) is kept when the field is left or the details close.
+  const saveTagDraft = () => {
+    if (!actions || tagDraft.trim() === "") return;
+    actions.save(place.id, { tags: normaliseTags([...place.tags, tagDraft]) });
+    setTagDraft("");
+  };
+  const close = () => {
+    saveTagDraft();
+    onClose();
+  };
   const name = place.name || t("unnamed");
   const note = collab && noteOrNull(() => placeNote(collab.doc, place.id));
   const ids = { name: `${base}-name`, time: `${base}-time`, stay: `${base}-stay`, tags: `${base}-tags`, chip: `${base}-chip` };
@@ -164,16 +254,30 @@ export function PlaceDetails({
   );
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // The phone sheet is modal: Tab and Shift+Tab go round inside it.
+    if (e.key === "Tab" && !wide && panel.current) {
+      const all = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      const [first, last] = [all[0], all.at(-1)];
+      if (!first || !last) return;
+      const at = document.activeElement;
+      if (e.shiftKey && (at === first || at === panel.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && at === last) {
+        e.preventDefault();
+        first.focus();
+      }
+      return;
+    }
     // An open note's Escape closes the note.
     if (e.key !== "Escape" || (e.target instanceof Element && e.target.closest("[data-note-editor]"))) return;
     e.preventDefault();
-    onClose();
+    close();
   };
 
   const chipText = `${where.kind === "day" ? `${where.number} · ` : ""}${where.label} · ${tc(place.category)}`;
   const chipStyle = where.kind === "day" ? { color: where.colour, background: `${where.colour}1a` } : undefined;
   const chip = "inline-flex max-w-full items-center gap-1 rounded-full bg-paper px-2.5 py-0.5 text-[12px] font-semibold text-ink-2";
-  const stays = [...new Set([...STAYS, place.stayMinutes])].sort((a, b) => a - b);
   const timing = where.kind === "day" ? where.timing : undefined;
   const arrive = timing?.arrive ?? null;
 
@@ -183,6 +287,8 @@ export function PlaceDetails({
       id="place-details"
       tabIndex={-1}
       aria-label={t("detailsFor", { name })}
+      role={wide ? undefined : "dialog"}
+      aria-modal={wide ? undefined : true}
       onKeyDown={onKeyDown}
       className="rota-slide fixed inset-0 z-30 flex flex-col gap-3.5 overflow-y-auto bg-surface p-4 outline-none lg:absolute lg:inset-auto lg:bottom-4 lg:left-[624px] lg:top-4 lg:z-[5] lg:w-[340px] lg:rounded-2xl lg:p-[18px] lg:shadow-[0_18px_40px_-12px_rgba(0,0,0,.3)]"
     >
@@ -217,7 +323,7 @@ export function PlaceDetails({
           )}
           {addedBy && <p className="text-[12.5px] text-ink-2">{t("addedBy", { name: addedBy.name })}</p>}
         </div>
-        <button type="button" aria-label={t("close")} onClick={onClose} className="grid size-8 shrink-0 place-items-center rounded-lg bg-paper text-ink-2 hover:bg-hover">
+        <button type="button" aria-label={t("close")} onClick={close} className="grid size-8 shrink-0 place-items-center rounded-lg bg-paper text-ink-2 hover:bg-hover">
           <Icon name="close" size={14} />
         </button>
       </div>
@@ -255,18 +361,7 @@ export function PlaceDetails({
         )}
         <Tile label={t("stay")} labelFor={actions ? ids.stay : undefined}>
           {actions ? (
-            <select
-              id={ids.stay}
-              value={place.stayMinutes}
-              onChange={(e) => actions.save(place.id, { stayMinutes: Number(e.target.value) })}
-              className="h-8 max-w-full rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold"
-            >
-              {stays.map((m) => (
-                <option key={m} value={m}>
-                  {stay(m)}
-                </option>
-              ))}
-            </select>
+            <StayField id={ids.stay} value={place.stayMinutes} onSave={(stayMinutes) => actions.save(place.id, { stayMinutes })} />
           ) : (
             stay(place.stayMinutes)
           )}
@@ -290,6 +385,11 @@ export function PlaceDetails({
       {warning && <HoursWarning {...warning} />}
 
       {actions ? (
+        <div
+          onBlur={(e) => {
+            if (e.target.id === ids.tags) saveTagDraft();
+          }}
+        >
         <TagInput
           id={ids.tags}
           value={{ tags: place.tags, draft: tagDraft }}
@@ -298,6 +398,7 @@ export function PlaceDetails({
             if (next.tags.join("\n") !== place.tags.join("\n")) actions.save(place.id, { tags: next.tags });
           }}
         />
+        </div>
       ) : (
         place.tags.length > 0 && (
           <div>

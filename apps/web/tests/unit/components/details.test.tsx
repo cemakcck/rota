@@ -33,6 +33,13 @@ const names = (region: HTMLElement) => within(region).queryAllByTestId("place-na
 const day = (n: number) => screen.getByRole("region", { name: new RegExp(`^Day ${n}\\b`) });
 const details = (name: string) => screen.getByRole("region", { name: `Details for ${name}` });
 const noDetails = () => screen.queryByRole("region", { name: /^Details for / });
+/** Screens of the given width for `(min-width: …px)` queries. */
+function screenWidth(px: number) {
+  vi.stubGlobal("matchMedia", (query: string) => {
+    const min = Number(/min-width:\s*(\d+)px/.exec(query)?.[1] ?? NaN);
+    return { matches: px >= min, media: query, addEventListener: () => undefined, removeEventListener: () => undefined };
+  });
+}
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r(undefined)));
 
 /** Opening hours by OSM id; every other request (routes) fails, so legs are straight-line estimates. */
@@ -290,5 +297,78 @@ describe("place details", () => {
     fireEvent.click(document.querySelector<HTMLElement>(`[data-pin="${chora}"]`)!);
     expect(details("Chora Church")).toBeTruthy();
     expect(window.location.search).toBe(`?view=day&day=${dayIds[1]}`);
+  });
+
+  it("on phones the details are a modal sheet that keeps focus in it", async () => {
+    screenWidth(390);
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(nameButton("A"));
+    const sheet = screen.getByRole("dialog", { name: "Details for A" });
+    expect(sheet.getAttribute("aria-modal")).toBe("true");
+    const focusable = [...sheet.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea")];
+    const [firstEl, lastEl] = [focusable[0], focusable.at(-1)!];
+    lastEl.focus();
+    fireEvent.keyDown(lastEl, { key: "Tab" });
+    expect(document.activeElement).toBe(firstEl);
+    fireEvent.keyDown(firstEl, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(lastEl);
+    // Escape still closes it, focus back on the row.
+    fireEvent.keyDown(lastEl, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(nameButton("A")));
+  });
+
+  it("on wide screens the details stay a non-modal region", () => {
+    screenWidth(1280);
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(nameButton("A"));
+    expect(details("A").getAttribute("aria-modal")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a tag typed without Enter is kept when the field is left or the details close", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", tags: ["views"], dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(nameButton("A"));
+    const tags = within(details("A")).getByRole("textbox", { name: "Tags" });
+    fireEvent.change(tags, { target: { value: "sunset" } });
+    fireEvent.blur(tags);
+    expect(fake.view.days[0].places[0].tags).toEqual(["views", "sunset"]);
+    fireEvent.change(tags, { target: { value: "Rooftop" } });
+    fireEvent.keyDown(tags, { key: "Escape" });
+    expect(noDetails()).toBeNull();
+    expect(fake.view.days[0].places[0].tags).toEqual(["views", "sunset", "Rooftop"]);
+  });
+
+  it("stay offers short stays and any custom length in 5-minute steps", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "A", category: "sight", stayMinutes: 60, dayId: dayIds[0] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(nameButton("A"));
+    const select = within(details("A")).getByRole("combobox", { name: "Stay" }) as HTMLSelectElement;
+    const values = [...select.options].map((o) => o.value);
+    expect(values.slice(0, 7)).toEqual(["0", "5", "10", "15", "20", "30", "45"]);
+    expect(values).toContain("480");
+    expect(values.at(-1)).toBe("custom");
+    fireEvent.change(select, { target: { value: "10" } });
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(10);
+
+    fireEvent.change(select, { target: { value: "custom" } });
+    const minutes = within(details("A")).getByRole("spinbutton", { name: "Stay (minutes)" });
+    fireEvent.change(minutes, { target: { value: "1000" } });
+    fireEvent.keyDown(minutes, { key: "Enter" });
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(1000);
+    // An uncommon length shows as its own option.
+    expect((within(details("A")).getByRole("combobox", { name: "Stay" }) as HTMLSelectElement).value).toBe("1000");
+    fireEvent.change(within(details("A")).getByRole("combobox", { name: "Stay" }), { target: { value: "custom" } });
+    const again = within(details("A")).getByRole("spinbutton", { name: "Stay (minutes)" });
+    fireEvent.change(again, { target: { value: "2000" } });
+    fireEvent.blur(again);
+    expect(fake.view.days[0].places[0].stayMinutes).toBe(1440);
   });
 });

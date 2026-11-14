@@ -357,7 +357,8 @@
     "firstStop": "İlk durak",
     "openingHours": "Açılış saatleri",
     "hoursClosed": "Kapalı",
-    "notKnown": "Bilinmiyor"
+    "notKnown": "Bilinmiyor",
+    "customStay": "Özel…"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

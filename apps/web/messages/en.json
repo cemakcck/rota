@@ -357,7 +357,8 @@
     "firstStop": "First stop",
     "openingHours": "Opening hours",
     "hoursClosed": "Closed",
-    "notKnown": "Not known"
+    "notKnown": "Not known",
+    "customStay": "Custom…"
   },
   "map": {
     "sheetHandle": "Resize the list",
