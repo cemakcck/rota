@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
-import { DAY_TITLE_MAX, addDaysToDate, type DayView, type TripView } from "@rota/trip";
+import { DAY_TITLE_MAX, type DayView, type TripView } from "@rota/trip";
 import { apiFetch } from "@/client/authClient";
 import { errorMessage, readError } from "@/client/apiError";
 import { dayColour } from "../map/mapFeatures";
@@ -38,11 +38,13 @@ const menuItem =
 /**
  * A day's ⋯ menu on the rail: Move up, Move down, Rename (its title) and Delete day. A disclosure like
  * Shift times: its group follows the button in the tab order, Escape or a press elsewhere closes it and
- * focus goes back to ⋯. Drawn fixed under the button, so the rail's scrolling does not clip it. Move
- * up/down keep it open (and focus on what was used) so a day can be moved several places in a row; at
- * an end they stay focusable but do nothing (aria-disabled), like Delete day on the only day.
+ * focus goes back to ⋯ (Escape on ⋯ itself too). Drawn fixed under the button, so the rail's scrolling
+ * does not clip it; a scroll or resize closes it. Move up/down keep it open (and focus on what was used)
+ * so a day can be moved several places in a row: it follows its button, and the moved day is scrolled
+ * into view. At an end they stay focusable but do nothing (aria-disabled), like Delete day on the only
+ * day. A title being typed is saved however the menu closes, except by Escape.
  */
-function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number; total: number; actions: DayActions; onMoved(toIndex: number): void }) {
+function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: number; actions: DayActions }) {
   const t = useTranslations("rail");
   const tt = useTranslations("trip");
   const id = useId();
@@ -52,22 +54,45 @@ function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number;
   const [at, setAt] = useState<CSSProperties>({});
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
+  // The title being typed, if any: closing the menu any way but Escape saves it.
+  const typed = useRef<string | null>(null);
+  // Until then, scrolls are this menu's own (bringing a moved day into view): they move it, not close it.
+  const ownScrollUntil = useRef(0);
+  const placed = useRef<number | null>(null);
 
-  // Placed under ⋯ (kept on screen), and closed when the page scrolls or resizes under it.
-  useLayoutEffect(() => {
-    if (!open) return;
+  // Placed under ⋯ (kept on screen); again after a move, with the moved day brought into view.
+  const place = () => {
     const r = button.current?.getBoundingClientRect();
     if (!r) return;
     const width = 208;
     setAt({ top: r.bottom + 4, left: Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8)), width });
-  }, [open]);
+  };
+  useLayoutEffect(() => {
+    if (!open) {
+      placed.current = null;
+      return;
+    }
+    if (placed.current !== null && placed.current !== n) {
+      ownScrollUntil.current = Date.now() + 500;
+      document.getElementById(railDayButtonId(day.id))?.scrollIntoView?.({ block: "nearest" });
+    }
+    placed.current = n;
+    place();
+  }, [open, n, day.id]);
   useEffect(() => {
     if (!open) return;
+    const shut = () => {
+      if (typed.current !== null) actions.rename(day.id, typed.current);
+      typed.current = null;
+      setOpen(false);
+    };
     const onDown = (e: PointerEvent) => {
-      if (e.target instanceof Node && !box.current?.contains(e.target) && !button.current?.contains(e.target)) setOpen(false);
+      if (e.target instanceof Node && !box.current?.contains(e.target) && !button.current?.contains(e.target)) shut();
     };
     const onMove = (e: Event) => {
-      if (!(e.target instanceof Node && box.current?.contains(e.target))) setOpen(false);
+      if (e.target instanceof Node && box.current?.contains(e.target)) return;
+      if (e.type === "scroll" && Date.now() < ownScrollUntil.current) return place();
+      shut();
     };
     document.addEventListener("pointerdown", onDown);
     window.addEventListener("resize", onMove);
@@ -77,23 +102,27 @@ function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number;
       window.removeEventListener("resize", onMove);
       document.removeEventListener("scroll", onMove, true);
     };
-  }, [open]);
+  }, [open, actions, day.id]);
   if (!open && renaming) setRenaming(false);
 
   const close = () => {
+    typed.current = null;
     setOpen(false);
     requestAnimationFrame(() => button.current?.focus());
   };
   const move = (by: -1 | 1, from: HTMLElement) => {
     const to = n - 1 + by;
     if (to < 0 || to >= total || !actions.move(day.id, to)) return;
-    onMoved(to);
     // The rail reorders its entries: focus stays on the button used.
     requestAnimationFrame(() => from.isConnected && document.activeElement !== from && from.focus());
   };
   const commit = () => {
     actions.rename(day.id, draft);
     close();
+  };
+  const edit = (value: string) => {
+    setDraft(value);
+    typed.current = value;
   };
   const first = n === 1;
   const last = n === total;
@@ -109,6 +138,11 @@ function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number;
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape" || !open) return;
+          e.stopPropagation();
+          close();
+        }}
         className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover hover:text-ink aria-expanded:bg-hover aria-expanded:text-ink"
       >
         <Icon name="more" />
@@ -143,11 +177,13 @@ function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number;
                 value={draft}
                 maxLength={DAY_TITLE_MAX}
                 placeholder={tt("dayTitlePlaceholder")}
-                onChange={(e) => setDraft(e.target.value)}
-                // Tabbing away saves too (as the day header's title does); Escape or a press elsewhere does not.
+                onChange={(e) => edit(e.target.value)}
+                // Tabbing away saves too (as the day header's title does), like a press elsewhere, a scroll or
+                // a resize; only Escape drops it.
                 onBlur={(e) => {
                   if (e.relatedTarget instanceof Node && !box.current?.contains(e.relatedTarget)) {
                     actions.rename(day.id, draft);
+                    typed.current = null;
                     setOpen(false);
                   }
                 }}
@@ -169,6 +205,7 @@ function DayMenu({ day, n, total, actions, onMoved }: { day: DayView; n: number;
                 className={`${menuItem} text-ink`}
                 onClick={() => {
                   setDraft(day.title);
+                  typed.current = null;
                   setRenaming(true);
                 }}
               >
@@ -210,7 +247,6 @@ function RailDay({
   onSelect,
   total,
   actions,
-  onMoved,
 }: {
   day: DayView;
   label: string;
@@ -219,7 +255,6 @@ function RailDay({
   onSelect(): void;
   total: number;
   actions: DayActions | null;
-  onMoved(toIndex: number): void;
 }) {
   const { setNodeRef: dropRef, isOver } = useDroppable({ id: railDayDropId(day.id) });
   // Dragged by pointer only (the ⋯ menu's Move up/down is the keyboard way), so dnd-kit's attributes
@@ -250,7 +285,7 @@ function RailDay({
       </button>
       {actions && (
         <div className="pt-1.5">
-          <DayMenu day={day} n={day.index + 1} total={total} actions={actions} onMoved={onMoved} />
+          <DayMenu day={day} n={day.index + 1} total={total} actions={actions} />
         </div>
       )}
     </div>
@@ -314,8 +349,6 @@ export function Rail({
   const locale = useLocale();
   const [adding, setAdding] = useState(false);
   const [failure, setFailure] = useState("");
-  // This person's own day moves, said politely (others' come from the Announcer).
-  const [moved, setMoved] = useState("");
   // "Fri 27" / "27 Cum": the weekday and the day of the month (dates, so in UTC).
   const date = (d: string) => {
     if (!d) return "";
@@ -359,9 +392,6 @@ export function Rail({
           onSelect={() => onSelect({ kind: "day", dayId: day.id })}
           total={trip.days.length}
           actions={dayActions}
-          onMoved={(to) =>
-            setMoved(t("dayMoved", { day: day.title || tt("day", { n: day.index + 1 }), n: to + 1, date: date(addDaysToDate(trip.startDate, to)) }))
-          }
         />
       ))}
       {canAddDay && trip.days.length < 30 && (
@@ -369,9 +399,6 @@ export function Rail({
           {`+ ${t("addDay")}`}
         </button>
       )}
-      <p role="status" className="sr-only">
-        {moved}
-      </p>
       {failure && (
         <p role="alert" className="px-3 text-[12.5px] font-medium text-danger">
           {failure}

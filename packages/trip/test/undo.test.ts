@@ -84,4 +84,65 @@ describe("undo", () => {
     expect(readTrip(a).days[0].places[0].name).toBe("Galata Tower");
     u.destroy();
   });
+
+  it("a step can be marked, and undone only while it is still the last thing this person did", () => {
+    const { a, b, days } = setup();
+    const id = addPlace(a, { name: "Galata", category: "sight", dayId: days[0] }, "A");
+    const u = createUndo(a, "A");
+    expect(u.mark()).toBeNull();
+    u.stopCapturing();
+    deletePlace(a, id, "A");
+    const mark = u.mark();
+    expect(mark).not.toBeNull();
+    // A friend's edit does not change what is mine to undo.
+    sync(a, b);
+    addPlace(b, { name: "Pera", category: "museum", dayId: days[1] }, "B");
+    sync(a, b);
+    expect(u.mark()).toBe(mark);
+    // My own later edit does: the marked step is no longer undone.
+    u.stopCapturing();
+    const other = addPlace(a, { name: "Balat", category: "sight", dayId: days[1] }, "A");
+    expect(u.undoMark(mark!)).toBe(false);
+    expect(readTrip(a).days[1].places.map((p) => p.id)).toContain(other);
+    expect(readTrip(a).placeCount).toBe(2);
+    // Undone by Ctrl+Z, the later edit goes; now the mark is the top again and undoes.
+    u.undo();
+    expect(u.undoMark(mark!)).toBe(true);
+    expect(readTrip(a).days[0].places.map((p) => p.name)).toEqual(["Galata"]);
+    // Already undone: nothing more.
+    expect(u.undoMark(mark!)).toBe(false);
+    u.destroy();
+  });
+
+  it("undoing a marked step that a friend fully overwrote changes nothing, and never undoes the step before it", () => {
+    const { a, b, days } = setup();
+    const u = createUndo(a, "A");
+    const id = addPlace(a, { name: "Galata", category: "sight", dayId: days[0] }, "A");
+    u.stopCapturing();
+    movePlace(a, id, { dayId: days[1] }, "A");
+    const mark = u.mark()!;
+    sync(a, b);
+    // Bob moves it on to Ideas: every field my move wrote is now his.
+    movePlace(b, id, { dayId: null }, "B");
+    sync(a, b);
+    u.undoMark(mark);
+    // Plain Y.UndoManager.undo() would go on to undo my add (it pops until something changes).
+    expect(readTrip(a).ideas.map((p) => p.id)).toEqual([id]);
+    expect(u.canUndo()).toBe(true);
+    u.destroy();
+  });
+
+  it("step runs an action as its own step and marks it, or marks nothing when it changed nothing", () => {
+    const { a, days } = setup();
+    const u = createUndo(a, "A");
+    const id = u.step(() => addPlace(a, { name: "Galata", category: "sight", dayId: days[0] }, "A"));
+    const added = u.lastStep();
+    expect(added).toBe(u.mark());
+    u.step(() => updatePlace(a, id, { name: "Galata Tower" }, "A"));
+    expect(u.lastStep()).not.toBe(added);
+    // Nothing changed: no mark (a toast for it offers no Undo).
+    u.step(() => movePlace(a, "gone", { dayId: days[1] }, "A"));
+    expect(u.lastStep()).toBeNull();
+    u.destroy();
+  });
 });

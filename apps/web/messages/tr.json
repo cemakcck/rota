@@ -402,7 +402,8 @@
     "undoAcceptFor": "Kabulü geri al: {name}",
     "undoClearTimeFor": "Saati kaldırmayı geri al: {name}",
     "undoTip": "Geri al (Ctrl+Z veya ⌘Z)",
-    "redoTip": "Yinele (Ctrl+Shift+Z veya ⌘⇧Z)"
+    "redoTip": "Yinele (Ctrl+Shift+Z veya ⌘⇧Z)",
+    "undoMoveDayFor": "Gün taşımayı geri al: {day}"
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",
@@ -489,7 +490,7 @@
     "title": "Paylaş",
     "ownerOnly": "Yalnızca gezinin sahibi kişi davet edebilir. Ondan bir katılma bağlantısı isteyin.",
     "people": "Kişiler",
-    "peopleHere": "Bu gezideki kişiler. Şu anda bu gezide: {names}",
+    "peopleHere": "Kişiler: {names}",
     "inviteFriends": "Arkadaşlarınızı davet edin"
   }
 }

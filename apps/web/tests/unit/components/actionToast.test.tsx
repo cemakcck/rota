@@ -6,6 +6,7 @@ import { renderIntl } from "./helpers";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 /** Buttons that show the given toasts. */
@@ -106,5 +107,57 @@ describe("ActionToast", () => {
     fireEvent.click(screen.getByRole("button", { name: "show 0" }));
     expect(screen.getByRole("status").textContent).toBe("Times shifted.");
     expect(screen.queryByRole("button", { name: /^Undo/ })).toBeNull();
+  });
+
+  it("stays while it holds focus, even focus put there by script (focus: true), and resumes once focus leaves", () => {
+    vi.useFakeTimers();
+    // As after a pointer click in a browser: the scripted focus is not :focus-visible.
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, "matches").mockImplementation(function (this: Element, selector: string) {
+      return selector === ":focus-visible" ? false : matches.call(this, selector);
+    });
+    render([{ message: "Day 2 deleted.", undoLabel: "Undo deleting Day 2", onUndo: () => undefined, focus: true }]);
+    fireEvent.click(screen.getByRole("button", { name: "show 0" }));
+    const undo = screen.getByRole("button", { name: "Undo deleting Day 2" });
+    expect(document.activeElement).toBe(undo);
+    act(() => vi.advanceTimersByTime(20_000));
+    expect(screen.getByText("Day 2 deleted.")).toBeTruthy();
+    // Focus moves out: the 6 s start again.
+    act(() => screen.getByRole("button", { name: "dismiss" }).focus());
+    act(() => vi.advanceTimersByTime(5900));
+    expect(screen.getByText("Day 2 deleted.")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByText("Day 2 deleted.")).toBeNull();
+  });
+
+  it("closing while it holds focus sends focus where the toast says, else to the screen's fallback, never to the page", () => {
+    renderIntl(
+      <ActionToastProvider fallbackFocus={() => document.getElementById("fallback")}>
+        <Shows
+          toasts={[
+            { message: "A deleted.", undoLabel: "Undo deleting A", onUndo: () => undefined, focus: true, returnFocus: () => document.getElementById("near") },
+            { message: "B deleted.", undoLabel: "Undo deleting B", onUndo: () => undefined, focus: true },
+          ]}
+        />
+        <button id="near" type="button">
+          near
+        </button>
+        <input id="fallback" aria-label="search" />
+      </ActionToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "show 0" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Undo deleting A" }), { key: "Escape" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "near" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "show 1" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo deleting B" }));
+    fireEvent.click(screen.getByRole("button", { name: "dismiss" }));
+    // (The click focused "dismiss" in a browser; here focus was still in the toast.)
+    expect(document.activeElement).not.toBe(document.body);
+
+    fireEvent.click(screen.getByRole("button", { name: "show 1" }));
+    act(() => screen.getByRole("button", { name: "Undo deleting B" }).focus());
+    fireEvent.keyDown(screen.getByRole("button", { name: "Undo deleting B" }), { key: "Escape" });
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "search" }));
   });
 });

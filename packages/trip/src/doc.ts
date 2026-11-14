@@ -208,6 +208,12 @@ export function removeDay(doc: Y.Doc, dayId: string, origin: string): void {
  * concurrent adds, or exhausted precision) are all days renumbered 0..n−1 in the new order, in the same
  * transaction. Returns false, changing nothing (no transaction), for an unknown day, a position that is
  * not a number, or the position it already has.
+ *
+ * Concurrency: the usual single-key write merges with anything a friend does. The renumbering fallback
+ * writes every day's `index`, each last-write-wins: if a friend moves another day at the same moment,
+ * one of the two writes to that day's `index` wins, so their move can be lost (or land in a mixed
+ * order). Every device still converges to the same order (readTrip sorts by index then id) and no day
+ * or place is lost; it needs tied indexes or exhausted precision, so it is rare.
  */
 export function moveDay(doc: Y.Doc, dayId: string, toIndex: number, origin: string): boolean {
   const sorted = readTrip(doc).days.map((d) => d.id);

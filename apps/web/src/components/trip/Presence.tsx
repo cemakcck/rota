@@ -80,7 +80,8 @@ export function EditingTag({ peer }: { peer: { name: string; colour: string } })
 
 /**
  * Header avatars: this person first, then everyone else here now; after five, "+N" names the rest. With
- * `onOpen` they are one button that opens the people sheet (who is on the trip, roles, invites).
+ * `onOpen` they are one button, named for the trip's members, that opens the people sheet (who is on
+ * the trip, roles, invites).
  */
 export function Presence({
   self,
@@ -133,7 +134,8 @@ export function Presence({
     <button
       type="button"
       aria-haspopup="dialog"
-      aria-label={ts("peopleHere", { names: people.map((p) => p.label).join(", ") })}
+      // Named for who is on the trip (its content, the avatars of who is here now, is not read inside a button).
+      aria-label={ts("peopleHere", { names: (members.length > 0 ? members.map((m) => m.name || t("someone")) : people.map((p) => p.name)).join(", ") })}
       title={ts("people")}
       onClick={(e) => onOpen(e.currentTarget)}
       className="flex h-9 items-center rounded-full px-1 hover:bg-hover"

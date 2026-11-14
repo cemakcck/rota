@@ -99,11 +99,14 @@ function notForTrip(target: EventTarget | null): boolean {
   return document.querySelector('[role="dialog"]') !== null;
 }
 
+/** Where focus goes when a toast holding it closes and it names no better place: the search, else the plan. */
+const toastFallbackFocus = () => document.querySelector<HTMLElement>("#main [role=combobox]") ?? document.getElementById("main");
+
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
 export function TripScreen(props: Props) {
   const userId = useUserId();
   return (
-    <ActionToastProvider key={userId ?? ""}>
+    <ActionToastProvider key={userId ?? ""} fallbackFocus={toastFallbackFocus}>
       <TripScreenFor {...props} />
     </ActionToastProvider>
   );
@@ -112,6 +115,7 @@ export function TripScreen(props: Props) {
 function TripScreenFor({ tripId }: Props) {
   const t = useTranslations("trip");
   const tm = useTranslations("map");
+  const tr = useTranslations("rail");
   const locale = useLocale();
   const router = useRouter();
   const { doc, view, status, ready, closed, firstOpenOffline, awareness, userId, simulateOffline } = useTrip(tripId);
@@ -244,29 +248,31 @@ function TripScreenFor({ tripId }: Props) {
     show(openListId === null ? { kind: "ideas" } : { kind: "day", dayId: openListId });
   }, [openId, openListId, shown.kind, show]);
 
-  // One action of this person's as its own undo step, so a toast's Undo reverts just it (never a
-  // friend's edit: those are not on this person's stack).
-  const step = <T,>(run: () => T): T => {
-    undo?.stopCapturing();
-    const result = run();
-    undo?.stopCapturing();
-    return result;
+  // One action of this person's as its own undo step, marked (Undo.lastStep) when it changed anything, so
+  // the toast shown for it can undo exactly that step.
+  const step = <T,>(run: () => T): T => (undo ? undo.step(run) : run());
+  // A toast's Undo for the last step: it reverts that step only, and only while it is still this person's
+  // last (a later edit of theirs also closes the toast, see below); never a friend's edit, never another
+  // of theirs. None when the step changed nothing or there is no undo manager.
+  const undoLast = (then?: () => void) => {
+    const mark = undo?.lastStep() ?? null;
+    if (!undo || !mark) return undefined;
+    return () => {
+      if (undo.undoMark(mark)) then?.();
+    };
   };
-  // The toast for such a step (no Undo without the undo manager).
-  const undoToast = (message: string, undoLabel: string) => toast.show({ message, undoLabel, onUndo: undo ? () => undo.undo() : undefined });
+  const undoToast = (message: string, undoLabel: string) => toast.show({ message, undoLabel, onUndo: undoLast() });
 
   // An add by this person: its own undo step, the new row highlighted, focused and scrolled to when it
   // is shown, and a toast saying where it went, whose Undo removes just that place.
   const addOwn = (put: () => string, name: string, to: ListId | "suggest", time: string | null): string => {
-    undo?.stopCapturing();
-    const id = put();
-    undo?.stopCapturing();
+    const id = step(put);
     const list = to === "suggest" ? "" : labelIn(view, to);
     toast.show({
       message: to === "suggest" ? t("addedSuggestion", { name }) : time ? t("addedToAt", { list, time }) : t("addedTo", { list }),
       undoLabel: t("undoAddFor", { name }),
       // This person's undo step: the add only, never a friend's edit (no Undo without the manager).
-      onUndo: undo ? () => undo.undo() : undefined,
+      onUndo: undoLast(),
     });
     setHighlight(id);
     requestAnimationFrame(() => {
@@ -299,8 +305,7 @@ function TripScreenFor({ tripId }: Props) {
     add: (stop, to) => void addStop(stop, to, editor),
     remove(place) {
       // Its own undo step, so the toast's Undo restores just the place.
-      undo?.stopCapturing();
-      deletePlace(doc, place.id, editor);
+      step(() => deletePlace(doc, place.id, editor));
       showDeleted(place.name || t("unnamed"), placeFocusId(place.id));
     },
     setDay: (dayId, patch) => setDay(doc, dayId, patch, editor),
@@ -346,10 +351,21 @@ function TripScreenFor({ tripId }: Props) {
 
   // Days from the rail: reordered (one step; the dates follow), renamed, or deleted with an Undo toast.
   const dayActions: DayActions | null = editor === null ? null : {
-    move: (dayId, toIndex) => step(() => moveDay(doc, dayId, toIndex, editor)),
+    move: (dayId, toIndex) => moveDayOwn(dayId, toIndex, editor),
     rename: (dayId, title) => step(() => setDay(doc, dayId, { title }, editor)),
     remove: (dayId) => deleteDay(dayId, editor),
   };
+
+  // "Balat is now Day 2, Sat, Nov 28", with an Undo; focus stays in the day's menu, so it can move again.
+  function moveDayOwn(dayId: string, toIndex: number, origin: string): boolean {
+    const day = view.days.find((d) => d.id === dayId);
+    if (!day || !step(() => moveDay(doc, dayId, toIndex, origin))) return false;
+    const name = day.title || labelIn(view, dayId);
+    const now = readTrip(doc).days.find((d) => d.id === dayId);
+    if (!now) return true;
+    undoToast(tr("dayMoved", { day: name, n: now.index + 1, date: dayDate(now.date) }), t("undoMoveDayFor", { day: name }));
+    return true;
+  }
 
   // "Day 2 deleted. Its 3 stops are in Ideas." Focus moves to Undo (the day's menu is gone); Undo brings the
   // day back (one step: its places, title and note), shows it again if it was shown, and focuses it on the rail.
@@ -357,6 +373,8 @@ function TripScreenFor({ tripId }: Props) {
     const day = view.days.find((d) => d.id === dayId);
     if (!day) return;
     const wasShown = shown.kind === "day" && shown.dayId === dayId;
+    // If the toast closes holding focus: the day now in its place on the rail, else the one before.
+    const neighbour = view.days[day.index + 1]?.id ?? view.days[day.index - 1]?.id;
     step(() => removeDay(doc, dayId, origin));
     const name = labelIn(view, dayId);
     const count = day.places.length;
@@ -364,13 +382,11 @@ function TripScreenFor({ tripId }: Props) {
       message: [t("dayDeleted", { day: name }), count > 0 ? t("dayDeletedPlaces", { count }) : ""].filter(Boolean).join(" "),
       undoLabel: t("undoDeleteDayFor", { day: name }),
       focus: true,
-      onUndo: undo
-        ? () => {
-            undo.undo();
-            if (wasShown) show({ kind: "day", dayId });
-            requestAnimationFrame(() => document.getElementById(railDayButtonId(dayId))?.focus());
-          }
-        : undefined,
+      returnFocus: () => (neighbour ? document.getElementById(railDayButtonId(neighbour)) : null),
+      onUndo: undoLast(() => {
+        if (wasShown) show({ kind: "day", dayId });
+        requestAnimationFrame(() => document.getElementById(railDayButtonId(dayId))?.focus());
+      }),
     });
   }
 
@@ -379,9 +395,7 @@ function TripScreenFor({ tripId }: Props) {
   function shiftTimes(dayId: string, minutes: number, origin: string) {
     const before = view.days.find((d) => d.id === dayId);
     if (!before) return;
-    undo?.stopCapturing();
-    const { clamped } = shiftDayTimes(doc, dayId, minutes, origin);
-    undo?.stopCapturing();
+    const { clamped } = step(() => shiftDayTimes(doc, dayId, minutes, origin));
     const after = new Map(readTrip(doc).days.find((d) => d.id === dayId)?.places.map((p) => [p.id, p.time]));
     const moved = before.places.filter((p) => p.time !== null && after.has(p.id) && after.get(p.id) !== p.time).length;
     const limit = minutes < 0 ? "00:00" : "23:59";
@@ -391,7 +405,7 @@ function TripScreenFor({ tripId }: Props) {
     toast.show({
       message: message.filter(Boolean).join(" "),
       undoLabel: t("undoShiftFor", { day }),
-      onUndo: undo ? () => undo.undo() : undefined,
+      onUndo: undoLast(),
     });
   }
 
@@ -401,12 +415,7 @@ function TripScreenFor({ tripId }: Props) {
       message: t("deleted", { name }),
       undoLabel: t("undoDeleteFor", { name }),
       focus: true,
-      onUndo: undo
-        ? () => {
-            undo.undo();
-            requestAnimationFrame(() => document.getElementById(focus)?.focus());
-          }
-        : undefined,
+      onUndo: undoLast(() => requestAnimationFrame(() => document.getElementById(focus)?.focus())),
     });
   }
 
@@ -444,8 +453,7 @@ function TripScreenFor({ tripId }: Props) {
     update: (id, patch) => updateChecklistItem(doc, id, patch, editor),
     move: (id, to) => moveChecklistItem(doc, id, to, editor),
     remove(item) {
-      undo?.stopCapturing();
-      deleteChecklistItem(doc, item.id, editor);
+      step(() => deleteChecklistItem(doc, item.id, editor));
       showDeleted(item.text || t("untitledItem"), checkFocusId(item.id));
     },
   };

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { addPlace, readTrip, setDay, updatePlace, vote } from "@rota/trip";
+import { addPlace, movePlace, readTrip, setDay, setPlaceTime, updatePlace, vote } from "@rota/trip";
 import { dayDropTarget, dropTarget, railDayDragId } from "@/components/trip/plan";
 import { renderIntl, stubFetch } from "./helpers";
 import { fake, newTrip, remoteEdit, useFakeTrip } from "./tripHarness";
@@ -65,7 +65,10 @@ describe("days in the rail", () => {
     // Balat is now Day 2, on Sat 28; its stop went with it.
     expect(railDays()[1].textContent).toBe("Day 2 · Sat 28Balat");
     expect(readTrip(doc).days[1].places.map((p) => p.name)).toEqual(["Fener"]);
-    expect(within(rail()).getByRole("status").textContent).toBe("Balat is now Day 2, Sat 28");
+    // Said once, by an Undo toast (the rail has no status of its own); focus stays on Move up.
+    expect(within(rail()).queryByRole("status")).toBeNull();
+    expect(toastText()).toBe("Balat is now Day 2, Sat, Nov 28");
+    expect(screen.getByRole("button", { name: "Undo moving Balat" })).toBeTruthy();
     await frame();
     expect(document.activeElement).toBe(up);
 
@@ -139,6 +142,81 @@ describe("days in the rail", () => {
     expect(document.activeElement).toBe(railDays()[1]);
   });
 
+  it("the toast's Undo puts a moved day back", () => {
+    const { dayIds } = newTrip({ days: 3 });
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(within(openMenu(3)).getByRole("button", { name: "Move up" }));
+    expect(readTrip(fake.doc).days.map((d) => d.id)).toEqual([dayIds[0], dayIds[2], dayIds[1]]);
+    expect(toastText()).toBe("Day 3 is now Day 2, Sat, Nov 28");
+    fireEvent.click(screen.getByRole("button", { name: "Undo moving Day 3" }));
+    expect(readTrip(fake.doc).days.map((d) => d.id)).toEqual(dayIds);
+  });
+
+  it("after Move up the menu follows its button and the moved day is scrolled into view", () => {
+    newTrip({ days: 3 });
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
+    renderIntl(<TripScreen tripId="t1" />);
+    const rect = (bottom: number) => () => ({ top: bottom - 32, bottom, left: 150, right: 182, width: 32, height: 32, x: 150, y: bottom - 32, toJSON: () => ({}) }) as DOMRect;
+    menu(3).getBoundingClientRect = rect(200);
+    const group = openMenu(3);
+    expect(group.style.top).toBe("204px");
+    menu(3).getBoundingClientRect = rect(140);
+    fireEvent.click(within(group).getByRole("button", { name: "Move up" }));
+    expect(within(rail()).getByRole("group", { name: "Day 2 options" }).style.top).toBe("144px");
+    expect(scrolled).toContain(railDays()[1]);
+  });
+
+  it("Escape on ⋯ with its menu open closes it", () => {
+    newTrip({ days: 2 });
+    renderIntl(<TripScreen tripId="t1" />);
+    openMenu(2);
+    fireEvent.keyDown(menu(2), { key: "Escape" });
+    expect(within(rail()).queryByRole("group", { name: "Day 2 options" })).toBeNull();
+    expect(menu(2).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("Rename saves when the menu closes by a press elsewhere, a scroll or a resize; only Escape drops it", () => {
+    const { doc } = newTrip({ days: 2 });
+    renderIntl(<TripScreen tripId="t1" />);
+    const rename = (value: string) => {
+      fireEvent.click(within(openMenu(2)).getByRole("button", { name: "Rename" }));
+      fireEvent.change(within(rail()).getByRole("textbox", { name: "Title for Day 2" }), { target: { value } });
+    };
+    rename("Balat");
+    fireEvent.pointerDown(document.body);
+    expect(readTrip(doc).days[1].title).toBe("Balat");
+    expect(within(rail()).queryByRole("group", { name: "Day 2 options" })).toBeNull();
+    rename("Fener");
+    fireEvent.scroll(rail());
+    expect(readTrip(doc).days[1].title).toBe("Fener");
+    rename("Kadıköy");
+    fireEvent(window, new Event("resize"));
+    expect(readTrip(doc).days[1].title).toBe("Kadıköy");
+    rename("nope");
+    fireEvent.keyDown(within(rail()).getByRole("textbox", { name: "Title for Day 2" }), { key: "Escape" });
+    expect(readTrip(doc).days[1].title).toBe("Kadıköy");
+  });
+
+  it("delete a day, then rename another: the delete's Undo never reverts the rename", () => {
+    const { doc, dayIds } = newTrip({ days: 3 });
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(within(openMenu(2)).getByRole("button", { name: "Delete day" }));
+    const undo = screen.getByRole("button", { name: "Undo deleting Day 2" });
+    fireEvent.click(within(openMenu(1)).getByRole("button", { name: "Rename" }));
+    const input = within(rail()).getByRole("textbox", { name: "Title for Day 1" });
+    fireEvent.change(input, { target: { value: "Karaköy" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(readTrip(doc).days[0].title).toBe("Karaköy");
+    // The toast went the moment this person did something else; even a stale press of its Undo does nothing.
+    expect(screen.queryByRole("button", { name: "Undo deleting Day 2" })).toBeNull();
+    fireEvent.click(undo);
+    expect(readTrip(doc).days.map((d) => d.id)).toEqual([dayIds[0], dayIds[2]]);
+    expect(readTrip(doc).days[0].title).toBe("Karaköy");
+  });
+
   it("the only day cannot be deleted, and says why", () => {
     const { doc } = newTrip({ days: 1 });
     renderIntl(<TripScreen tripId="t1" />);
@@ -199,10 +277,9 @@ describe("people in the header", () => {
     serve(members);
     renderIntl(<TripScreen tripId="t1" />);
     const header = screen.getByRole("banner");
-    const avatars = within(header).getByRole("button", { name: "People on this trip. In this trip now: Ann (you)" });
+    // Named for the trip's members (a button's content is not read as a list).
+    const avatars = within(header).getByRole("button", { name: "People: Ann, Deniz" });
     expect(avatars.getAttribute("aria-haspopup")).toBe("dialog");
-    // The avatars are still a list (spans inside the button).
-    expect(within(avatars).getByRole("list", { name: "In this trip now" })).toBeTruthy();
     // Two members: the button says Share.
     expect(within(header).getByRole("button", { name: "Share" })).toBeTruthy();
     expect(within(header).queryByRole("button", { name: "Invite friends" })).toBeNull();
@@ -274,6 +351,46 @@ describe("undo toasts", () => {
     remoteEdit("u2", (d, as) => updatePlace(d, pera, { name: "Pera Museum" }, as));
     fireEvent.click(screen.getByRole("button", { name: "Undo deleting Galata Tower" }));
     expect(readTrip(doc).days[0].places.map((p) => p.name)).toEqual(["Galata Tower", "Pera Museum"]);
+  });
+
+  it("delete stop is its own undo step: an edit right after it undoes on its own", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    const pera = addPlace(doc, { name: "Pera", category: "museum", dayId: dayIds[1] }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    openDetails("Galata Tower");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Galata Tower" }));
+    // Within 500 ms, another edit of this person's (not a toasted action).
+    act(() => vote(doc, pera, "u1", 1));
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    const trip = readTrip(doc);
+    expect(trip.days[1].places[0].votes).toEqual({});
+    expect(trip.days[0].places).toEqual([]);
+  });
+
+  it("a friend changes the very field Undo restores: Undo reverts only this person's change (theirs stays)", () => {
+    const { doc, dayIds } = newTrip();
+    const a = addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], time: "09:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Change the time for A, now 09:00" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Time for A" }), { target: { value: "" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for A" }), { key: "Enter" });
+    // Deniz sets a time of their own after the clear; the clear's Undo does not overwrite it.
+    remoteEdit("u2", (d, as) => setPlaceTime(d, a, "11:00", as));
+    fireEvent.click(screen.getByRole("button", { name: "Undo clearing the time of A" }));
+    expect(readTrip(doc).days[0].places[0].time).toBe("11:00");
+
+    // Same for a move: Deniz moves the place on to Ideas; Undo of mine does not pull it back.
+    let b = "";
+    act(() => void (b = addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0] }, "u1")));
+    openDetails("B");
+    fireEvent.click(screen.getByRole("button", { name: "Move B to…" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("radio", { name: /^Day 2/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Move" }));
+    remoteEdit("u2", (d, as) => movePlace(d, b, { dayId: null }, as));
+    fireEvent.click(screen.getByRole("button", { name: "Undo moving B" }));
+    // B stays where Deniz put it, and the Undo did not go on to remove B (the add before the move).
+    expect(readTrip(doc).ideas.map((p) => p.id)).toEqual([b]);
   });
 
   it("move to another day: Undo puts it back with its time, keeping a friend's rename", () => {
