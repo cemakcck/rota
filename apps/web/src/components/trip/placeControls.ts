@@ -25,6 +25,10 @@ export function usePlaceControls(
   status: string;
   moving: { list: ListId; place: PlaceView } | null;
   closeMove(): void;
+  /** Move to…: to another list, keeping a set time; said politely. */
+  moveTo(id: string, to: ListId): void;
+  /** After this person's own drop: where the stop is now (and its time), said politely. */
+  sayMoved(id: string, from: ListId): void;
 } {
   const t = useTranslations("trip");
   const [moving, setMoving] = useState<string | null>(null);
@@ -41,15 +45,23 @@ export function usePlaceControls(
   const movingPlace = find(moving);
   if (moving !== null && !movingPlace) setMoving(null);
 
-  // After this person's own reorder or time change: where the stop is now, and its time if it has one.
-  const sayWhere = (id: string) => {
-    const list = plannedLists(readTrip(doc)).find((l) => l.places.some((p) => p.id === id));
+  // After this person's own reorder, move or time change: where the stop is now (naming the list when
+  // it changed from `from`), and its time if it has one.
+  const sayWhere = (id: string, from?: ListId) => {
+    const now = readTrip(doc);
+    const list = plannedLists(now).find((l) => l.places.some((p) => p.id === id));
     if (!list) return;
     const position = list.places.findIndex((p) => p.id === id) + 1;
     const place = list.places[position - 1];
     const name = place.name || t("unnamed");
     const total = list.places.length;
-    setStatus(place.time === null || list.id === null ? t("reorderedTo", { name, position, total }) : t("reorderedToAt", { name, time: place.time, position, total }));
+    const time = list.id === null ? null : place.time;
+    if (from !== undefined && from !== list.id) {
+      const index = now.days.findIndex((d) => d.id === list.id);
+      const label = index < 0 ? t("ideas") : t("day", { n: index + 1 });
+      return setStatus(time === null ? t("movedTo", { name, list: label, position, total }) : t("movedToAt", { name, list: label, time, position, total }));
+    }
+    setStatus(time === null ? t("reorderedTo", { name, position, total }) : t("reorderedToAt", { name, time, position, total }));
   };
 
   const stopActions: StopActions | null = actions && {
@@ -89,5 +101,10 @@ export function usePlaceControls(
       setStatus(time === null ? t("scheduled", { name, list }) : t("scheduledAt", { name, list, time }));
     });
 
-  return { stopActions, schedule, status, moving: movingPlace, closeMove: () => setMoving(null) };
+  const moveTo = (id: string, to: ListId) => {
+    const from = find(id)?.list;
+    if (actions && from !== undefined && actions.moveTo(id, to)) sayWhere(id, from);
+  };
+
+  return { stopActions, schedule, status, moving: movingPlace, closeMove: () => setMoving(null), moveTo, sayMoved: sayWhere };
 }

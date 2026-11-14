@@ -1,5 +1,5 @@
 import type * as Y from "yjs";
-import { movePlace, type Category, type PlaceView, type Slot, type TripView } from "@rota/trip";
+import { movePlace, readTrip, setPlaceTime, type Category, type PlaceView, type Slot, type TripView } from "@rota/trip";
 
 /** Where a planned place lives: a day id, or null for Ideas. */
 export type ListId = string | null;
@@ -41,12 +41,32 @@ export function dropTarget(view: TripView, activeId: string, overId: string): ({
 }
 
 /**
- * A drop of a dragged place: moved to where `dropTarget` says, a timed stop re-timed for its new slot
- * (spec §2b), as one undo step. False when the drop lands nowhere (on itself, on a day that is gone).
+ * A move to another list without a slot (Move to…, a drop on a day in the rail or on another day's list):
+ * a stop with a set time keeps it and goes to its place by time in that day (ruling F1); an untimed stop
+ * goes to the end. One transaction, so one undo step. False when the place or the day is gone.
+ */
+export function moveKeepingTime(doc: Y.Doc, id: string, dayId: ListId, origin: string): boolean {
+  let moved = false;
+  doc.transact(() => {
+    const time = plannedLists(readTrip(doc)).flatMap((l) => l.places).find((p) => p.id === id)?.time ?? null;
+    moved = movePlace(doc, id, { dayId }, origin);
+    if (moved && dayId !== null && time !== null) setPlaceTime(doc, id, time, origin);
+  }, origin);
+  return moved;
+}
+
+/**
+ * A drop of a dragged place, where `dropTarget` says, as one undo step. Within a day (or onto a row) a
+ * timed stop is re-timed for its new slot (spec §2b); dropped on another list as a whole (its rail
+ * entry, its end) it keeps its time (see moveKeepingTime). False when the drop lands nowhere (on
+ * itself, on a day that is gone).
  */
 export function dropPlace(doc: Y.Doc, view: TripView, activeId: string, overId: string, origin: string): boolean {
   const to = dropTarget(view, activeId, overId);
-  return to !== null && movePlace(doc, activeId, to, origin, { retime: true });
+  if (to === null) return false;
+  const from = plannedLists(view).find((l) => l.places.some((p) => p.id === activeId))?.id;
+  if (to.beforeId == null && to.afterId == null && to.dayId !== from) return moveKeepingTime(doc, activeId, to.dayId, origin);
+  return movePlace(doc, activeId, to, origin, { retime: true });
 }
 
 export type Filter = { categories: Category[]; tag: string | null };

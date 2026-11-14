@@ -10,8 +10,8 @@ import type { ListId } from "./plan";
 export type ListChoice = { id: ListId; label: string };
 
 /**
- * The keyboard and screen reader alternative to dragging a place to another day or Ideas: pick a list,
- * the place goes to its end. The caller unmounts it when the place disappears (deleted by someone else).
+ * The keyboard and screen reader alternative to dragging a place to another day or Ideas: pick a list;
+ * the caller moves it there (a timed stop keeps its time and goes to its place by time, see moveKeepingTime). The caller unmounts it when the place disappears (deleted by someone else).
  */
 export function MoveDialog({
   place,

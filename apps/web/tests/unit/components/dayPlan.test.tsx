@@ -219,11 +219,11 @@ describe("day plan", () => {
     addPlace(doc, { name: "Balat", category: "sight", stayMinutes: 60, dayId: dayIds[1], time: "08:00" }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
     const undo = createUndo(doc, "u1");
-    // The drop the trip screen makes when a row lands on the rail's Day 2: to the end, re-timed for that slot.
+    // The drop the trip screen makes when a row lands on the rail's Day 2: its time kept, placed by it (ruling F1).
     expect(dropPlace(doc, fake.view, tower, `rail:day:${dayIds[1]}`, "u1")).toBe(true);
     expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
       ["Balat", "08:00"],
-      ["Galata Tower", "09:00"],
+      ["Galata Tower", "10:00"],
     ]);
     // One step to undo.
     undo.undo();

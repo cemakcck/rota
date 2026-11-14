@@ -51,7 +51,7 @@ import { MoveDialog } from "./MoveDialog";
 import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
 import { usePlaceControls } from "./placeControls";
 import { CollabContext, Presence, type Collab } from "./Presence";
-import { NO_FILTER, dropPlace, passes, plannedLists, tripCentre, type ListId } from "./plan";
+import { NO_FILTER, dropPlace, moveKeepingTime, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { Rail } from "./Rail";
 import { TripHeader } from "./TripHeader";
@@ -220,8 +220,10 @@ function TripScreenFor({ tripId }: Props) {
     // Set by the plan (it knows the neighbours and says what happened).
     nudge: () => undefined,
     openMove: () => undefined,
-    // Every move from the plan (drag, Alt+arrows, Move to…) re-times a timed stop for its new slot (spec §2b).
+    // A move to a slot (Alt+arrows, Move up/down) re-times a timed stop for it (spec §2b); Move to…
+    // keeps a set time and slots the stop by it in the new day (ruling F1).
     move: (id, to) => movePlace(doc, id, to, editor, { retime: true }),
+    moveTo: (id, dayId) => moveKeepingTime(doc, id, dayId, editor),
     add: ({ time, ...place }, to) =>
       void (to === "suggest" ? addPlace(doc, { ...place, dayId: null, status: "suggested" }, editor) : addPlace(doc, { ...place, dayId: to, time }, editor)),
     remove(place) {
@@ -354,7 +356,10 @@ function TripScreenFor({ tripId }: Props) {
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
-    if (editor !== null && over) dropPlace(doc, view, String(active.id), String(over.id), editor);
+    if (editor === null || !over) return;
+    const id = String(active.id);
+    const from = listOf(id)?.id;
+    if (dropPlace(doc, view, id, String(over.id), editor) && from !== undefined) controls.sayMoved(id, from);
   };
   const dragged = dragging === null ? undefined : listOf(dragging)?.places.find((p) => p.id === dragging);
 
@@ -495,7 +500,7 @@ function TripScreenFor({ tripId }: Props) {
                 }}
                 onMove={(to) => {
                   const id = controls.moving!.place.id;
-                  actions.move(id, { dayId: to });
+                  controls.moveTo(id, to);
                   controls.closeMove();
                   requestAnimationFrame(() => (document.getElementById(placeMoveId(id)) ?? document.getElementById(placeFocusId(id)))?.focus());
                 }}

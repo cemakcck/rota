@@ -36,7 +36,10 @@ export const SILENT: Announcements = {
 
 export type PlanActions = StopActions &
   SuggestionActions & {
+    /** Moves within a list (drag onto a row, Alt+↑/↓, Move up/down): a timed stop is re-timed for its slot. */
     move(id: string, to: { dayId: ListId } & Slot): boolean;
+    /** Moves to another list (Move to…): a timed stop keeps its time and goes to its place by time. */
+    moveTo(id: string, dayId: ListId): boolean;
     setDay(dayId: string, patch: DayPatch): void;
     /** Adds a place to a day or Ideas, or as a suggestion. */
     add(stop: NewStop, to: ListId | "suggest"): void;

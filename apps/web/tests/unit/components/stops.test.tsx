@@ -93,10 +93,11 @@ describe("stops", () => {
     expect(names(screen.getByRole("region", { name: "Ideas" }))).toEqual(["Galata Tower"]);
   });
 
-  it("a timed stop moved to another day is re-timed for its new place there", () => {
+  it("a timed stop moved to another day keeps its time and goes to its place by time there, as one undo step, said politely", () => {
     const { doc, dayIds } = newTrip();
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], time: "15:00" }, "u1");
     addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 45, dayId: dayIds[1], time: "08:00" }, "u1");
+    addPlace(doc, { name: "Dinner", category: "food", dayId: dayIds[1], time: "19:00" }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
     open("Galata Tower");
     fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
@@ -104,8 +105,53 @@ describe("stops", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Move" }));
     expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
       ["Breakfast", "08:00"],
-      ["Galata Tower", "08:45"],
+      ["Galata Tower", "15:00"],
+      ["Dinner", "19:00"],
     ]);
+    expect(screen.getByTestId("plan-status").textContent).toBe("Galata Tower moved to Day 2 at 15:00, position 2 of 3");
+    // One undo step: back in Day 1, still at 15:00.
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(fake.view.days[0].places.map((p) => [p.name, p.time])).toEqual([["Galata Tower", "15:00"]]);
+    expect(names(day(2))).toEqual(["Breakfast", "Dinner"]);
+  });
+
+  it("an untimed stop moved to another day stays untimed, at the end", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
+    addPlace(doc, { name: "Breakfast", category: "food", dayId: dayIds[1], time: "08:00" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    open("Galata Tower");
+    fireEvent.click(screen.getByRole("button", { name: "Move Galata Tower to…" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("radio", { name: /^Day 2/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Move" }));
+    expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
+      ["Breakfast", "08:00"],
+      ["Galata Tower", null],
+    ]);
+    expect(screen.getByTestId("plan-status").textContent).toBe("Galata Tower moved to Day 2, position 2 of 2");
+  });
+
+  it("a timed stop dropped on a day in the rail keeps its time; dragged within a day it is re-timed", () => {
+    const { doc, dayIds } = newTrip();
+    const tower = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], time: "15:00" }, "u1");
+    addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 45, dayId: dayIds[1], time: "08:00" }, "u1");
+    const dinner = addPlace(doc, { name: "Dinner", category: "food", dayId: dayIds[1], time: "19:00" }, "u1");
+    expect(dropPlace(doc, fake.view, tower, `rail:day:${dayIds[1]}`, "u1")).toBe(true);
+    expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
+      ["Breakfast", "08:00"],
+      ["Galata Tower", "15:00"],
+      ["Dinner", "19:00"],
+    ]);
+    // Within a day (onto a row): re-timed for the slot.
+    expect(dropPlace(doc, fake.view, dinner, placeDropId(tower), "u1")).toBe(true);
+    expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([
+      ["Breakfast", "08:00"],
+      ["Dinner", "08:45"],
+      ["Galata Tower", "15:00"],
+    ]);
+    // Dropped on another day's list: kept too.
+    expect(dropPlace(doc, fake.view, tower, listDropId(dayIds[0]), "u1")).toBe(true);
+    expect(fake.view.days[0].places.map((p) => [p.name, p.time])).toEqual([["Galata Tower", "15:00"]]);
   });
 
   it("remote delete while the Move dialog is open closes it", () => {
