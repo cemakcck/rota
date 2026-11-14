@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rota trip screen</title>
+<!-- Design reference for the trip screen (spec §14). Static: no build, no scripts. Light theme only. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Surfaces and ink: warm neutrals, so the map and member colours carry the colour. */
+    --canvas: #e9e7e2;
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --ink: #1c1b19;
+    --ink-2: #57544e;
+    --ink-3: #8d8981;
+    --line: #e8e5df;
+    --line-2: #f0eee9;
+    --hover: #f3f1ec;
+    --focus: #1c1b19;
+
+    /* Member colours (packages/trip/src/colours.ts) */
+    --red: #dc2626; --orange: #ea580c; --amber: #a16207; --green: #16a34a;
+    --teal: #0d9488; --blue: #2563eb; --violet: #7c3aed; --pink: #db2777;
+    /* The demo trip's people */
+    --you: var(--blue); --deniz: var(--orange); --selin: var(--teal);
+
+    /* Warnings sit in a warm tone that is not a member colour */
+    --warn-bg: #fdf3dc;
+    --warn-line: #f1dfb1;
+    --warn-ink: #8a4b08;
+
+    /* Map */
+    --map-land: #f1efe9;
+    --map-park: #dfe8d4;
+    --map-water: #cadde6;
+    --map-shore: #b9cfd9;
+    --map-road: #ffffff;
+    --map-road-casing: #e3dfd6;
+
+    --radius: 12px;
+    --shadow-1: 0 1px 2px rgba(28,27,25,.06), 0 1px 1px rgba(28,27,25,.04);
+    --shadow-2: 0 6px 24px -6px rgba(28,27,25,.18), 0 2px 6px rgba(28,27,25,.06);
+    --shadow-3: 0 30px 60px -20px rgba(28,27,25,.30), 0 12px 24px -12px rgba(28,27,25,.18);
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font: 14px/1.45 "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; }
+  svg { display: block; }
+  .icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .icon.sm { width: 14px; height: 14px; }
+  .icon.xs { width: 12px; height: 12px; stroke-width: 2; }
+  .mono { font-family: var(--mono); font-feature-settings: "tnum"; }
+
+  /* ---------- Reference page chrome ---------- */
+  .ref { max-width: 1360px; margin: 0 auto; padding: 48px 40px 80px; }
+  .ref-head { display: grid; grid-template-columns: 1fr minmax(0, 420px); gap: 40px; align-items: end; margin-bottom: 40px; }
+  .ref-kicker { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+  .ref h1 { font-size: 40px; line-height: 1.05; letter-spacing: -.025em; font-weight: 600; margin: 0; }
+  .ref h1 span { color: var(--ink-3); font-weight: 500; }
+  .ref-notes { margin: 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 13.5px; display: grid; gap: 6px; }
+  .ref-notes li { display: flex; gap: 10px; }
+  .ref-notes li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); margin-top: 8px; flex: none; }
+  .ref-section { margin-top: 56px; }
+  .ref-section > h2 { display: flex; align-items: baseline; gap: 12px; font-size: 15px; font-weight: 600; margin: 0 0 16px; letter-spacing: -.005em; }
+  .ref-section > h2 small { font: 500 12px var(--mono); color: var(--ink-3); }
+  .frame-scroll { overflow-x: auto; padding: 4px 40px 64px; margin: -4px -40px -64px; }
+
+  /* ---------- Shared app pieces ---------- */
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 0 0 2px var(--surface); position: relative; flex: none;
+  }
+  .avatar.sm { width: 20px; height: 20px; font-size: 10px; }
+  .avatar.away { opacity: .4; }
+  .avatars { display: flex; }
+  .avatars .avatar + .avatar { margin-left: -6px; }
+  .avatars .avatar.sm + .avatar.sm { margin-left: -3px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+    box-shadow: var(--shadow-1);
+  }
+  .btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--ink-2); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 7px; }
+  .gmaps-dot { width: 14px; height: 14px; flex: none; }
+
+  .sync { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+  .sync.synced { background: transparent; }
+  .sync.syncing { background: var(--hover); }
+  .sync.offline { background: var(--warn-bg); color: var(--warn-ink); box-shadow: inset 0 0 0 1px var(--warn-line); }
+  .spinner { width: 12px; height: 12px; border-radius: 50%; border: 1.75px solid currentColor; border-right-color: transparent; opacity: .8; }
+
+  .chip-weather { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  .chip-weather b { color: var(--ink); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+  .chip-weather .lo { color: var(--ink-3); font-family: var(--mono); font-size: 12px; }
+  .chip-weather .icon { width: 16px; height: 16px; color: var(--ink-2); }
+
+  .tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--line-2); color: var(--ink-2); font-size: 11.5px; font-weight: 500; }
+
+  .cat { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--line-2); color: var(--ink-2); flex: none; }
+  .cat .icon { width: 17px; height: 17px; }
+
+  .num {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: #fff;
+    font: 600 11px/1 var(--mono); flex: none; box-shadow: 0 0 0 2px var(--surface);
+  }
+
+  /* Day */
+  .day-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+  .day-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .day-title h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+  .day-title span { color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+  .day-sub { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; color: var(--ink-2); font-size: 12.5px; flex-wrap: wrap; }
+  .seg { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); }
+  .seg .mono { font-size: 12px; color: var(--ink); }
+  .day-collapsed { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+  .day-collapsed h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .day-collapsed .meta { color: var(--ink-3); font-size: 12.5px; }
+  .day-collapsed .chev { margin-left: auto; color: var(--ink-3); }
+  .day-collapsed .mini-cats { display: flex; gap: 4px; color: var(--ink-3); }
+
+  /* Place row */
+  .places { list-style: none; margin: 0; padding: 0 12px; }
+  .row {
+    position: relative; display: grid; grid-template-columns: 22px 32px 1fr auto; gap: 10px 12px; align-items: start;
+    padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line);
+  }
+  .row .num { margin-top: 5px; }
+  .row-name { font-size: 14px; font-weight: 600; letter-spacing: -.005em; line-height: 1.3; }
+  .row-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; color: var(--ink-3); font-size: 12px; }
+  .row-meta .by { display: inline-flex; align-items: center; gap: 4px; margin-right: 2px; }
+  .by-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .row-time { text-align: right; }
+  .row-time .arrive { font: 600 13.5px/1.2 var(--mono); }
+  .row-time .stay { font: 400 11.5px/1.3 var(--mono); color: var(--ink-3); margin-top: 3px; }
+  .row.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink), var(--shadow-2); }
+  .row.remote { border-color: var(--deniz); box-shadow: 0 0 0 1px var(--deniz); }
+  .remote-tag {
+    position: absolute; top: -9px; right: 12px; height: 18px; padding: 0 7px; border-radius: 6px; background: var(--deniz); color: #fff;
+    font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .row-extra { grid-column: 3 / 5; display: grid; gap: 10px; }
+  .warn {
+    display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 9px; background: var(--warn-bg);
+    box-shadow: inset 0 0 0 1px var(--warn-line); color: var(--warn-ink); font-size: 12.5px; line-height: 1.4;
+  }
+  .warn .icon { margin-top: 1px; }
+  .warn-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--warn-bg); box-shadow: inset 0 0 0 1px var(--warn-line); color: var(--warn-ink); font-size: 11.5px; font-weight: 600; }
+  .warn b { font-weight: 600; }
+  .note { font-size: 13px; color: var(--ink-2); line-height: 1.5; padding-left: 10px; border-left: 2px solid var(--line); }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .leg { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 22px; color: var(--ink-3); font-size: 12px; }
+  .leg::before { content: ""; width: 0; height: 100%; border-left: 2px dotted #cfcac0; margin-right: 6px; }
+  .leg .mono { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+  .leg .hint { white-space: nowrap; }
+  .leg .hint { color: var(--ink-3); }
+  .leg.long .mono { color: var(--ink); }
+
+  /* Map pieces */
+  .map-svg { width: 100%; height: 100%; }
+  .road-minor { fill: none; stroke: var(--map-road); stroke-width: 2.5; stroke-linecap: round; }
+  .road-casing { fill: none; stroke: var(--map-road-casing); stroke-width: 7; stroke-linecap: round; }
+  .road-major { fill: none; stroke: var(--map-road); stroke-width: 4.5; stroke-linecap: round; }
+  .map-label { font: 600 9.5px "Geist", sans-serif; letter-spacing: .14em; fill: #a7a297; text-anchor: middle; }
+  .map-water-label { font: italic 500 12px "Geist", sans-serif; letter-spacing: .04em; fill: #7f9eae; text-anchor: middle; }
+  .route { fill: none; stroke: var(--ink); stroke-linecap: round; stroke-linejoin: round; }
+  .route-casing { fill: none; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
+  .route-approx { stroke: var(--ink-2); }
+  .pin-body { fill: var(--ink); }
+  .pin-num { fill: #fff; font-family: var(--mono); font-weight: 600; text-anchor: middle; }
+  .pin-selected .pin-body { fill: var(--ink); stroke: var(--ink); }
+  .callout-title { font: 600 13px "Geist", sans-serif; fill: var(--ink); }
+  .callout-warn { font: 500 11.5px "Geist", sans-serif; fill: var(--warn-ink); }
+  .cursor-name { font: 600 11px "Geist", sans-serif; fill: #fff; text-anchor: middle; }
+
+  .map-ctrl { position: absolute; display: grid; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-2); overflow: hidden; }
+  .map-ctrl button { width: 36px; height: 36px; border: 0; background: none; display: grid; place-items: center; color: var(--ink-2); cursor: pointer; }
+  .map-ctrl button + button { border-top: 1px solid var(--line); }
+  .attribution { position: absolute; right: 8px; bottom: 6px; font-size: 10px; color: var(--ink-3); background: rgba(255,255,255,.7); padding: 1px 6px; border-radius: 4px; }
+
+  /* ---------- Desktop frame ---------- */
+  .desktop {
+    width: 1280px; height: 820px; border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow-3);
+    display: grid; grid-template-rows: 36px 64px 1fr; outline: 1px solid rgba(28,27,25,.08);
+  }
+  .demo-bar {
+    display: flex; align-items: center; gap: 14px; padding: 0 16px; background: var(--ink); color: rgba(255,255,255,.78); font-size: 12.5px;
+  }
+  .demo-bar b { color: #fff; font-weight: 600; }
+  .demo-bar .sp { flex: 1; }
+  .demo-bar a { color: #fff; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-weight: 500; }
+  .switch i { width: 28px; height: 16px; border-radius: 999px; background: rgba(255,255,255,.25); position: relative; }
+  .switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .switch.on i { background: #f5b84a; }
+  .switch.on i::after { left: 14px; }
+
+  .app-head { display: flex; align-items: center; gap: 16px; padding: 0 16px 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .logo { display: flex; align-items: center; gap: 8px; padding-right: 14px; border-right: 1px solid var(--line); height: 32px; font-weight: 700; letter-spacing: -.02em; font-size: 15px; }
+  .logo svg { width: 22px; height: 22px; }
+  .trip-title { display: grid; gap: 1px; min-width: 0; }
+  .trip-title h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.015em; white-space: nowrap; }
+  .trip-title p { margin: 0; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+  .weather { display: flex; gap: 6px; margin-left: 8px; }
+  .head-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+  .desk-body { display: grid; grid-template-columns: 420px 1fr; min-height: 0; }
+  .panel { background: var(--bg); border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr; min-height: 0; }
+  .tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .tab { position: relative; height: 38px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink-3); }
+  .tab .count { font: 500 11px var(--mono); color: var(--ink-3); background: var(--line-2); padding: 1px 6px; border-radius: 999px; }
+  .tab.active { color: var(--ink); }
+  .tab.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--ink); border-radius: 2px; }
+  .search { margin: 12px 12px 4px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-3); font-size: 13.5px; box-shadow: var(--shadow-1); }
+  .search kbd { margin-left: auto; font: 500 11px var(--mono); color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  .scroll { overflow: hidden; position: relative; padding-bottom: 16px; }
+  .scroll::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: linear-gradient(transparent, var(--bg)); }
+  .day + .day, .day-collapsed + .day, .day + .day-collapsed { margin-top: 8px; }
+
+  .map { position: relative; overflow: hidden; background: var(--map-land); }
+  .map-day { position: absolute; top: 14px; left: 14px; display: flex; gap: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-2); font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+  .pill.active { background: var(--ink); color: #fff; }
+
+  /* ---------- Phones ---------- */
+  .phones { display: flex; gap: 40px; flex-wrap: wrap; }
+  .phone-wrap { display: grid; gap: 12px; }
+  .phone-wrap > p { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 390px; }
+  .phone-wrap > p b { color: var(--ink); font-weight: 600; }
+  .phone {
+    width: 390px; height: 844px; border-radius: 48px; overflow: hidden; position: relative; background: var(--map-land);
+    box-shadow: var(--shadow-3), 0 0 0 10px #1c1b19, 0 0 0 11px #3a3833; margin: 11px;
+  }
+  .phone .map-layer { position: absolute; inset: 0; }
+  .status-bar { position: absolute; top: 0; left: 0; right: 0; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 36px; font-weight: 600; font-size: 15px; z-index: 3; }
+  .status-bar .sys { display: flex; gap: 6px; align-items: center; }
+  .island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 120px; height: 34px; border-radius: 20px; background: #000; z-index: 4; }
+  .phone-head {
+    position: absolute; top: 56px; left: 12px; right: 12px; z-index: 3; display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,.94); backdrop-filter: blur(10px); border-radius: 16px; padding: 8px 10px 8px 8px; box-shadow: var(--shadow-2);
+  }
+  .icon-btn { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--line-2); border: 0; flex: none; }
+  .phone-head .trip-title h2 { font-size: 15px; }
+  .phone-head .trip-title p { font-size: 12px; }
+  .phone-head .avatars { margin-left: auto; }
+  .phone-sync { position: absolute; top: 116px; left: 12px; z-index: 3; display: flex; gap: 6px; align-items: center; }
+  .phone-sync .sync { box-shadow: var(--shadow-2), inset 0 0 0 1px var(--warn-line); }
+  .phone-sync .sync.syncing { background: var(--surface); box-shadow: var(--shadow-2); }
+  .phone-sync .note-pill { height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; background: rgba(255,255,255,.92); font-size: 12px; color: var(--ink-2); box-shadow: var(--shadow-1); }
+  .phone .map-ctrl { right: 12px; top: 300px; z-index: 2; }
+
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--bg); border-radius: 22px 22px 0 0;
+    box-shadow: 0 -8px 30px -8px rgba(28,27,25,.22), 0 -1px 0 rgba(28,27,25,.05); overflow: hidden;
+  }
+  .grab { width: 38px; height: 5px; border-radius: 3px; background: #d6d2ca; margin: 8px auto 6px; }
+  .day-tabs { display: flex; gap: 4px; margin: 4px 12px 2px; padding: 3px; background: var(--line-2); border-radius: 10px; }
+  .day-tabs span { flex: 1; text-align: center; height: 30px; display: grid; place-items: center; font-size: 12.5px; font-weight: 500; color: var(--ink-2); border-radius: 8px; }
+  .day-tabs span.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); font-weight: 600; }
+  .sheet .day-head { padding: 10px 16px 6px; }
+  .sheet .row { padding: 10px; grid-template-columns: 22px 30px 1fr auto; gap: 8px 10px; }
+  .sheet .cat { width: 30px; height: 30px; }
+  .sheet .row-name { font-size: 13.5px; }
+  .sheet .leg { height: 26px; }
+  .sheet .row-extra { grid-column: 2 / 5; }
+  .home-ind { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: var(--ink); z-index: 5; }
+  .sheet-tabs { display: flex; gap: 4px; padding: 2px 12px 0; border-bottom: 1px solid var(--line); }
+
+  /* Checklist */
+  .check-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+  .check-head h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .progress { display: flex; align-items: center; gap: 8px; font: 500 12px var(--mono); color: var(--ink-3); }
+  .bar { width: 72px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 40%; background: var(--ink); }
+  .checklist { list-style: none; margin: 0 12px; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .check { display: flex; align-items: center; gap: 12px; padding: 12px; min-height: 52px; }
+  .check + .check { border-top: 1px solid var(--line-2); }
+  .box { width: 22px; height: 22px; border-radius: 7px; border: 1.75px solid #c9c4ba; display: grid; place-items: center; flex: none; background: var(--surface); }
+  .check.done .box { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .check-text { flex: 1; min-width: 0; font-size: 14px; }
+  .check.done .check-text { color: var(--ink-3); text-decoration: line-through; text-decoration-color: #c9c4ba; }
+  .assignee { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 3px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--deniz); background: color-mix(in srgb, var(--deniz) 9%, white); }
+  .add-item { display: flex; align-items: center; gap: 10px; margin: 10px 12px 0; height: 44px; padding: 0 12px; border-radius: var(--radius); border: 1px dashed #d3cec5; color: var(--ink-3); font-size: 13.5px; }
+  .ideas-strip { margin: 18px 16px 0; }
+  .ideas-strip h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+  .idea { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .idea + .idea { margin-top: 6px; }
+  .idea .name { font-weight: 600; font-size: 13.5px; }
+  .votes { margin-left: auto; display: flex; gap: 6px; }
+  .vote { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); font: 500 12px var(--mono); color: var(--ink-2); }
+
+  /* ---------- Tokens ---------- */
+  .tokens { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; }
+  .card { background: var(--surface); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-1); border: 1px solid var(--line); }
+  .card h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+  .card > p { margin: 0 0 16px; font-size: 12.5px; color: var(--ink-3); }
+  .cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; }
+  .cats div { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+  .sw { display: grid; gap: 6px; font: 500 10.5px var(--mono); color: var(--ink-3); }
+  .sw i { height: 40px; border-radius: 9px; display: block; }
+  .states { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .stack { display: grid; gap: 20px; }
+
+  @media (max-width: 760px) {
+    .ref { padding: 32px 16px 64px; }
+    .ref-head { grid-template-columns: 1fr; gap: 20px; }
+    .ref h1 { font-size: 30px; }
+    .tokens { grid-template-columns: 1fr; }
+    .cats { grid-template-columns: repeat(2, 1fr); }
+    .swatches { grid-template-columns: repeat(4, 1fr); }
+    .phones { gap: 24px; }
+    .frame-scroll { padding: 4px 16px 48px; margin: -4px -16px -48px; }
+    .phone-wrap { max-width: 100%; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Icon sprite: the 11 categories, then interface icons. 24×24, 1.75 stroke. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="lift" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#1c1b19" flood-opacity=".16"/></filter>
+    <g id="map-base">
+<rect x="-400" y="-400" width="2000" height="2600" fill="var(--map-land)"/>
+<ellipse cx="817.6" cy="115.7" rx="30" ry="22" fill="var(--map-park)"/>
+<ellipse cx="584.8" cy="536.3" rx="18" ry="12" fill="var(--map-park)"/>
+<ellipse cx="431.3" cy="788.6" rx="11" ry="9" fill="var(--map-park)"/>
+<ellipse cx="243.4" cy="508.2" rx="16" ry="10" fill="var(--map-park)"/>
+<ellipse cx="714.4" cy="210.3" rx="26" ry="16" fill="var(--map-park)"/>
+<ellipse cx="132.3" cy="385.5" rx="22" ry="14" fill="var(--map-park)"/>
+<path d="M211.7 595.9 C224.9 590.0 264.6 572.5 291.1 560.8 C317.5 549.1 344.0 533.9 370.4 525.8 C396.9 517.6 423.4 515.2 449.8 511.7 C476.3 508.2 516.0 505.9 529.2 504.7" class="road-minor"/>
+<path d="M396.9 694.0 C399.5 677.6 406.6 629.7 412.8 595.9 C419.0 562.0 427.8 525.8 433.9 490.7 C440.1 455.7 442.8 426.4 449.8 385.5 C456.9 344.7 467.5 292.1 476.3 245.3 C485.1 198.6 498.3 128.5 502.7 105.2" class="road-minor"/>
+<path d="M635.0 455.6 C643.9 444.0 674.7 414.8 688.0 385.5 C701.2 356.3 705.6 315.4 714.4 280.4 C723.2 245.3 732.1 216.1 740.9 175.2 C749.7 134.4 762.9 58.4 767.3 35.1" class="road-minor"/>
+<path d="M132.3 806.2 C145.5 803.8 185.2 789.8 211.7 792.1 C238.1 794.5 264.6 816.7 291.1 820.2 C317.5 823.7 357.2 814.3 370.4 813.2" class="road-minor"/>
+<path d="M264.6 455.6 C273.4 438.1 304.3 385.5 317.5 350.5 C330.8 315.4 335.2 286.2 344.0 245.3 C352.8 204.5 366.0 128.5 370.4 105.2" class="road-minor"/>
+<path d="M418.1 704.5 C432.2 691.1 477.2 647.3 502.7 623.9 C528.3 600.5 540.7 590.6 571.5 564.3 C602.4 538.0 650.9 507.1 688.0 466.2 C725.0 425.3 771.3 358.1 793.8 319.0 C816.3 279.8 817.2 272.8 822.9 231.3 C828.6 189.9 827.3 97.0 828.2 70.1" class="road-casing"/>
+<path d="M132.3 630.9 C148.2 613.4 192.3 557.3 227.6 525.8 C262.8 494.2 302.5 465.0 344.0 441.6 C385.4 418.3 432.2 404.2 476.3 385.5 C520.4 366.9 564.5 350.5 608.6 329.5 C652.7 308.4 703.4 274.6 740.9 259.4 C778.4 244.2 818.1 241.8 833.5 238.3" class="road-casing"/>
+<path d="M169.3 694.0 C183.5 696.3 227.6 699.8 254.0 708.0 C280.5 716.2 306.9 734.9 328.1 743.1 C349.3 751.2 372.2 754.7 381.0 757.1" class="road-casing"/>
+<path d="M349.3 708.0 C357.2 697.5 380.1 660.1 396.9 644.9 C413.7 629.7 433.9 630.9 449.8 616.9 C465.7 602.9 478.9 587.7 492.2 560.8 C505.4 533.9 516.0 490.7 529.2 455.6 C542.4 420.6 562.7 385.5 571.5 350.5 C580.4 315.4 580.4 262.9 582.1 245.3" class="road-casing"/>
+<path d="M661.5 946.3 C665.9 928.8 679.1 882.1 688.0 841.2 C696.8 800.3 696.8 747.7 714.4 701.0 C732.1 654.3 762.9 601.7 793.8 560.8 C824.7 519.9 864.4 484.9 899.6 455.6 C934.9 426.4 987.8 397.2 1005.5 385.5" class="road-casing"/>
+<path d="M418.1 704.5 C432.2 691.1 477.2 647.3 502.7 623.9 C528.3 600.5 540.7 590.6 571.5 564.3 C602.4 538.0 650.9 507.1 688.0 466.2 C725.0 425.3 771.3 358.1 793.8 319.0 C816.3 279.8 817.2 272.8 822.9 231.3 C828.6 189.9 827.3 97.0 828.2 70.1" class="road-major"/>
+<path d="M132.3 630.9 C148.2 613.4 192.3 557.3 227.6 525.8 C262.8 494.2 302.5 465.0 344.0 441.6 C385.4 418.3 432.2 404.2 476.3 385.5 C520.4 366.9 564.5 350.5 608.6 329.5 C652.7 308.4 703.4 274.6 740.9 259.4 C778.4 244.2 818.1 241.8 833.5 238.3" class="road-major"/>
+<path d="M169.3 694.0 C183.5 696.3 227.6 699.8 254.0 708.0 C280.5 716.2 306.9 734.9 328.1 743.1 C349.3 751.2 372.2 754.7 381.0 757.1" class="road-major"/>
+<path d="M349.3 708.0 C357.2 697.5 380.1 660.1 396.9 644.9 C413.7 629.7 433.9 630.9 449.8 616.9 C465.7 602.9 478.9 587.7 492.2 560.8 C505.4 533.9 516.0 490.7 529.2 455.6 C542.4 420.6 562.7 385.5 571.5 350.5 C580.4 315.4 580.4 262.9 582.1 245.3" class="road-major"/>
+<path d="M661.5 946.3 C665.9 928.8 679.1 882.1 688.0 841.2 C696.8 800.3 696.8 747.7 714.4 701.0 C732.1 654.3 762.9 601.7 793.8 560.8 C824.7 519.9 864.4 484.9 899.6 455.6 C934.9 426.4 987.8 397.2 1005.5 385.5" class="road-major"/>
+<polygon points="838.8,-105.2 841.4,91.1 838.8,175.2 833.5,273.4 799.1,336.5 756.8,399.6 693.3,483.7 635.0,532.8 571.5,581.8 508.0,644.9 455.1,694.0 418.1,732.5 407.5,760.6 457.8,778.1 439.2,834.2 396.9,855.2 264.6,876.2 105.8,897.3 -105.8,946.3 -105.8,2278.3 1164.2,2278.3 1164.2,1142.6 740.9,1100.6 688.0,1072.5 656.2,1023.5 635.0,974.4 624.5,925.3 603.3,876.2 571.5,806.2 566.2,736.0 598.0,687.0 650.9,602.9 719.7,518.7 788.5,434.6 841.4,350.5 878.5,280.4 883.8,175.2 894.3,-105.2" fill="var(--map-water)" stroke="var(--map-shore)" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M428.7 746.6 C419.8 743.1 392.5 735.5 375.7 725.5 C359.0 715.6 340.5 699.2 328.1 687.0 C315.8 674.7 311.3 664.8 301.6 651.9 C291.9 639.1 281.4 623.9 269.9 609.9 C258.4 595.9 244.3 580.7 232.8 567.8 C221.4 555.0 210.8 546.2 201.1 532.8 C191.4 519.3 179.0 494.8 174.6 487.2" fill="none" stroke="var(--map-shore)" stroke-width="25" stroke-linecap="round"/>
+<path d="M428.7 746.6 C419.8 743.1 392.5 735.5 375.7 725.5 C359.0 715.6 340.5 699.2 328.1 687.0 C315.8 674.7 311.3 664.8 301.6 651.9 C291.9 639.1 281.4 623.9 269.9 609.9 C258.4 595.9 244.3 580.7 232.8 567.8 C221.4 555.0 210.8 546.2 201.1 532.8 C191.4 519.3 179.0 494.8 174.6 487.2" fill="none" stroke="var(--map-water)" stroke-width="22.6" stroke-linecap="round"/>
+<line x1="680.0" y1="508.2" x2="738.2" y2="557.3" class="road-casing"/><line x1="680.0" y1="508.2" x2="738.2" y2="557.3" class="road-major"/>
+<line x1="828.2" y1="241.8" x2="891.7" y2="234.8" class="road-casing"/><line x1="828.2" y1="241.8" x2="891.7" y2="234.8" class="road-major"/>
+<text x="132.3" y="588.8" class="map-label">BALAT</text>
+<text x="351.9" y="687.0" class="map-label">KARAKÖY</text>
+<text x="529.2" y="539.8" class="map-label">BEŞİKTAŞ</text>
+<text x="449.8" y="441.6" class="map-label">ŞİŞLİ</text>
+<text x="714.4" y="91.1" class="map-label">SARIYER</text>
+<text x="688.0" y="722.0" class="map-label">ÜSKÜDAR</text>
+<text x="238.1" y="792.1" class="map-label">FATİH</text>
+<text x="979.0" y="140.2" class="map-label">BEYKOZ</text>
+<text x="775.3" y="371.5" class="map-water-label" transform="rotate(-48 775.3 371.5)">Bosphorus</text>
+<text x="240.8" y="578.3" class="map-water-label" transform="rotate(-40 240.8 578.3)">Golden Horn</text>
+<text x="264.6" y="981.4" class="map-water-label" transform="rotate(0 264.6 981.4)">Sea of Marmara</text>
+</g>
+  </defs>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M7 3v18M4.5 3v4.5a2.5 2.5 0 0 0 5 0V3M17 21V3c-2 1.2-3 3.6-3 6.5 0 2.4.9 3.5 3 3.5"/></symbol>
+  <symbol id="i-drinks" viewBox="0 0 24 24"><path d="M5 4h14l-7 8zM12 12v8M8 20h8M7.6 7h8.8"/></symbol>
+  <symbol id="i-cafe" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5c-.6.8-.6 1.7 0 2.5M12 3.5c-.6.8-.6 1.7 0 2.5"/></symbol>
+  <symbol id="i-museum" viewBox="0 0 24 24"><path d="M3 9.5 12 4l9 5.5zM5.5 9.5V18M10 9.5V18M14 9.5V18M18.5 9.5V18M3 20.5h18"/></symbol>
+  <symbol id="i-sight" viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 1 2-2h2l1.6-2.4h6.8L17 7h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-nightlife" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/><path d="M17 3.5v3M15.5 5h3"/></symbol>
+  <symbol id="i-shopping" viewBox="0 0 24 24"><path d="M5 8h14l-1.2 12.2H6.2zM9 10V6.5a3 3 0 0 1 6 0V10"/></symbol>
+  <symbol id="i-nature" viewBox="0 0 24 24"><path d="M12 3 6.5 10.5h3L5 16.5h14l-4.5-6h3zM12 16.5V21"/></symbol>
+  <symbol id="i-gym" viewBox="0 0 24 24"><path d="M6.5 7v10M3.5 9.5v5M17.5 7v10M20.5 9.5v5M6.5 12h11"/></symbol>
+  <symbol id="i-stay" viewBox="0 0 24 24"><path d="M3 5v14M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11.5" r="1.8"/></symbol>
+  <symbol id="i-other" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+
+  <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.8"/><path d="m9 20 2.5-6.5L14 16v5M8 11.5l2.5-3.5 3.5 1 2 3.5 2.5 1M11.5 13.5 12.6 9"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 16.5V12l2-5h10l2 5v4.5M3.5 12h17M5 16.5h14M6.5 16.5v2M17.5 16.5v2"/><circle cx="8" cy="13.8" r=".6"/><circle cx="16" cy="13.8" r=".6"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 4.2 2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0zM12 9.5v4.5M12 17.2v.1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M3 3l18 18M8.5 6.2A6 6 0 0 1 17.6 10 4 4 0 0 1 20 17M16 19H7a4.5 4.5 0 0 1-1.5-8.75"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+  <symbol id="i-partly" viewBox="0 0 24 24"><path d="M8 4.5v1.2M3.8 8.5H5M5 5.3l.9.9M11.6 6.4a4 4 0 0 0-6.7 3.7"/><path d="M8.5 19.5h9a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 8.5 19.5z"/></symbol>
+  <symbol id="i-rain" viewBox="0 0 24 24"><path d="M7 15.5a4 4 0 0 1 .6-8 5.5 5.5 0 0 1 10.5 1.5 3.5 3.5 0 0 1-.6 6.5"/><path d="M8.5 18l-1 2.5M12.5 17l-1 2.5M16.5 18l-1 2.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="7"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+  <symbol id="i-gmaps" viewBox="0 0 24 24"><path d="M12 21.5s-6.5-6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15.5 12 21.5 12 21.5z" fill="#ea4335" stroke="none"/><circle cx="12" cy="10.3" r="2.4" fill="#fff" stroke="none"/></symbol>
+</svg>
+
+<main class="ref">
+
+  <header class="ref-head">
+    <div>
+      <p class="ref-kicker">Rota · Design reference · Trip screen</p>
+      <h1>Istanbul long weekend<br><span>at 1280 px and 390 px</span></h1>
+    </div>
+    <ul class="ref-notes">
+      <li>Calm and map-forward: warm neutrals, the map does the talking, one dark ink for pins and the route.</li>
+      <li>Member colours are the only accent: avatars, who added a place, a friend's outline, their map cursor.</li>
+      <li>Times and distances in a monospace with tabular figures, so a day reads as a schedule.</li>
+      <li>Warnings use a warm tone that no member colour shares. Approximate legs are dotted and marked ≈.</li>
+    </ul>
+  </header>
+
+  <!-- ===================== DESKTOP ===================== -->
+  <section class="ref-section" aria-labelledby="desk-h">
+    <h2 id="desk-h">Desktop <small>1280 × 820 · list 420 px, map fills the rest</small></h2>
+    <div class="frame-scroll">
+      <div class="desktop">
+
+        <div class="demo-bar">
+          <b>Demo trip</b><span>Deleted after 7 days without activity.</span>
+          <span class="sp"></span>
+          <span class="switch"><i></i>Simulate offline</span>
+          <a href="#"><svg class="icon sm"><use href="#i-users"/></svg>Try it with a friend</a>
+        </div>
+
+        <div class="app-head">
+          <div class="logo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1c1b19"/><path d="M7.5 15.5c2-5 7-2 9-7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="7.5" cy="15.5" r="1.8" fill="#fff"/><circle cx="16.5" cy="8.5" r="1.8" fill="#fff"/></svg>
+            rota
+          </div>
+          <div class="trip-title">
+            <h2>Istanbul long weekend</h2>
+            <p>Fri 27 – Sun 29 Nov · Istanbul · 3 days</p>
+          </div>
+          <div class="weather" aria-label="Weather">
+            <span class="chip-weather"><svg class="icon"><use href="#i-sun"/></svg>Fri <b>14°</b><span class="lo">8°</span></span>
+            <span class="chip-weather"><svg class="icon"><use href="#i-partly"/></svg>Sat <b>12°</b><span class="lo">7°</span></span>
+            <span class="chip-weather"><svg class="icon"><use href="#i-rain"/></svg>Sun <b>11°</b><span class="lo">7°</span></span>
+          </div>
+          <div class="head-right">
+            <span class="sync synced" role="status"><svg class="icon sm"><use href="#i-check"/></svg>Synced</span>
+            <div class="avatars" aria-label="In this trip now: you, Deniz, Selin">
+              <span class="avatar" style="background:var(--you)" title="You (Guest Otter)">O</span>
+              <span class="avatar" style="background:var(--deniz)" title="Deniz">D</span>
+              <span class="avatar" style="background:var(--selin)" title="Selin">S</span>
+            </div>
+            <button class="btn"><svg class="icon sm"><use href="#i-users"/></svg>Invite</button>
+          </div>
+        </div>
+
+        <div class="desk-body">
+          <!-- List: the accessible source of truth for the map -->
+          <section class="panel" aria-label="Plan">
+            <nav class="tabs">
+              <span class="tab active"><svg class="icon sm"><use href="#i-list"/></svg>Plan</span>
+              <span class="tab">Ideas <span class="count">2</span></span>
+              <span class="tab">Checklist <span class="count">2/5</span></span>
+            </nav>
+            <div class="search"><svg class="icon"><use href="#i-search"/></svg>Search places to add<kbd>/</kbd></div>
+            <div class="scroll">
+
+              <div class="day-collapsed" style="margin-top:8px">
+                <svg class="icon sm" style="color:var(--ink-3);transform:rotate(-90deg)"><use href="#i-chev-down"/></svg>
+                <div>
+                  <h3>Day 1 <span class="meta">· Fri 27 Nov</span></h3>
+                  <div class="meta"><span class="mono">09:30 – 14:46</span> · 4 places · Karaköy and Galata</div>
+                </div>
+                <span class="mini-cats chev">
+                  <svg class="icon sm"><use href="#i-food"/></svg><svg class="icon sm"><use href="#i-museum"/></svg><svg class="icon sm"><use href="#i-sight"/></svg>
+                </span>
+              </div>
+
+              <div class="day">
+                <div class="day-head">
+                  <div class="day-title"><h3>Day 2</h3><span>Sat 28 Nov</span></div>
+                  <span style="margin-left:auto"></span>
+                  <button class="btn sm"><svg class="gmaps-dot"><use href="#i-gmaps"/></svg>Directions<svg class="icon xs" style="color:var(--ink-3)"><use href="#i-ext"/></svg></button>
+                </div>
+                <div class="day-sub">
+                  <span class="seg"><svg class="icon sm"><use href="#i-clock"/></svg>Starts <span class="mono">09:00</span></span>
+                  <span class="seg"><svg class="icon sm"><use href="#i-walk"/></svg>Walking<svg class="icon xs"><use href="#i-chev-down"/></svg></span>
+                  <span style="color:var(--ink-3)">· Balat and the old city</span>
+                </div>
+
+                <ol class="places">
+                  <li class="row">
+                    <span class="num">1</span>
+                    <span class="cat"><svg class="icon"><use href="#i-cafe"/></svg></span>
+                    <div>
+                      <div class="row-name">Forno Balat</div>
+                      <div class="row-meta"><span class="by"><i class="by-dot" style="background:var(--selin)"></i>Selin</span><span class="tag">breakfast</span><span class="tag">pastry</span></div>
+                    </div>
+                    <div class="row-time"><div class="arrive">09:00</div><div class="stay">45 min</div></div>
+                  </li>
+                  <li class="leg"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">2 min · 140 m</span></li>
+                  <li class="row remote">
+                    <span class="remote-tag"><svg class="icon xs"><use href="#i-pencil"/></svg>Deniz</span>
+                    <span class="num">2</span>
+                    <span class="cat"><svg class="icon"><use href="#i-sight"/></svg></span>
+                    <div>
+                      <div class="row-name">Balat colourful streets</div>
+                      <div class="row-meta"><span class="by"><i class="by-dot" style="background:var(--deniz)"></i>Deniz</span><span class="tag">photos</span><span class="tag">walk</span></div>
+                    </div>
+                    <div class="row-time"><div class="arrive">09:47</div><div class="stay">1 h 30 min</div></div>
+                  </li>
+                  <li class="leg"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">15 min · 1.1 km</span></li>
+                  <li class="row">
+                    <span class="num">3</span>
+                    <span class="cat"><svg class="icon"><use href="#i-museum"/></svg></span>
+                    <div>
+                      <div class="row-name">Chora Church</div>
+                      <div class="row-meta"><span class="by"><i class="by-dot" style="background:var(--you)"></i>You</span><span class="tag">mosaics</span></div>
+                    </div>
+                    <div class="row-time"><div class="arrive">11:32</div><div class="stay">1 h 15 min</div></div>
+                  </li>
+                  <li class="leg long"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">≈ 3 h 19 min · 14.9 km</span><span class="hint">· long walk</span></li>
+                  <li class="row selected">
+                    <span class="num">4</span>
+                    <span class="cat"><svg class="icon"><use href="#i-museum"/></svg></span>
+                    <div>
+                      <div class="row-name">Rumeli Hisarı</div>
+                      <div class="row-meta"><span class="by"><i class="by-dot" style="background:var(--you)"></i>You</span><span class="tag">fortress</span><span class="tag">views</span></div>
+                    </div>
+                    <div class="row-time"><div class="arrive">16:06</div><div class="stay">1 h 30 min</div></div>
+                    <div class="row-extra">
+                      <div class="warn" role="note"><svg class="icon sm"><use href="#i-warn"/></svg><span><b>Closes at 17:00.</b> You'd be there until <span class="mono">17:36</span>.</span></div>
+                      <div class="note">Closes at 17:00. It is a long way from Balat, so go by taxi or the ferry-and-bus combo.</div>
+                      <div class="actions">
+                        <button class="btn sm"><svg class="gmaps-dot"><use href="#i-gmaps"/></svg>Open in Google Maps</button>
+                        <button class="btn sm ghost"><svg class="icon sm"><use href="#i-up"/></svg>Move up</button>
+                        <button class="btn sm ghost">Move to day…</button>
+                      </div>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="day-collapsed">
+                <svg class="icon sm" style="color:var(--ink-3);transform:rotate(-90deg)"><use href="#i-chev-down"/></svg>
+                <div>
+                  <h3>Day 3 <span class="meta">· Sun 29 Nov</span></h3>
+                  <div class="meta"><span class="mono">09:00 – 15:06</span> · 4 places · by car</div>
+                </div>
+                <span class="mini-cats chev">
+                  <svg class="icon sm"><use href="#i-nature"/></svg><svg class="icon sm"><use href="#i-food"/></svg><svg class="icon sm"><use href="#i-shopping"/></svg><svg class="icon sm"><use href="#i-drinks"/></svg>
+                </span>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- Map -->
+          <section class="map" aria-label="Map of Day 2">
+            <svg class="map-svg" viewBox="79 78 860 720" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Day 2 route: Forno Balat, Balat colourful streets, Chora Church, Rumeli Hisarı">
+              <use href="#map-base"/>
+              <circle cx="410.7" cy="717.8" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="400.6" cy="689.8" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="393.7" cy="696.8" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="409.6" cy="708.7" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="823.4" cy="114.3" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="657.8" cy="943.5" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="654.6" cy="942.8" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<circle cx="673.1" cy="956.2" r="4.5" fill="#fff" stroke="var(--ink-3)" stroke-width="2.0"/>
+<path d="M249.0 685.6 L274.8 656.1 Q232.8 653.3 200.9 656.7" class="route-casing" style="stroke-width:8.0px"/>
+<path d="M249.0 685.6 L274.8 656.1 Q232.8 653.3 200.9 656.7" class="route" style="stroke-width:4.0px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route-casing" style="stroke-width:8.0px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route route-approx" style="stroke-width:4.0px;stroke-dasharray:1.0 8.0"/>
+<g class="pin" aria-label="1. Forno Balat"><circle cx="249.0" cy="687.6" r="14.5" fill="rgba(28,27,25,.18)"/><circle cx="249.0" cy="685.6" r="15.5" fill="#fff"/><circle cx="249.0" cy="685.6" r="13.0" class="pin-body"/><text x="249.0" y="690.0" class="pin-num" style="font-size:12.0px">1</text></g>
+<g class="pin" aria-label="2. Balat colourful streets"><circle cx="274.8" cy="658.1" r="14.5" fill="rgba(28,27,25,.18)"/><circle cx="274.8" cy="656.1" r="15.5" fill="#fff"/><circle cx="274.8" cy="656.1" r="13.0" class="pin-body"/><text x="274.8" y="660.5" class="pin-num" style="font-size:12.0px">2</text></g>
+<g class="pin" aria-label="3. Chora Church"><circle cx="200.9" cy="658.7" r="14.5" fill="rgba(28,27,25,.18)"/><circle cx="200.9" cy="656.7" r="15.5" fill="#fff"/><circle cx="200.9" cy="656.7" r="13.0" class="pin-body"/><text x="200.9" y="661.1" class="pin-num" style="font-size:12.0px">3</text></g>
+<g class="pin pin-selected" aria-label="4. Rumeli Hisarı"><circle cx="826.1" cy="283.1" r="17.5" fill="rgba(28,27,25,.18)"/><circle cx="826.1" cy="281.1" r="18.5" fill="#fff"/><circle cx="826.1" cy="281.1" r="16.0" class="pin-body"/><text x="826.1" y="285.5" class="pin-num" style="font-size:13.0px">4</text><circle cx="839.7" cy="267.5" r="8.0" fill="#fff"/><circle cx="839.7" cy="267.5" r="6.5" fill="var(--warn-ink)"/><text x="839.7" y="271.1" class="pin-num" style="font-size:10.0px">!</text></g>
+<g class="pin-callout" transform="translate(676.1 307.1) scale(1.0)"><rect width="168" height="46" rx="10" fill="#fff" filter="url(#lift)"/><text x="12" y="19" class="callout-title">Rumeli Hisarı</text><text x="12" y="35" class="callout-warn">Closes at 17:00</text></g>
+<g class="remote-cursor" transform="translate(619.2 196.3) scale(1.0)"><path d="M0 0 L0 17 L4.6 12.8 L7.8 20 L10.6 18.8 L7.5 11.8 L13.5 11.6 Z" fill="var(--selin)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="12" y="18" width="44" height="20" rx="10" fill="var(--selin)"/><text x="34" y="32" class="cursor-name">Selin</text></g>
+            </svg>
+            <div class="map-day">
+              <span class="pill">All days</span><span class="pill">Day 1</span><span class="pill active">Day 2</span><span class="pill">Day 3</span>
+            </div>
+            <div class="map-ctrl" style="right:14px;top:14px">
+              <button aria-label="Zoom in"><svg class="icon"><use href="#i-plus"/></svg></button>
+              <button aria-label="Zoom out"><svg class="icon"><use href="#i-minus"/></svg></button>
+            </div>
+            <div class="map-ctrl" style="right:14px;top:104px"><button aria-label="Fit the day"><svg class="icon"><use href="#i-locate"/></svg></button></div>
+            <span class="attribution">© OpenStreetMap contributors</span>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PHONES ===================== -->
+  <section class="ref-section" aria-labelledby="phone-h">
+    <h2 id="phone-h">Phone <small>390 × 844 · full map, list in a bottom sheet</small></h2>
+    <div class="phones">
+
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="map-layer">
+            <svg class="map-svg" viewBox="100 -171 929 2010" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+              <use href="#map-base"/>
+              <circle cx="410.7" cy="717.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="400.6" cy="689.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="393.7" cy="696.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="409.6" cy="708.7" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="823.4" cy="114.3" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="657.8" cy="943.5" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="654.6" cy="942.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="673.1" cy="956.2" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<path d="M243.4 704.9 L296.9 639.5 Q232.8 653.3 192.6 659.5" class="route-casing" style="stroke-width:19.0px"/>
+<path d="M243.4 704.9 L296.9 639.5 Q232.8 653.3 192.6 659.5" class="route" style="stroke-width:9.5px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route-casing" style="stroke-width:19.0px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route route-approx" style="stroke-width:9.5px;stroke-dasharray:2.4 19.0"/>
+<g class="pin" aria-label="1. Forno Balat"><circle cx="243.4" cy="709.7" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="243.4" cy="704.9" r="36.9" fill="#fff"/><circle cx="243.4" cy="704.9" r="31.0" class="pin-body"/><text x="243.4" y="715.4" class="pin-num" style="font-size:28.6px">1</text></g>
+<g class="pin" aria-label="2. Balat colourful streets"><circle cx="296.9" cy="644.2" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="296.9" cy="639.5" r="36.9" fill="#fff"/><circle cx="296.9" cy="639.5" r="31.0" class="pin-body"/><text x="296.9" y="650.0" class="pin-num" style="font-size:28.6px">2</text></g>
+<g class="pin" aria-label="3. Chora Church"><circle cx="192.6" cy="664.3" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="192.6" cy="659.5" r="36.9" fill="#fff"/><circle cx="192.6" cy="659.5" r="31.0" class="pin-body"/><text x="192.6" y="670.0" class="pin-num" style="font-size:28.6px">3</text></g>
+<g class="pin pin-selected" aria-label="4. Rumeli Hisarı"><circle cx="826.1" cy="285.9" r="41.7" fill="rgba(28,27,25,.18)"/><circle cx="826.1" cy="281.1" r="44.0" fill="#fff"/><circle cx="826.1" cy="281.1" r="38.1" class="pin-body"/><text x="826.1" y="291.6" class="pin-num" style="font-size:31.0px">4</text><circle cx="858.5" cy="248.7" r="19.0" fill="#fff"/><circle cx="858.5" cy="248.7" r="15.5" fill="var(--warn-ink)"/><text x="858.5" y="257.3" class="pin-num" style="font-size:23.8px">!</text></g>
+<g class="remote-cursor" transform="translate(502.7 350.5) scale(2.380952380952381)"><path d="M0 0 L0 17 L4.6 12.8 L7.8 20 L10.6 18.8 L7.5 11.8 L13.5 11.6 Z" fill="var(--selin)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="12" y="18" width="44" height="20" rx="10" fill="var(--selin)"/><text x="34" y="32" class="cursor-name">Selin</text></g>
+            </svg>
+          </div>
+          <div class="island"></div>
+          <div class="status-bar"><span>9:41</span><span class="sys"><svg class="icon sm"><use href="#i-cloud-off"/></svg></span></div>
+          <div class="phone-head">
+            <button class="icon-btn" aria-label="My trips"><svg class="icon"><use href="#i-chev-left"/></svg></button>
+            <div class="trip-title"><h2>Istanbul long weekend</h2><p>Fri 27 – Sun 29 Nov</p></div>
+            <div class="avatars">
+              <span class="avatar sm" style="background:var(--you)">O</span>
+              <span class="avatar sm" style="background:var(--deniz)">D</span>
+              <span class="avatar sm" style="background:var(--selin)">S</span>
+            </div>
+          </div>
+          <div class="phone-sync">
+            <span class="sync offline" role="status"><svg class="icon sm"><use href="#i-cloud-off"/></svg>Offline — 3 changes waiting</span>
+            <span class="note-pill">Map may be incomplete</span>
+          </div>
+          <div class="map-ctrl"><button aria-label="Fit the day"><svg class="icon"><use href="#i-locate"/></svg></button></div>
+
+          <div class="sheet" style="top:396px">
+            <div class="grab"></div>
+            <div class="day-tabs"><span>Day 1</span><span class="active">Day 2</span><span>Day 3</span><span>Ideas</span></div>
+            <div class="day-head">
+              <div class="day-title"><h3>Sat 28 Nov</h3><span class="mono" style="font-size:12px">09:00 · walking</span></div>
+              <span style="margin-left:auto"></span>
+              <button class="btn sm"><svg class="gmaps-dot"><use href="#i-gmaps"/></svg>Directions</button>
+            </div>
+            <ol class="places">
+              <li class="row">
+                <span class="num">1</span><span class="cat"><svg class="icon"><use href="#i-cafe"/></svg></span>
+                <div><div class="row-name">Forno Balat</div><div class="row-meta"><i class="by-dot" style="background:var(--selin)"></i><span class="tag">breakfast</span></div></div>
+                <div class="row-time"><div class="arrive">09:00</div><div class="stay">45 min</div></div>
+              </li>
+              <li class="leg"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">2 min</span></li>
+              <li class="row">
+                <span class="num">2</span><span class="cat"><svg class="icon"><use href="#i-sight"/></svg></span>
+                <div><div class="row-name">Balat colourful streets</div><div class="row-meta"><i class="by-dot" style="background:var(--deniz)"></i><span class="tag">photos</span><span class="tag">walk</span></div></div>
+                <div class="row-time"><div class="arrive">09:47</div><div class="stay">1 h 30</div></div>
+              </li>
+              <li class="leg"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">15 min</span></li>
+              <li class="row">
+                <span class="num">3</span><span class="cat"><svg class="icon"><use href="#i-museum"/></svg></span>
+                <div><div class="row-name">Chora Church</div><div class="row-meta"><i class="by-dot" style="background:var(--you)"></i><span class="tag">mosaics</span></div></div>
+                <div class="row-time"><div class="arrive">11:32</div><div class="stay">1 h 15</div></div>
+              </li>
+              <li class="leg long"><svg class="icon sm"><use href="#i-walk"/></svg><span class="mono">≈ 3 h 19 min</span></li>
+              <li class="row">
+                <span class="num">4</span><span class="cat"><svg class="icon"><use href="#i-museum"/></svg></span>
+                <div><div class="row-name">Rumeli Hisarı</div><div class="row-meta"><i class="by-dot" style="background:var(--you)"></i><span class="warn-chip"><svg class="icon xs"><use href="#i-warn"/></svg>Closes at 17:00</span></div></div>
+                <div class="row-time"><div class="arrive">16:06</div><div class="stay">1 h 30</div></div>
+              </li>
+            </ol>
+          </div>
+          <div class="home-ind"></div>
+        </div>
+        <p><b>Plan, offline.</b> "Simulate offline" is on: the header says how many changes are waiting, and the sheet keeps working on the device's copy.</p>
+      </div>
+
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="map-layer">
+            <svg class="map-svg" viewBox="100 -171 929 2010" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
+              <use href="#map-base"/>
+              <circle cx="410.7" cy="717.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="400.6" cy="689.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="393.7" cy="696.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="409.6" cy="708.7" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="823.4" cy="114.3" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="657.8" cy="943.5" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="654.6" cy="942.8" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<circle cx="673.1" cy="956.2" r="10.7" fill="#fff" stroke="var(--ink-3)" stroke-width="4.8"/>
+<path d="M243.4 704.9 L296.9 639.5 Q232.8 653.3 192.6 659.5" class="route-casing" style="stroke-width:19.0px"/>
+<path d="M243.4 704.9 L296.9 639.5 Q232.8 653.3 192.6 659.5" class="route" style="stroke-width:9.5px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route-casing" style="stroke-width:19.0px"/>
+<path d="M206.9 654.7 C218.3 637.9 243.5 584.6 275.2 553.8 C306.8 522.9 350.2 493.0 396.9 469.7 C443.6 446.3 507.2 432.3 555.7 413.6 C604.2 394.9 650.0 375.0 688.0 357.5 C725.9 340.0 760.2 321.2 783.2 308.4 C806.2 295.7 818.9 285.7 826.1 281.1" class="route route-approx" style="stroke-width:9.5px;stroke-dasharray:2.4 19.0"/>
+<g class="pin" aria-label="1. Forno Balat"><circle cx="243.4" cy="709.7" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="243.4" cy="704.9" r="36.9" fill="#fff"/><circle cx="243.4" cy="704.9" r="31.0" class="pin-body"/><text x="243.4" y="715.4" class="pin-num" style="font-size:28.6px">1</text></g>
+<g class="pin" aria-label="2. Balat colourful streets"><circle cx="296.9" cy="644.2" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="296.9" cy="639.5" r="36.9" fill="#fff"/><circle cx="296.9" cy="639.5" r="31.0" class="pin-body"/><text x="296.9" y="650.0" class="pin-num" style="font-size:28.6px">2</text></g>
+<g class="pin" aria-label="3. Chora Church"><circle cx="192.6" cy="664.3" r="34.5" fill="rgba(28,27,25,.18)"/><circle cx="192.6" cy="659.5" r="36.9" fill="#fff"/><circle cx="192.6" cy="659.5" r="31.0" class="pin-body"/><text x="192.6" y="670.0" class="pin-num" style="font-size:28.6px">3</text></g>
+<g class="pin pin-selected" aria-label="4. Rumeli Hisarı"><circle cx="826.1" cy="285.9" r="41.7" fill="rgba(28,27,25,.18)"/><circle cx="826.1" cy="281.1" r="44.0" fill="#fff"/><circle cx="826.1" cy="281.1" r="38.1" class="pin-body"/><text x="826.1" y="291.6" class="pin-num" style="font-size:31.0px">4</text><circle cx="858.5" cy="248.7" r="19.0" fill="#fff"/><circle cx="858.5" cy="248.7" r="15.5" fill="var(--warn-ink)"/><text x="858.5" y="257.3" class="pin-num" style="font-size:23.8px">!</text></g>
+<g class="remote-cursor" transform="translate(767.3 364.5) scale(2.380952380952381)"><path d="M0 0 L0 17 L4.6 12.8 L7.8 20 L10.6 18.8 L7.5 11.8 L13.5 11.6 Z" fill="var(--selin)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><rect x="12" y="18" width="44" height="20" rx="10" fill="var(--selin)"/><text x="34" y="32" class="cursor-name">Selin</text></g>
+            </svg>
+          </div>
+          <div class="island"></div>
+          <div class="status-bar"><span>9:41</span><span class="sys"></span></div>
+          <div class="phone-head">
+            <button class="icon-btn" aria-label="My trips"><svg class="icon"><use href="#i-chev-left"/></svg></button>
+            <div class="trip-title"><h2>Istanbul long weekend</h2><p>Fri 27 – Sun 29 Nov</p></div>
+            <div class="avatars">
+              <span class="avatar sm" style="background:var(--you)">O</span>
+              <span class="avatar sm" style="background:var(--deniz)">D</span>
+              <span class="avatar sm away" style="background:var(--selin)" title="Selin, not here now">S</span>
+            </div>
+          </div>
+          <div class="phone-sync"><span class="sync syncing" role="status"><span class="spinner"></span>Syncing…</span></div>
+
+          <div class="sheet" style="top:176px">
+            <div class="grab"></div>
+            <div class="day-tabs"><span>Day 1</span><span>Day 2</span><span>Day 3</span><span class="active">Checklist</span></div>
+            <div class="check-head">
+              <h3>Checklist</h3>
+              <span class="progress"><span class="bar"><i></i></span>2/5</span>
+            </div>
+            <ul class="checklist">
+              <li class="check done"><span class="box"><svg class="icon xs"><use href="#i-check"/></svg></span><span class="check-text">Buy Istanbulkart passes</span><span class="avatar sm" style="background:var(--you)">O</span></li>
+              <li class="check done"><span class="box"><svg class="icon xs"><use href="#i-check"/></svg></span><span class="check-text">Download offline maps</span><span class="avatar sm" style="background:var(--deniz)">D</span></li>
+              <li class="check"><span class="box"></span><span class="check-text">Book a table at Çiya Sofrası</span></li>
+              <li class="check"><span class="box"></span><span class="check-text">Check Chora Church opening hours</span><span class="assignee"><span class="avatar sm" style="background:var(--deniz);box-shadow:none">D</span>Deniz</span></li>
+              <li class="check"><span class="box"></span><span class="check-text">Pack comfortable walking shoes</span></li>
+            </ul>
+            <div class="add-item"><svg class="icon"><use href="#i-plus"/></svg>Add an item</div>
+
+            <div class="ideas-strip">
+              <h4>Ideas to vote on</h4>
+              <div class="idea">
+                <span class="cat"><svg class="icon"><use href="#i-nature"/></svg></span>
+                <div><div class="name">Moda Sahil</div><div class="row-meta"><i class="by-dot" style="background:var(--deniz)"></i><span class="tag">sunset</span></div></div>
+                <div class="votes"><span class="vote">▲ 2</span><span class="vote">▼ 0</span></div>
+              </div>
+              <div class="idea">
+                <span class="cat"><svg class="icon"><use href="#i-sight"/></svg></span>
+                <div><div class="name">Pierre Loti Hill</div><div class="row-meta"><i class="by-dot" style="background:var(--selin)"></i><span class="tag">views</span><span class="tag">tea</span></div></div>
+                <div class="votes"><span class="vote">▲ 1</span><span class="vote">▼ 1</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="home-ind"></div>
+        </div>
+        <p><b>Checklist, back online.</b> The sheet pulled up; local changes are going up ("Syncing…"). Assignees wear their member colour.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== TOKENS ===================== -->
+  <section class="ref-section" aria-labelledby="tok-h">
+    <h2 id="tok-h">Pieces <small>categories, member colours, sync indicator</small></h2>
+    <div class="tokens">
+      <div class="card">
+        <h3>Categories</h3>
+        <p>Eleven, each with a quiet line icon on a neutral tile. Colour is reserved for people.</p>
+        <div class="cats">
+          <div><span class="cat"><svg class="icon"><use href="#i-food"/></svg></span>Food</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-drinks"/></svg></span>Drinks</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-cafe"/></svg></span>Café</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-museum"/></svg></span>Museum</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-sight"/></svg></span>Sight</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-nightlife"/></svg></span>Nightlife</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-shopping"/></svg></span>Shopping</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-nature"/></svg></span>Nature</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-gym"/></svg></span>Gym</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-stay"/></svg></span>Stay</div>
+          <div><span class="cat"><svg class="icon"><use href="#i-other"/></svg></span>Other</div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card">
+          <h3>Member colours</h3>
+          <p>Assigned in join order; each has at least 3:1 contrast on white.</p>
+          <div class="swatches">
+            <span class="sw"><i style="background:var(--red)"></i>#dc2626</span>
+            <span class="sw"><i style="background:var(--orange)"></i>#ea580c</span>
+            <span class="sw"><i style="background:var(--amber)"></i>#a16207</span>
+            <span class="sw"><i style="background:var(--green)"></i>#16a34a</span>
+            <span class="sw"><i style="background:var(--teal)"></i>#0d9488</span>
+            <span class="sw"><i style="background:var(--blue)"></i>#2563eb</span>
+            <span class="sw"><i style="background:var(--violet)"></i>#7c3aed</span>
+            <span class="sw"><i style="background:var(--pink)"></i>#db2777</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Sync indicator</h3>
+          <p>Always in the header. Quiet when all is well, warm when work is waiting.</p>
+          <div class="states">
+            <span class="sync synced"><svg class="icon sm"><use href="#i-check"/></svg>Synced</span>
+            <span class="sync syncing"><span class="spinner"></span>Syncing…</span>
+            <span class="sync offline"><svg class="icon sm"><use href="#i-cloud-off"/></svg>Offline — 3 changes waiting</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

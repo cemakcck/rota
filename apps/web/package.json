@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hocuspocus/extension-database": "^4.8.0",
+    "@hocuspocus/provider": "^4.8.0",
     "@hocuspocus/server": "^4.8.0",
     "@rota/trip": "*",
     "better-auth": "^1.7.23",
@@ -27,19 +28,21 @@
     "resend": "^6.38.1",
     "tsx": "^4.23.15",
     "ws": "^8.23.0",
+    "y-indexeddb": "^9.0.12",
     "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@hocuspocus/provider": "^4.8.0",
     "@playwright/test": "1.65",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.2.1",
     "drizzle-kit": "^0.31.11",
+    "fake-indexeddb": "^6.2.8",
     "jsdom": "^31.0.0",
     "tailwindcss": "^4"
   }
