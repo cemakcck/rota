@@ -1,18 +1,47 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from "@hocuspocus/provider";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import * as Y from "yjs";
 import { addDay, addPlace, newTripId, readTrip, setTripMeta } from "@rota/trip";
 import { startServer, type RunningServer } from "../../server";
 import { db } from "@/server/db/client";
-import { user } from "@/server/db/schema";
+import { tripMembers, user } from "@/server/db/schema";
 import { createSyncServer, serveSync } from "@/server/sync";
 import { loadState, storeState } from "@/server/trips/docStore";
 import { addMember, createTrip, deleteTrip, removeMember } from "@/server/trips/repo";
 import { NEW_TRIP, signUpUser, type TestUser } from "./helpers";
+
+/** Lets a test hold a trip's document load open (a cold database) and see when it starts. */
+const slowLoads = vi.hoisted(() => new Map<string, { entered: () => void; release: Promise<void> }>());
+vi.mock("@/server/trips/docStore", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/trips/docStore")>();
+  return {
+    ...real,
+    async loadState(id: string) {
+      const slow = slowLoads.get(id);
+      if (slow) {
+        slowLoads.delete(id);
+        slow.entered();
+        await slow.release;
+      }
+      return real.loadState(id);
+    },
+  };
+});
+
+function holdLoad(tripId: string) {
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  slowLoads.set(tripId, { entered, release: new Promise<void>((resolve) => (release = resolve)) });
+  return { started, release };
+}
+
+const within = <T>(ms: number, p: Promise<T>) =>
+  Promise.race([p, new Promise<"timed out">((resolve) => setTimeout(() => resolve("timed out"), ms))]);
 
 type Client = {
   doc: Y.Doc;
@@ -28,7 +57,7 @@ type Client = {
 const open: Client[] = [];
 
 /** A Node client like the browser's: bearer token when it has one, else "cookie" plus the cookie header. */
-function connect(server: { url: string }, tripId: string, auth: { token?: string; cookie?: string }): Client {
+function connect(server: { url: string }, tripId: string, auth: { token?: string; cookie?: string }, doc = new Y.Doc()): Client {
   const headers = auth.cookie ? { cookie: auth.cookie } : {};
   class NodeWebSocket extends WebSocket {
     constructor(url: string) {
@@ -39,7 +68,6 @@ function connect(server: { url: string }, tripId: string, auth: { token?: string
     url: `${server.url.replace("http", "ws")}/sync`,
     WebSocketPolyfill: NodeWebSocket,
   });
-  const doc = new Y.Doc();
   const provider = new HocuspocusProvider({ websocketProvider: socket, name: tripId, document: doc, token: auth.token ?? "cookie" });
   provider.attach();
   const client: Client = {
@@ -186,12 +214,48 @@ describe("sync server", () => {
     });
   });
 
-  it("a 1.5 MB message closes the connection", async () => {
+  it("a member removed while their connection is still loading the document is closed with removed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {}); // Hocuspocus logs the refused message
+    const id = await newTrip(ann, bob);
+    // Bob's offline copy holds an edit; it goes up as soon as the server accepts the connection.
+    const offline = new Y.Doc();
+    Y.applyUpdate(offline, (await loadState(id))!);
+    setTripMeta(offline, { name: "Written after removal" }, bob.id);
+    const load = holdLoad(id);
+    const b = connect(server, id, as(bob), offline);
+    await load.started; // authenticated, document still loading
+    const removing = removeMember(id, bob.id); // commits, then waits on the same document load
+    await vi.waitFor(async () => {
+      const [row] = await db.select({ at: tripMembers.removedAt }).from(tripMembers).where(and(eq(tripMembers.tripId, id), eq(tripMembers.userId, bob.id)));
+      expect(row.at).not.toBeNull();
+    });
+    load.release();
+    await removing;
+    expect(await within(2000, b.closed.then((e) => e.reason))).toBe("removed");
+    const a = connect(server, id, as(ann));
+    await a.synced;
+    expect(readTrip(a.doc).name).toBe(NEW_TRIP.name);
+    expect((await storedTrip(id)).view.name).toBe(NEW_TRIP.name);
+  });
+
+  it("an 8.5 MB message closes the connection", async () => {
     const id = await newTrip(ann);
     const a = connect(server, id, as(ann));
     await a.synced;
-    a.doc.getMap("meta").set("blob", "x".repeat(1.5 * 1024 * 1024));
+    a.doc.getMap("meta").set("blob", "x".repeat(8.5 * 1024 * 1024));
     expect((await a.closed).code).toBe(1009); // "message too big"
+  });
+
+  it("a 1.5 MB offline update is accepted and reaches another client", async () => {
+    const id = await newTrip(ann, bob);
+    const b = connect(server, id, as(bob));
+    await b.synced;
+    // Edited while offline (e.g. loaded from IndexedDB), then connected: it goes up as one sync message.
+    const offline = new Y.Doc();
+    offline.getMap("meta").set("blob", "x".repeat(1.5 * 1024 * 1024));
+    const a = connect(server, id, as(ann), offline);
+    await a.synced;
+    await vi.waitFor(() => expect((b.doc.getMap("meta").get("blob") as string | undefined)?.length).toBe(1.5 * 1024 * 1024), { timeout: 5000 });
   });
 
   it("an unknown top-level share closes only that connection", async () => {
