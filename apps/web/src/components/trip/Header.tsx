@@ -118,7 +118,7 @@ export function Header({
         </svg>
         <span className="hidden sm:inline">rota</span>
       </Link>
-      <div className="grid min-w-0 flex-1 gap-px">
+      <div className="grid min-w-0 flex-1 basis-40 gap-px">
         <TripName name={view.name} onRename={onRename} />
         <p className="text-[12.5px] text-ink-2">{t("dates", { range: dateRange(locale, view.startDate, view.days.length), count: view.days.length })}</p>
       </div>
