@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: rota
+      POSTGRES_PASSWORD: rota
+      POSTGRES_DB: rota
+    ports:
+      # Host port; set ROTA_DB_PORT if 5434 is taken (and change the URLs in apps/web/.env.local).
+      - "${ROTA_DB_PORT:-5434}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rota -d rota"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - rota-db:/var/lib/postgresql/data
+
+volumes:
+  rota-db:

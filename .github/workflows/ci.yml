@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgres://rota:rota@localhost:5434/rota
+      # The integration global setup creates rota_test if missing.
+      TEST_DATABASE_URL: postgres://rota:rota@localhost:5434/rota_test
+      # Built once by the "Production build" step; the production integration suite and the e2e
+      # server run against it instead of each running `next build` into the same .next.
+      ROTA_REUSE_BUILD: "1"
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: rota
+          POSTGRES_PASSWORD: rota
+          POSTGRES_DB: rota
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U rota -d rota"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Unit and integration tests
+        run: npm test
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: npm run test:e2e -- --pass-with-no-tests
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

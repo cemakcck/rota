@@ -1,0 +1,28 @@
+{
+  "name": "rota",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @rota/web",
+    "build": "npm run build -w @rota/web",
+    "start": "npm run start -w @rota/web",
+    "lint": "eslint",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "TZ=America/New_York vitest run",
+    "test:e2e": "npm run test:e2e -w @rota/web --",
+    "db:up": "docker compose up -d --wait 2>/dev/null || docker-compose up -d --wait",
+    "db:generate": "npm run db:generate -w @rota/web --if-present",
+    "db:migrate": "npm run db:migrate -w @rota/web --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

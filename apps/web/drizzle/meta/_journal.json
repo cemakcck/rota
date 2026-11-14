@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794658319261,
+      "tag": "0000_peaceful_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794658856655,
+      "tag": "0001_trip_soft_removal",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794678976429,
+      "tag": "0002_invite_creator_set_null",
+      "breakpoints": true
+    }
+  ]
+}
