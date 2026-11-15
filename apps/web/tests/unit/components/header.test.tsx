@@ -50,7 +50,7 @@ describe("header", () => {
     newTrip({ days: 3 });
     renderIntl(<TripScreen tripId="t1" />);
     expect(screen.getByRole("heading", { level: 1, name: "Istanbul long weekend" })).toBeTruthy();
-    expect(screen.getByText("Fri, Nov 27 – Sun, Nov 29 · 3 days")).toBeTruthy();
+    expect(screen.getByText("Fri, Nov 27 – Sun, Nov 29 · 3 days · 0 places")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Rename trip" }));
     const input = screen.getByLabelText("Trip name");
@@ -79,7 +79,7 @@ describe("header", () => {
     refresh();
     expect(undo).toHaveProperty("disabled", false);
 
-    fireEvent.keyDown(screen.getByLabelText("Place name"), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("combobox", { name: /^Add a place to/ }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
 
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
@@ -99,13 +99,15 @@ describe("header", () => {
     updatePlace(doc, id, { name: "Galata Kulesi" }, "u1");
     refresh();
 
+    // The note is with the place's editor until the details panel (Task 3).
+    fireEvent.click(screen.getByRole("button", { name: "Galata Kulesi" }));
     fireEvent.click(screen.getByRole("button", { name: "Add a note to Galata Kulesi" }));
     fireEvent.keyDown(screen.getByRole("button", { name: "Bold" }), { key: "z", ctrlKey: true });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Note for Galata Kulesi" }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
   });
 
-  it("the undo shortcut does nothing while the settings sheet or a place editor is open", async () => {
+  it("the undo shortcut does nothing while the settings sheet is open or while typing in a place's details", async () => {
     const { doc, dayIds } = newTrip();
     const id = addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0] }, "u1");
     const trip = { id: "t1", name: "Istanbul long weekend", startDate: "2026-11-27", days: 2, members: [{ id: "u1", name: "Ann", colour: "#2563eb", role: "owner" }] };
@@ -123,10 +125,10 @@ describe("header", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     vi.unstubAllGlobals();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Kulesi" }));
-    fireEvent.keyDown(screen.getByRole("button", { name: "Save" }), { key: "z", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Galata Kulesi" }));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Kulesi");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
     expect(fake.view.days[0].places[0].name).toBe("Galata Tower");
   });

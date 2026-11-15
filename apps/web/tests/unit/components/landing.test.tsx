@@ -43,6 +43,6 @@ describe("landing", () => {
   it("links to sign in, sign up and GitHub", () => {
     renderIntl(<Landing locale="en" />);
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in");
-    expect(screen.getByRole("link", { name: "Rota on GitHub" }).getAttribute("href")).toMatch(/^https:\/\/github\.com\/cemakcck\//);
+    expect(screen.getByRole("link", { name: "Tripify on GitHub" }).getAttribute("href")).toMatch(/^https:\/\/github\.com\/cemakcck\//);
   });
 });

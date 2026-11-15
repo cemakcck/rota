@@ -33,7 +33,7 @@ function mondayTrip() {
 describe("opening hours", () => {
   it("an opening-hours warning appears for a Monday museum visit", async () => {
     const { doc, dayIds } = mondayTrip();
-    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], osmId: "n101" }, "u1");
+    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], osmId: "n101", time: "09:00" }, "u1");
     addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], osmId: "w102" }, "u1");
     vi.stubGlobal(
       "fetch",
@@ -43,6 +43,22 @@ describe("opening hours", () => {
     const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
     const note = await within(row("Pera Museum")).findByRole("note");
     expect(note.textContent).toBe("Closed on Mondays");
+    expect(within(row("Galata Tower")).queryByRole("note")).toBeNull();
+  });
+
+  it("an untimed stop still gets the closed-all-day warning, and no other", async () => {
+    const { doc, dayIds } = mondayTrip();
+    addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], osmId: "n101" }, "u1");
+    addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], osmId: "w102" }, "u1");
+    vi.stubGlobal(
+      "fetch",
+      stubFetch({ "GET /api/hours?ids=n101,w102": () => ({ body: { hours: { n101: "Tu-Su 10:00-19:00", w102: "Mo-Su 20:00-23:00" } } }) }).fn,
+    );
+    renderIntl(<TripScreen tripId="t1" />);
+    const row = (name: string) => screen.getByText(name, { selector: "[data-testid=place-name]" }).closest("li")!;
+    const note = await within(row("Pera Museum")).findByRole("note");
+    expect(note.textContent).toBe("Closed on Mondays");
+    // Open later that day, but with no time there is nothing to compare: no warning.
     expect(within(row("Galata Tower")).queryByRole("note")).toBeNull();
   });
 
@@ -70,7 +86,7 @@ describe("opening hours", () => {
     const { fn, calls } = stubFetch({ "GET /api/hours?ids=n103": () => ({ body: { hours: { n103: null } } }) });
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    await vi.waitFor(() => expect(calls.filter((c) => c.key.startsWith("GET /api/hours"))).toHaveLength(1));
     expect(screen.queryByRole("note")).toBeNull();
   });
 });

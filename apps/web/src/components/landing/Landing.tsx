@@ -6,7 +6,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { btn, btnPrimary, errorText } from "../ui";
 import { SyncAnimation } from "./SyncAnimation";
 
-export const GITHUB_URL = "https://github.com/cemakcck/rota";
+export const GITHUB_URL = "https://github.com/cemakcck/tripify";
 
 export function Landing({ locale }: { locale: "en" | "tr" }) {
   const t = useTranslations("landing");
@@ -30,8 +30,8 @@ export function Landing({ locale }: { locale: "en" | "tr" }) {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 sm:px-8">
       <header className="flex h-16 items-center justify-between">
-        <span className="text-[18px] font-semibold tracking-tight">Rota</span>
-        <nav className="flex items-center gap-2" aria-label="Rota">
+        <span className="text-[18px] font-semibold tracking-tight">Tripify</span>
+        <nav className="flex items-center gap-2" aria-label="Tripify">
           <Link href="/sign-in" className={btn}>
             {t("signIn")}
           </Link>

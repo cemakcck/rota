@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { addPlace, initTrip, MEMBER_COLOURS, readTrip, setPlaceStatus, type Destination } from "@rota/trip";
-import { CITY_PAD, DAY_COLOURS, IDEAS_COLOUR, ISTANBUL, mapFeatures } from "@/components/map/mapFeatures";
+import { CITY_PAD, DAY_COLOURS, IDEAS_COLOUR, ISTANBUL, LABEL_MIN_ZOOM, PIN_LABEL_MAX, labelledPins, mapFeatures, pinLabel } from "@/components/map/mapFeatures";
 
 function trip({ days = 2, destination = null }: { days?: number; destination?: Destination | null } = {}) {
   const doc = new Y.Doc();
@@ -20,6 +20,9 @@ function trip({ days = 2, destination = null }: { days?: number; destination?: D
 }
 
 const none = new Set<string>();
+const all = { kind: "all" } as const;
+const ideas = { kind: "ideas" } as const;
+const day = (dayId: string) => ({ kind: "day", dayId }) as const;
 
 describe("mapFeatures", () => {
   it("pins are numbered per day in order with the day colour", () => {
@@ -70,7 +73,7 @@ describe("mapFeatures", () => {
     );
 
     const { pins } = mapFeatures(readTrip(doc), {
-      selectedDayId: null,
+      shown: all,
       hiddenIds: none,
     });
     expect(pins.map((p) => [p.id, p.number, p.colour, p.category, p.dayId])).toEqual([
@@ -100,14 +103,60 @@ describe("mapFeatures", () => {
       },
       "u1",
     );
-    expect(mapFeatures(readTrip(long.doc), { selectedDayId: null, hiddenIds: none }).pins[0].colour).toBe(DAY_COLOURS[0]);
+    expect(mapFeatures(readTrip(long.doc), { shown: all, hiddenIds: none }).pins[0].colour).toBe(DAY_COLOURS[0]);
 
-    // With a day selected, the other days' pins (and Ideas) stay on the map but step back.
-    const selected = mapFeatures(readTrip(doc), {
-      selectedDayId: dayIds[1],
-      hiddenIds: none,
-    }).pins;
-    expect(selected.map((p) => p.active)).toEqual([false, false, true, false]);
+  });
+
+  it("mapFeatures for a day returns that day's numbered pins and route", () => {
+    const { doc, dayIds } = trip();
+    const a = addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], lat: 41.0, lng: 28.9 }, "u1");
+    const b = addPlace(doc, { name: "B", category: "food", dayId: dayIds[0], lat: 41.1, lng: 29.0 }, "u1");
+    addPlace(doc, { name: "Other day", category: "sight", dayId: dayIds[1], lat: 41.3, lng: 29.2 }, "u1");
+    addPlace(doc, { name: "Idea", category: "cafe", dayId: null, lat: 41.4, lng: 29.3 }, "u1");
+    const features = mapFeatures(readTrip(doc), { shown: day(dayIds[0]), hiddenIds: none });
+    // Only that day: no other day's pins, no Ideas.
+    expect(features.pins.map((p) => [p.id, p.number, p.colour])).toEqual([
+      [a, 1, DAY_COLOURS[0]],
+      [b, 2, DAY_COLOURS[0]],
+    ]);
+    expect(features.routes).toEqual([
+      { line: { type: "LineString", coordinates: [[28.9, 41.0], [29.0, 41.1]] }, colour: DAY_COLOURS[0], approximate: true },
+    ]);
+    expect(features.bounds).toEqual([28.9, 41.0, 29.0, 41.1]);
+  });
+
+  it("mapFeatures for ideas view returns only idea pins", () => {
+    const { doc, dayIds } = trip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], lat: 41.0, lng: 28.9 }, "u1");
+    addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0], lat: 41.1, lng: 29.0 }, "u1");
+    const idea = addPlace(doc, { name: "Idea", category: "cafe", dayId: null, lat: 41.4, lng: 29.3 }, "u1");
+    addPlace(doc, { name: "Suggested", category: "food", dayId: null, lat: 41, lng: 29, status: "suggested" }, "u1");
+    const features = mapFeatures(readTrip(doc), { shown: ideas, hiddenIds: none });
+    expect(features.pins.map((p) => [p.id, p.number, p.colour, p.dayId])).toEqual([[idea, null, IDEAS_COLOUR, null]]);
+    expect(features.routes).toEqual([]);
+    expect(features.bounds).toEqual([29.3, 41.4, 29.3, 41.4]);
+  });
+
+  it("the whole trip shows every day's pins and routes, and Ideas", () => {
+    const { doc, dayIds } = trip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], lat: 41.0, lng: 28.9 }, "u1");
+    addPlace(doc, { name: "B", category: "sight", dayId: dayIds[0], lat: 41.1, lng: 29.0 }, "u1");
+    addPlace(doc, { name: "C", category: "sight", dayId: dayIds[1], lat: 41.2, lng: 29.1 }, "u1");
+    addPlace(doc, { name: "D", category: "sight", dayId: dayIds[1], lat: 41.3, lng: 29.2 }, "u1");
+    addPlace(doc, { name: "Idea", category: "cafe", dayId: null, lat: 41.4, lng: 29.3 }, "u1");
+    const features = mapFeatures(readTrip(doc), { shown: all, hiddenIds: none });
+    expect(features.pins.map((p) => p.name)).toEqual(["A", "B", "C", "D", "Idea"]);
+    expect(features.routes.map((r) => r.colour)).toEqual([DAY_COLOURS[0], DAY_COLOURS[1]]);
+    expect(features.bounds).toEqual([28.9, 41.0, 29.3, 41.4]);
+  });
+
+  it("an empty day fits the trip's pins, then the destination", () => {
+    const { doc, dayIds } = trip();
+    addPlace(doc, { name: "A", category: "sight", dayId: dayIds[0], lat: 41.0, lng: 28.9 }, "u1");
+    addPlace(doc, { name: "Idea", category: "cafe", dayId: null, lat: 41.4, lng: 29.3 }, "u1");
+    const features = mapFeatures(readTrip(doc), { shown: day(dayIds[1]), hiddenIds: none });
+    expect(features.pins).toEqual([]);
+    expect(features.bounds).toEqual([28.9, 41.0, 29.3, 41.4]);
   });
 
   it("places without coordinates and filtered places are not pinned", () => {
@@ -162,7 +211,7 @@ describe("mapFeatures", () => {
     setPlaceStatus(doc, dismissed, "dismissed", "u1");
 
     const { pins } = mapFeatures(readTrip(doc), {
-      selectedDayId: null,
+      shown: all,
       hiddenIds: new Set([filtered]),
     });
     // The numbers stay those of the list, where unpinned and filtered places keep their places.
@@ -191,7 +240,7 @@ describe("mapFeatures", () => {
     );
     const view = readTrip(doc);
 
-    expect(mapFeatures(view, { selectedDayId: dayIds[0], hiddenIds: none }).route).toEqual({
+    expect(mapFeatures(view, { shown: day(dayIds[0]), hiddenIds: none }).routes[0]).toEqual({
       line: {
         type: "LineString",
         coordinates: [
@@ -215,19 +264,19 @@ describe("mapFeatures", () => {
     };
     expect(
       mapFeatures(view, {
-        selectedDayId: dayIds[0],
+        shown: day(dayIds[0]),
         hiddenIds: none,
         routeGeometry: { [dayIds[0]]: road },
-      }).route,
+      }).routes[0],
     ).toEqual({
       line: road,
       colour: DAY_COLOURS[0],
       approximate: false,
     });
 
-    // One stop is no route; no day selected, no route.
-    expect(mapFeatures(view, { selectedDayId: dayIds[1], hiddenIds: none }).route).toBeNull();
-    expect(mapFeatures(view, { selectedDayId: null, hiddenIds: none }).route).toBeNull();
+    // One stop is no route; Ideas have none.
+    expect(mapFeatures(view, { shown: day(dayIds[1]), hiddenIds: none }).routes).toEqual([]);
+    expect(mapFeatures(view, { shown: ideas, hiddenIds: none }).routes).toEqual([]);
   });
 
   it("bounds fall back to destination then Istanbul", () => {
@@ -240,13 +289,13 @@ describe("mapFeatures", () => {
     const view = readTrip(doc);
 
     // Over every visible pin, or the selected day's when it has any.
-    expect(mapFeatures(view, { selectedDayId: null, hiddenIds: none }).bounds).toEqual([28.9, 41.0, 29.3, 41.2]);
-    expect(mapFeatures(view, { selectedDayId: dayIds[1], hiddenIds: none }).bounds).toEqual([29.1, 41.1, 29.3, 41.2]);
-    expect(mapFeatures(view, { selectedDayId: dayIds[0], hiddenIds: new Set([a]) }).bounds).toEqual([29.1, 41.1, 29.3, 41.2]);
+    expect(mapFeatures(view, { shown: all, hiddenIds: none }).bounds).toEqual([28.9, 41.0, 29.3, 41.2]);
+    expect(mapFeatures(view, { shown: day(dayIds[1]), hiddenIds: none }).bounds).toEqual([29.1, 41.1, 29.3, 41.2]);
+    expect(mapFeatures(view, { shown: day(dayIds[0]), hiddenIds: new Set([a]) }).bounds).toEqual([29.1, 41.1, 29.3, 41.2]);
 
     // No pins: the destination, then Istanbul, as a city-sized box.
     const empty = trip({ destination: { name: "Rome", lat: 41.9, lng: 12.5 } });
-    expect(mapFeatures(readTrip(empty.doc), { selectedDayId: null, hiddenIds: none }).bounds).toEqual([
+    expect(mapFeatures(readTrip(empty.doc), { shown: all, hiddenIds: none }).bounds).toEqual([
       12.5 - CITY_PAD,
       41.9 - CITY_PAD,
       12.5 + CITY_PAD,
@@ -254,9 +303,48 @@ describe("mapFeatures", () => {
     ]);
     expect(
       mapFeatures(readTrip(trip().doc), {
-        selectedDayId: null,
+        shown: all,
         hiddenIds: none,
       }).bounds,
     ).toEqual([ISTANBUL.lng - CITY_PAD, ISTANBUL.lat - CITY_PAD, ISTANBUL.lng + CITY_PAD, ISTANBUL.lat + CITY_PAD]);
+  });
+});
+
+describe("pin labels", () => {
+  it("are the place's name, cut to about 18 characters", () => {
+    expect(PIN_LABEL_MAX).toBe(18);
+    expect(pinLabel("Karaköy Lokantası")).toBe("Karaköy Lokantası");
+    expect(pinLabel("Kadıköy Barlar Sokağı")).toBe("Kadıköy Barlar So…");
+    expect([...pinLabel("Kadıköy Barlar Sokağı")]).toHaveLength(18);
+    expect(pinLabel("  Galata Tower ")).toBe("Galata Tower");
+  });
+
+  const at = (id: string, x: number, y: number, label = "Galata Tower") => ({ id, x, y, label, idea: false });
+  const zoom = LABEL_MIN_ZOOM + 2;
+
+  it("all show when apart; a label that would overlap an earlier label, or cover a pin, hides", () => {
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300), at("c", 400, 100)], { zoom, keep: null })]).toEqual(["a", "b", "c"]);
+    // b sits just under a: their labels would overlap, so the earlier stop's shows.
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 110)], { zoom, keep: null })]).toEqual(["a"]);
+    // c's pin is where a's label would go: a's label hides, c's shows.
+    expect([...labelledPins([at("a", 100, 100), at("c", 150, 80)], { zoom, keep: null })]).toEqual(["c"]);
+  });
+
+  it("the selected pin's label always shows, first, and others give way to it", () => {
+    const shown = labelledPins([at("a", 100, 100), at("b", 100, 110)], { zoom, keep: "b" });
+    expect([...shown]).toEqual(["b"]);
+  });
+
+  it("the selected pin's label box is measured from its larger head", () => {
+    // Selected, a's head is 42 px: its label reaches to x 221 (it would end at 217 from a 34 px head),
+    // so b's label, starting at 219, would overlap it.
+    expect([...labelledPins([at("a", 100, 100), at("b", 198, 100)], { zoom, keep: "a" })]).toEqual(["a"]);
+    // Not selected, b's pin is under a's label instead: a's hides, b's shows.
+    expect([...labelledPins([at("a", 100, 100), at("b", 198, 100)], { zoom, keep: null })]).toEqual(["b"]);
+  });
+
+  it("at low zoom only the selected pin's label shows", () => {
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: null })]).toEqual([]);
+    expect([...labelledPins([at("a", 100, 100), at("b", 100, 300)], { zoom: LABEL_MIN_ZOOM - 1, keep: "b" })]).toEqual(["b"]);
   });
 });

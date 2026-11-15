@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "tips_seen_at" timestamp with time zone;

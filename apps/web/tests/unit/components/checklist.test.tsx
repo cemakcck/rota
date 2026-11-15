@@ -17,11 +17,15 @@ vi.mock("@/i18n/navigation", () => ({
 
 import { TripScreen } from "@/components/trip/TripScreen";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
+const checklistEntry = () => within(screen.getByRole("navigation", { name: "Trip" })).getByRole("button", { name: /^Checklist/ });
 const openChecklist = () => {
-  fireEvent.click(screen.getByRole("tab", { name: /^Checklist/ }));
-  return screen.getByRole("tabpanel", { name: /^Checklist/ });
+  fireEvent.click(checklistEntry());
+  return screen.getByRole("main", { name: "Checklist" });
 };
 const texts = () => fake.view.checklist.map((i) => i.text);
 const items = (panel: HTMLElement) => within(within(panel).getByRole("list", { name: "Checklist items" })).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"));
@@ -31,7 +35,7 @@ describe("checklist", () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
     const panel = openChecklist();
-    expect(screen.getByRole("tab", { name: /^Checklist/ }).getAttribute("aria-selected")).toBe("true");
+    expect(checklistEntry().getAttribute("aria-current")).toBe("true");
 
     const form = within(panel).getByRole("form", { name: "Add an item" });
     for (const text of ["Passports", " Istanbulkart ", "Walking shoes"]) {
@@ -80,7 +84,7 @@ describe("checklist", () => {
     const ids = ["Passports", "Istanbulkart", "Shoes", "Adapter", "Sunscreen"].map((t) => addChecklistItem(doc, t, "u1"));
     updateChecklistItem(doc, ids[0], { done: true }, "u1");
     renderIntl(<TripScreen tripId="t1" />);
-    expect(screen.getByRole("tab", { name: /^Checklist/ }).textContent).toContain("1/5");
+    expect(checklistEntry().textContent).toContain("1/5");
     const panel = openChecklist();
     expect(within(panel).getByText("1 of 5 done")).toBeTruthy();
 
@@ -93,6 +97,19 @@ describe("checklist", () => {
     refresh();
     expect(within(panel).getByRole("button", { name: "Add" })).toHaveProperty("disabled", true);
     expect(within(panel).getByText(/The checklist is full/)).toBeTruthy();
+  });
+
+  it("on phones the box's 44 px label stays clear of the item's text field", () => {
+    const { doc } = newTrip();
+    addChecklistItem(doc, "Passports", "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    const label = within(openChecklist()).getByRole("checkbox", { name: "Passports" }).closest("label")!;
+    // 44 × 44 px, grown sideways only into the row's gap-x-2 (8 px): an overlap of the field would take
+    // its edge, or lose the box's (found by the e2e elementFromPoint probe).
+    const classes = label.className.split(" ");
+    expect(classes).toEqual(expect.arrayContaining(["max-lg:-mx-2", "max-lg:-my-2.5", "max-lg:size-11"]));
+    expect(classes).not.toContain("max-lg:-m-2.5");
+    expect(label.parentElement!.className.split(" ")).toContain("gap-x-2");
   });
 
   it("is read-only while the user is unknown", () => {

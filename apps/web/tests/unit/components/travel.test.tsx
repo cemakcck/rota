@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { addPlace } from "@rota/trip";
 import { renderIntl, stubFetch } from "./helpers";
@@ -17,6 +17,9 @@ vi.mock("@/i18n/navigation", () => ({
 
 import { TripScreen } from "@/components/trip/TripScreen";
 
+// The whole trip in the list column: these cover every day and Ideas at once.
+beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=all"));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -26,7 +29,7 @@ const day1 = () => screen.getByRole("region", { name: /^Day 1\b/ });
 
 function twoStops(lng: number) {
   const { doc, dayIds } = newTrip({ days: 1 });
-  addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng }, "u1");
+  addPlace(doc, { name: "Galata Tower", category: "sight", dayId: dayIds[0], lat: 41.0256, lng, time: "09:00" }, "u1");
   addPlace(doc, { name: "Pera Museum", category: "museum", dayId: dayIds[0], lat: 41.0317, lng: lng + 0.001 }, "u1");
   return `${lng},41.0256;${lng + 0.001},41.0317`;
 }
@@ -41,11 +44,13 @@ describe("travel times", () => {
     });
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
-    expect(await within(day1()).findByText("12 min walk · 950 m")).toBeTruthy();
-    expect(within(day1()).queryByText(/≈/)).toBeNull();
+    expect(await within(day1()).findByText("12 min walk · 950 m", { selector: "[data-testid=travel-leg] *" })).toBeTruthy();
+    // Routed: neither the leg nor the day's total is marked as an estimate.
+    expect(within(day1()).getByTestId("travel-leg").textContent).not.toMatch(/≈/);
+    expect(within(day1()).getByTestId("travel-total").textContent).toBe("12 min travel");
     expect(within(day1()).getByText("12 min travel")).toBeTruthy();
-    // The second stop's arrival follows the routed leg: 09:00, a 45 min stay, then 12 min.
-    expect(within(day1()).getByText("around 09:57")).toBeTruthy();
+    // The second stop's estimated arrival follows the routed leg: set at 09:00, a 45 min stay, then 12 min.
+    expect(within(day1()).getAllByTestId("place-time").map((t) => t.textContent)).toEqual(["09:00", "≈ estimated, 09:57"]);
   });
 
   it("a trip with five routed days gets road legs for every day, one request at a time", async () => {
@@ -68,7 +73,7 @@ describe("travel times", () => {
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
     // Five requests one after another, each re-rendering a five-day screen: slow on a busy machine.
-    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m")).toHaveLength(5), { timeout: 5000 });
+    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m", { selector: "[data-testid=travel-leg] *" })).toHaveLength(5), { timeout: 5000 });
     expect(screen.queryAllByTestId("travel-leg").filter((l) => l.textContent?.startsWith("≈"))).toHaveLength(0);
     // Each day asked once: none turned away.
     expect(fn.mock.calls.filter(([url]) => String(url).startsWith("/api/route"))).toHaveLength(5);
@@ -87,7 +92,7 @@ describe("travel times", () => {
       expect(calls).toHaveLength(0);
       online.mockReturnValue(true);
       act(() => void window.dispatchEvent(new Event("online")));
-      expect(await within(day1()).findByText("14 min walk · 1.1 km")).toBeTruthy();
+      expect(await within(day1()).findByText("14 min walk · 1.1 km", { selector: "[data-testid=travel-leg] *" })).toBeTruthy();
     } finally {
       online.mockRestore();
     }

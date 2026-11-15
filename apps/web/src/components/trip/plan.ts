@@ -1,4 +1,5 @@
-import type { Category, PlaceView, Slot, TripView } from "@rota/trip";
+import type * as Y from "yjs";
+import { movePlace, readTrip, setPlaceTime, type Category, type PlaceView, type Slot, type TripView } from "@rota/trip";
 
 /** Where a planned place lives: a day id, or null for Ideas. */
 export type ListId = string | null;
@@ -14,9 +15,16 @@ export function plannedLists(view: TripView): { id: ListId; places: PlaceView[] 
 
 /**
  * Where a dragged place lands when dropped on `overId`. On a row: before it, or after it when moving
- * down within the same list (so the place takes the row's position). On a list: at its end.
+ * down within the same list (so the place takes the row's position). On a list or its rail entry: at its end.
  */
 export function dropTarget(view: TripView, activeId: string, overId: string): ({ dayId: ListId } & Slot) | null {
+  // The rail's entries (a day, Ideas): at the end of that list.
+  if (overId === "rail:ideas") return { dayId: null };
+  if (overId.startsWith("rail:day:")) {
+    // A day removed meanwhile (by someone else, mid-drag) takes nothing.
+    const dayId = overId.slice("rail:day:".length);
+    return view.days.some((d) => d.id === dayId) ? { dayId } : null;
+  }
   if (overId.startsWith("list:")) {
     const key = overId.slice("list:".length);
     return { dayId: key === "ideas" ? null : key };
@@ -30,6 +38,52 @@ export function dropTarget(view: TripView, activeId: string, overId: string): ({
     return active >= 0 && active < over ? { dayId: list.id, afterId: overPlace } : { dayId: list.id, beforeId: overPlace };
   }
   return null;
+}
+
+/** A rail day being dragged (to reorder the days); rows are dragged by their place id. */
+export const railDayDragId = (dayId: string) => `rail:drag:${dayId}`;
+export const isDayDrag = (activeId: string) => activeId.startsWith("rail:drag:");
+
+/**
+ * Where a dragged rail day goes when dropped on `overId`: onto another rail day, it takes that day's
+ * position (the days between shift over). Anything else (a row, a list, Ideas, itself, a day gone
+ * meanwhile) takes nothing.
+ */
+export function dayDropTarget(view: TripView, activeId: string, overId: string): { dayId: string; toIndex: number } | null {
+  if (!isDayDrag(activeId) || !overId.startsWith("rail:day:")) return null;
+  const dayId = activeId.slice("rail:drag:".length);
+  const from = view.days.findIndex((d) => d.id === dayId);
+  const to = view.days.findIndex((d) => d.id === overId.slice("rail:day:".length));
+  return from < 0 || to < 0 || from === to ? null : { dayId, toIndex: to };
+}
+
+/**
+ * A move to another list without a slot (Move to…, a drop on a day in the rail or on another day's list):
+ * a stop with a set time keeps it and goes to its place by time in that day (ruling F1); an untimed stop
+ * goes to the end. One transaction, so one undo step. False when the place or the day is gone.
+ */
+export function moveKeepingTime(doc: Y.Doc, id: string, dayId: ListId, origin: string): boolean {
+  let moved = false;
+  doc.transact(() => {
+    const time = plannedLists(readTrip(doc)).flatMap((l) => l.places).find((p) => p.id === id)?.time ?? null;
+    moved = movePlace(doc, id, { dayId }, origin);
+    if (moved && dayId !== null && time !== null) setPlaceTime(doc, id, time, origin);
+  }, origin);
+  return moved;
+}
+
+/**
+ * A drop of a dragged place, where `dropTarget` says, as one undo step. Within a day (or onto a row) a
+ * timed stop is re-timed for its new slot (spec §2b); dropped on another list as a whole (its rail
+ * entry, its end) it keeps its time (see moveKeepingTime). False when the drop lands nowhere (on
+ * itself, on a day that is gone).
+ */
+export function dropPlace(doc: Y.Doc, view: TripView, activeId: string, overId: string, origin: string): boolean {
+  const to = dropTarget(view, activeId, overId);
+  if (to === null) return false;
+  const from = plannedLists(view).find((l) => l.places.some((p) => p.id === activeId))?.id;
+  if (to.beforeId == null && to.afterId == null && to.dayId !== from) return moveKeepingTime(doc, activeId, to.dayId, origin);
+  return movePlace(doc, activeId, to, origin, { retime: true });
 }
 
 export type Filter = { categories: Category[]; tag: string | null };
@@ -89,4 +143,18 @@ export function tripCentre(view: TripView): { lat: number; lng: number } | null 
   const pins = plannedLists(view).flatMap((l) => l.places.filter((p) => p.lat !== null && p.lng !== null)) as { lat: number; lng: number }[];
   if (pins.length === 0) return null;
   return { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length };
+}
+
+/**
+ * A time as typed: "9:30", "09.30", "0930" or "9" become "09:30"/"09:00"; empty text is "" (no time);
+ * anything else (25:00, words) is null.
+ */
+export function parseTime(text: string): string | null {
+  const s = text.trim();
+  if (s === "") return "";
+  const m = /^(\d{1,2})(?:[:.]?(\d{2}))?$/.exec(s);
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2] ?? "0")];
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }

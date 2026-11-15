@@ -37,6 +37,8 @@ export const user = pgTable("user", {
   colour: text("colour").notNull(),
   isDemo: boolean("is_demo").default(false).notNull(),
   lastActiveAt: tstz("last_active_at"),
+  /** When this person finished or skipped the first-time tour; null until then (and again after "Show tips again"). */
+  tipsSeenAt: tstz("tips_seen_at"),
 });
 
 export const session = pgTable(

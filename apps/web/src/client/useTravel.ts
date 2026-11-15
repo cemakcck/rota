@@ -3,8 +3,11 @@ import { estimateLeg, type DayView, type Leg, type TravelMode, type TripView } f
 import { apiFetch } from "./authClient";
 import { createRemote, getJson, useRemote } from "./remote";
 
-/** A day's travel: legs between consecutive stops (null where a stop has no coordinates). */
-export type Travel = { legs: (Leg | null)[]; geometry: GeoJSON.LineString | null; totalSeconds: number; anyApproximate: boolean };
+/**
+ * A day's travel: legs between consecutive stops (null where a stop has no coordinates). `loading` is
+ * true while a route for the day is still being asked for (its legs are straight-line guesses until then).
+ */
+export type Travel = { legs: (Leg | null)[]; geometry: GeoJSON.LineString | null; totalSeconds: number; anyApproximate: boolean; loading: boolean };
 type Routed = { legs: { seconds: number; meters: number }[]; geometry: GeoJSON.LineString };
 
 /** The route service takes at most 25 points per request. */
@@ -42,7 +45,7 @@ function pieces(day: DayView): { run: number; first: number; key: string }[] {
   return out;
 }
 
-function travelOf(day: DayView, get: (key: string) => Routed | undefined): Travel {
+function travelOf(day: DayView, get: (key: string) => Routed | undefined, pending: (key: string) => boolean): Travel {
   const legs: (Leg | null)[] = day.places.slice(1).map(() => null);
   const parts = pieces(day);
   const lines: GeoJSON.Position[][] = [];
@@ -66,6 +69,7 @@ function travelOf(day: DayView, get: (key: string) => Routed | undefined): Trave
     geometry,
     totalSeconds: known.reduce((sum, l) => sum + l.seconds, 0),
     anyApproximate: known.some((l) => l.approximate),
+    loading: parts.some((p) => !get(p.key) && pending(p.key)),
   };
 }
 
@@ -76,10 +80,10 @@ function travelOf(day: DayView, get: (key: string) => Routed | undefined): Trave
  */
 export function useTravels(view: TripView): Record<string, Travel> {
   const keys = useMemo(() => view.days.flatMap((d) => pieces(d).map((p) => p.key)), [view.days]);
-  const { get, version } = useRemote(routes, keys);
+  const { get, pending, version } = useRemote(routes, keys);
   return useMemo(
-    () => Object.fromEntries(view.days.map((d) => [d.id, travelOf(d, get)])),
+    () => Object.fromEntries(view.days.map((d) => [d.id, travelOf(d, get, pending)])),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` changes as routes arrive in `get`'s cache
-    [view.days, get, version],
+    [view.days, get, pending, version],
   );
 }

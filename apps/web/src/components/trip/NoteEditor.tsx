@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -72,6 +72,27 @@ export function noteOrNull(read: () => Y.XmlFragment): Y.XmlFragment | null {
   }
 }
 
+/** Plain text of a note node (Tiptap's XML: elements holding text). */
+function plain(node: Y.XmlElement | Y.XmlText | Y.XmlHook): string {
+  if (node instanceof Y.XmlText) return (node.toDelta() as { insert: unknown }[]).map((d) => (typeof d.insert === "string" ? d.insert : "")).join("");
+  if (node instanceof Y.XmlElement) return node.toArray().map(plain).join("");
+  return "";
+}
+
+/** A day note's first non-empty paragraph (or list item), as plain text. */
+export function noteFirstLine(note: Y.XmlFragment): string {
+  const blocks = (nodes: (Y.XmlElement | Y.XmlText | Y.XmlHook)[]): string => {
+    for (const node of nodes) {
+      if (!(node instanceof Y.XmlElement)) continue;
+      const children = node.toArray();
+      const text = children.some((c) => c instanceof Y.XmlText) ? plain(node).trim() : blocks(children);
+      if (text) return text;
+    }
+    return "";
+  };
+  return blocks(note.toArray());
+}
+
 const inline = (text: Y.XmlText) => (text.toDelta() as { insert: unknown }[]).map((d) => (typeof d.insert === "string" ? d.insert : "")).join("");
 
 /** The note's text, a line per paragraph (list items included), for the collapsed preview. */
@@ -98,7 +119,7 @@ function useNoteText(fragment: Y.XmlFragment): string {
   return useSyncExternalStore(subscribe, () => noteText(fragment), () => "");
 }
 
-const tool = "grid size-7 place-items-center rounded-md text-[13px] text-ink-2 hover:bg-hover aria-pressed:bg-ink aria-pressed:text-white";
+const tool = "grid size-7 max-lg:size-11 place-items-center rounded-md text-[13px] text-ink-2 hover:bg-hover aria-pressed:bg-ink aria-pressed:text-white";
 
 function Toolbar({ editor }: { editor: Editor }) {
   const t = useTranslations("trip");
@@ -162,7 +183,7 @@ function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFr
   if (!editor) return null;
   return (
     <div
-      className="rounded-lg border border-ink-2 bg-surface focus-within:shadow-[0_0_0_1px_var(--color-ink)]"
+      className="rounded-lg border border-ink-2 bg-surface focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
       }}
@@ -170,6 +191,52 @@ function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFr
       <Toolbar editor={editor} />
       <EditorContent editor={editor} />
     </div>
+  );
+}
+
+/**
+ * The collapsed note's text, cut to `lines` lines. With `more`, a "more" / "less" button shows the whole
+ * note when it is longer than that (measured, so it appears only when something is hidden).
+ */
+function Preview({ text, name, lines, more, onOpen }: { text: string; name: string; lines: 2 | 3; more: boolean; onOpen: (() => void) | undefined }) {
+  const t = useTranslations("trip");
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const box = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!more || !el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    // Measured while clamped: expanded, nothing is hidden and the button stays as it was.
+    if (!expanded) measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => !expanded && measure());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, more, expanded]);
+  const clamp = expanded ? "" : lines === 2 ? "line-clamp-2" : "line-clamp-3";
+  return (
+    <>
+      <p
+        ref={box}
+        data-note-text
+        className={`${clamp} whitespace-pre-line border-l-2 border-line pl-2.5 text-[13px] leading-normal text-ink-2 [overflow-wrap:anywhere]`}
+        onClick={onOpen}
+      >
+        {text}
+      </p>
+      {more && (overflows || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? t("noteLessFor", { name }) : t("noteMoreFor", { name })}
+          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline max-lg:min-h-11 max-lg:px-2"
+          onClick={() => setExpanded((e) => !e)}
+        >
+          {expanded ? t("noteLess") : t("noteMore")}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -184,6 +251,8 @@ export function NoteEditor({
   name,
   editable,
   onOpenChange,
+  lines = 3,
+  more = false,
 }: {
   fragment: Y.XmlFragment;
   awareness: Awareness | null;
@@ -191,6 +260,10 @@ export function NoteEditor({
   name: string;
   editable: boolean;
   onOpenChange(open: boolean): void;
+  /** How many lines the collapsed preview shows. */
+  lines?: 2 | 3;
+  /** Offer "more" to read the whole note when the preview cuts it. */
+  more?: boolean;
 }) {
   const t = useTranslations("trip");
   const text = useNoteText(fragment);
@@ -220,19 +293,12 @@ export function NoteEditor({
   if (!text && !editable) return null;
   return (
     <div className="grid justify-items-start gap-1">
-      {text && (
-        <p
-          className="line-clamp-3 whitespace-pre-line border-l-2 border-line pl-2.5 text-[13px] leading-normal text-ink-2 [overflow-wrap:anywhere]"
-          onClick={editable ? () => change(true) : undefined}
-        >
-          {text}
-        </p>
-      )}
+      {text && <Preview text={text} name={name} lines={lines} more={more} onOpen={editable ? () => change(true) : undefined} />}
       {editable && (
         <button
           ref={toggle}
           type="button"
-          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline"
+          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline max-lg:min-h-11 max-lg:px-2"
           aria-label={text ? t("editNoteFor", { name }) : t("addNoteFor", { name })}
           onClick={() => change(true)}
         >

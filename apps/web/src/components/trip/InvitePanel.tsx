@@ -136,7 +136,7 @@ export function InvitePanel({ tripId, locale, onMembersChanged }: { tripId: stri
                 <label htmlFor="join-link" className="sr-only">
                   {t("linkLabel")}
                 </label>
-                <input id="join-link" readOnly value={url} onFocus={(e) => e.target.select()} className="h-9 w-full rounded-lg border border-ink-2 bg-surface px-3 font-mono text-[12.5px]" />
+                <input id="join-link" readOnly value={url} onFocus={(e) => e.target.select()} className="h-9 max-lg:h-11 w-full rounded-lg border border-ink-2 bg-surface px-3 font-mono text-[12.5px]" />
               </div>
               <button type="button" className={`${btn} ${btnSm}`} onClick={copy}>
                 {t("copyLink")}

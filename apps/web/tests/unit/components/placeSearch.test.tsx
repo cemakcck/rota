@@ -33,7 +33,7 @@ describe("place search", () => {
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
 
-    const box = screen.getByRole("combobox", { name: "Place name" });
+    const box = screen.getByRole("combobox", { name: "Add a place to Day 1…" });
     expect(box.getAttribute("aria-expanded")).toBe("false");
     fireEvent.change(box, { target: { value: "Galata" } });
     const list = await screen.findByRole("listbox");
@@ -53,6 +53,10 @@ describe("place search", () => {
     fireEvent.keyDown(box, { key: "ArrowUp" });
     fireEvent.keyDown(box, { key: "ArrowDown" });
     fireEvent.keyDown(box, { key: "Enter" });
+    // The pick opens the add step (time, stay); Enter there adds it to the day.
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(fake.view.days[0].places).toHaveLength(0);
+    fireEvent.keyDown(screen.getByLabelText("Time"), { key: "Enter" });
 
     expect(fake.view.days[0].places).toHaveLength(1);
     expect(fake.view.days[0].places[0]).toMatchObject({
@@ -69,6 +73,27 @@ describe("place search", () => {
     expect(document.activeElement).toBe(box);
   });
 
+  it("the same place returned twice (same OSM type and id) is listed once", async () => {
+    newTrip();
+    const pier = { name: "Karakoy Kabatas Eminonu Ferries Pier", label: "Karaköy, Beyoğlu, İstanbul", lat: 41.0213, lng: 28.9768, osmId: "n555", category: "other" };
+    // A node and a way may share a number: those are different places.
+    const way = { ...pier, name: "Karaköy Pier building", osmId: "w555" };
+    const { fn } = stubFetch({ "GET /api/geocode?q=karakoy&lang=en": () => ({ body: { results: [pier, galata, { ...pier, label: "again" }, way] } }) });
+    vi.stubGlobal("fetch", fn);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Add a place to Day 1…" }), { target: { value: "karakoy" } });
+    const list = await screen.findByRole("listbox");
+    expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      expect.stringContaining("Karakoy Kabatas Eminonu Ferries Pier"),
+      expect.stringContaining("Galata Kulesi"),
+      expect.stringContaining("Karaköy Pier building"),
+    ]);
+    expect(within(list).getAllByRole("option")[0].textContent).toContain("Karaköy, Beyoğlu");
+    expect(errors.mock.calls.flat().join(" ")).not.toContain("same key");
+    errors.mockRestore();
+  });
+
   it("offline: says search needs a connection, and the place can still be added by name", async () => {
     newTrip();
     const fn = vi.fn();
@@ -76,11 +101,12 @@ describe("place search", () => {
     const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     try {
       renderIntl(<TripScreen tripId="t1" />);
-      const box = screen.getByRole("combobox", { name: "Place name" });
+      const box = screen.getByRole("combobox", { name: "Add a place to Day 1…" });
       fireEvent.change(box, { target: { value: "Galata" } });
       expect(await screen.findByText("Search needs a connection — add it by name instead")).toBeTruthy();
       expect(fn).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      fireEvent.keyDown(box, { key: "Enter" });
+      fireEvent.click(screen.getByRole("button", { name: "Add to Day 1" }));
       expect(fake.view.days[0].places[0]).toMatchObject({ name: "Galata", lat: null, osmId: null });
     } finally {
       online.mockRestore();

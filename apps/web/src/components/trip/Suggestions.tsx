@@ -5,14 +5,15 @@ import { useTranslations } from "next-intl";
 import type { MemberView, PlaceView } from "@rota/trip";
 import { btn, btnSm } from "../ui";
 import { CategoryIcon } from "./icons";
-import { MoveDialog, type ListChoice } from "./MoveDialog";
+import { MoveDialog, type ListChoice, type MoveTiming } from "./MoveDialog";
 import type { ListId } from "./plan";
 import { VoteButtons } from "./VoteButtons";
 
 /** What a member can do with suggestions; absent while the user is unknown (read-only). */
 export type SuggestionActions = {
   vote(id: string, value: 1 | -1 | 0): void;
-  accept(id: string, to: ListId): void;
+  /** Planned, into `to`: into a day at a time (null: untimed) and with a stay, when given; one step. */
+  accept(id: string, to: ListId, timing?: MoveTiming): void;
   dismiss(id: string): void;
   restore(id: string): void;
 };
@@ -38,6 +39,7 @@ export function Suggestions({
   members,
   userId,
   lists,
+  suggest,
   actions,
 }: {
   suggestions: PlaceView[];
@@ -46,6 +48,8 @@ export function Suggestions({
   userId: string | null;
   /** Where an accepted suggestion can go: the days, then Ideas. */
   lists: ListChoice[];
+  /** The time suggested for a place as a day's new last stop ("" when none): accepting into a day asks it first. */
+  suggest?: (dayId: string, place: PlaceView) => string;
   actions: SuggestionActions | null;
 }) {
   const t = useTranslations("trip");
@@ -64,13 +68,13 @@ export function Suggestions({
 
   return (
     <section aria-labelledby={headingId} className="pb-2">
-      <div className="px-4 pb-2.5 pt-3.5">
+      <div className="px-5 pb-2.5 pt-3.5">
         <h2 id={headingId} tabIndex={-1} className="text-[15px] font-semibold tracking-[-0.01em] outline-none">
           {t("suggestions")}
         </h2>
         <p className="mt-0.5 text-[12.5px] text-ink-2">{t("suggestionsHelp")}</p>
       </div>
-      <div className="mx-3">
+      <div className="mx-5">
         {suggestions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t("suggestionsEmpty")}</p>
         ) : (
@@ -117,7 +121,7 @@ export function Suggestions({
               type="button"
               aria-expanded={open}
               aria-controls={dismissedId}
-              className="inline-flex h-9 items-center rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-hover"
+              className="inline-flex h-9 max-lg:h-11 items-center rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-hover"
               onClick={() => setOpen((o) => !o)}
             >
               {t("dismissedCount", { count: dismissed.length })}
@@ -161,9 +165,10 @@ export function Suggestions({
           place={target}
           accept
           lists={lists}
+          when={suggest && { suggest: (dayId) => suggest(dayId, target), stayMinutes: target.stayMinutes }}
           onClose={() => setAccepting(null)}
-          onMove={(to) => {
-            actions.accept(target.id, to);
+          onMove={(to, timing) => {
+            actions.accept(target.id, to, timing);
             setAccepting(null);
             keepFocus();
           }}

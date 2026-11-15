@@ -29,9 +29,14 @@ describe("presence", () => {
     renderIntl(<TripScreen tripId="t1" />);
     expect(fake.awareness.getLocalState()).toMatchObject({ user: { id: "u1", name: "Ann", colour: "#2563eb" }, editing: null, cursor: null });
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Tower" }));
+    // Opening the place (its details) and editing its time on the row both count as editing it.
+    fireEvent.click(screen.getByRole("button", { name: "Galata Tower" }));
     expect(fake.awareness.getLocalState()?.editing).toBe(id);
-    fireEvent.click(screen.getByRole("button", { name: "Edit Galata Tower" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(fake.awareness.getLocalState()?.editing).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Set a time for Galata Tower" }));
+    expect(fake.awareness.getLocalState()?.editing).toBe(id);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Time for Galata Tower" }), { key: "Escape" });
     expect(fake.awareness.getLocalState()?.editing).toBeNull();
   });
 
@@ -72,7 +77,8 @@ describe("presence", () => {
     people.forEach((p) => upsertMember(doc, p));
     renderIntl(<TripScreen tripId="t1" />);
 
-    const here = () => screen.getByRole("list", { name: "In this trip now" });
+    // The avatars of who is here now, inside the people button (named by them: "… In this trip now: Ann (you) Deniz").
+    const here = () => screen.getByRole("button", { name: /^People: .*\. In this trip now:/ });
     // Just this person.
     expect(within(here()).getAllByRole("img").map((a) => a.getAttribute("aria-label"))).toEqual(["Ann (you)"]);
 
@@ -88,6 +94,6 @@ describe("presence", () => {
     expect(avatars).toHaveLength(6);
     expect(avatars.slice(0, 5).map((a) => a.getAttribute("aria-label"))).toEqual(["Ann (you)", "Deniz", "Selin", "Mert", "Ece"]);
     expect(avatars[5].textContent).toBe("+2");
-    expect(avatars[5].getAttribute("aria-label")).toBe("2 more: Can, Zeynep");
+    expect(avatars[5].getAttribute("aria-label")).toBe("+2 more: Can, Zeynep");
   });
 });

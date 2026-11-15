@@ -54,6 +54,9 @@ export function createRemote<T>(load: (keys: string[], signal: AbortSignal) => P
         },
         (err) => {
           for (const key of chunk) entries.set(key, err instanceof RequestRefused ? { refused: true } : { failedAt: Date.now() });
+          // No value, but no longer pending: readers stop waiting for one.
+          version++;
+          listeners.forEach((l) => l());
         },
       )
       .finally(() => {
@@ -82,6 +85,12 @@ export function createRemote<T>(load: (keys: string[], signal: AbortSignal) => P
       const entry = entries.get(key);
       return entry && "value" in entry ? entry.value : undefined;
     },
+    /** True while the key is asked for, or not asked for yet while online (an answer may still come). */
+    pending(key: string): boolean {
+      const entry = entries.get(key);
+      if (!entry) return typeof navigator === "undefined" || navigator.onLine;
+      return "pending" in entry;
+    },
     request,
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -98,7 +107,10 @@ export type Remote<T> = ReturnType<typeof createRemote<T>>;
  * connection returns; re-renders as answers arrive. Returns the cache's reader and its version, which
  * changes whenever an answer arrives (for memo dependencies).
  */
-export function useRemote<T>(remote: Remote<T>, keys: string[]): { get: (key: string) => T | undefined; version: number } {
+export function useRemote<T>(
+  remote: Remote<T>,
+  keys: string[],
+): { get: (key: string) => T | undefined; pending: (key: string) => boolean; version: number } {
   const version = useSyncExternalStore(remote.subscribe, remote.version, remote.version);
   const joined = keys.join("\n");
   useEffect(() => {
@@ -113,7 +125,7 @@ export function useRemote<T>(remote: Remote<T>, keys: string[]): { get: (key: st
       window.removeEventListener("online", online);
     };
   }, [remote, joined]);
-  return { get: remote.get, version };
+  return { get: remote.get, pending: remote.pending, version };
 }
 
 /**

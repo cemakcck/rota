@@ -132,7 +132,7 @@ const DAY_SEC = 86_400;
 
 /**
  * Every email invite may send an email to an address the inviter chose, so it is counted per user and
- * per IP; over either limit it is a 429. Keeps a signed-up user from using Rota to send spam.
+ * per IP; over either limit it is a 429. Keeps a signed-up user from using Tripify to send spam.
  */
 export async function limitEmailInvites(userId: string, ip: string): Promise<void> {
   const byUser = await hit(`invite:user:${userId}`, EMAIL_INVITES_PER_USER_PER_DAY, DAY_SEC);

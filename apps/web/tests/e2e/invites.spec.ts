@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { PASSWORD, api, expect, newContext, openTrip, test, tripWith } from "./fixtures";
+import { PASSWORD, api, expect, hereNow, newContext, openTrip, test, tripWith } from "./fixtures";
 
 test.describe("invites", () => {
   test("owner invites by link, a new user signs up through it and lands in the trip", async ({ browser, people }) => {
     const ann = await people.signUp("Ann");
     const tripId = await tripWith(ann);
     await openTrip(ann.page, tripId);
-    await ann.page.getByRole("button", { name: "Trip settings" }).click();
-    await ann.page.getByRole("button", { name: "Create link" }).click();
-    const link = await ann.page.getByRole("textbox", { name: "Join link" }).inputValue();
+    // Alone on the trip, the header offers "Invite friends": the people sheet with the invite panel.
+    await ann.page.getByRole("banner").getByRole("button", { name: "Invite friends" }).click();
+    const sheet = ann.page.getByRole("dialog", { name: "People" });
+    await sheet.getByRole("button", { name: "Create link" }).click();
+    const link = await sheet.getByRole("textbox", { name: "Join link" }).inputValue();
     expect(link).toMatch(/\/invite\//);
-    await ann.page.getByRole("button", { name: "Close", exact: true }).click();
+    await sheet.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(sheet).toBeHidden();
 
     const context = await newContext(browser);
     try {
@@ -24,8 +27,15 @@ test.describe("invites", () => {
       await cem.getByRole("button", { name: "Create account" }).click();
 
       await expect(cem).toHaveURL(new RegExp(`/en/t/${tripId}$`));
+      // A new account: the first-time tour opens on the trip; skipping it shows the plan.
+      const tour = cem.getByRole("dialog", { name: "These are your days" });
+      await tour.getByRole("button", { name: "Skip tour" }).click();
+      await expect(tour).toBeHidden();
       await expect(cem.getByRole("heading", { name: "Lisbon weekend" })).toBeVisible();
-      await expect(ann.page.getByRole("list", { name: "In this trip now" }).getByRole("img", { name: "Cem" })).toBeVisible();
+      await expect(hereNow(ann.page).getByRole("img", { name: "Cem" })).toBeVisible();
+      // Ann is no longer alone: the button is "Share", and the sheet lists Cem as a member.
+      await ann.page.getByRole("banner").getByRole("button", { name: "Share", exact: true }).click();
+      await expect(ann.page.getByRole("dialog", { name: "People" }).getByRole("list", { name: "People on this trip" })).toContainText("Cem");
     } finally {
       await context.close();
     }

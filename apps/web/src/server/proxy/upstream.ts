@@ -2,7 +2,7 @@ import { HttpError } from "../httpError";
 import { hit } from "../rateLimit";
 import { clientIp, hashIp } from "../ipHash";
 
-export const USER_AGENT = "Rota portfolio demo (https://github.com/cemakcck/rota)";
+export const USER_AGENT = "Tripify portfolio demo (https://github.com/cemakcck/tripify)";
 
 /** Free public services ask for at most one request per second. */
 const SPACING_MS = 1000;

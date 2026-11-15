@@ -13,7 +13,7 @@ describe("translations", () => {
   });
 
   it("Turkish copy reads naturally", () => {
-    expect(tr.trip.home).toBe("Rota — Gezilerim");
+    expect(tr.trip.home).toBe("Tripify — Gezilerim");
     expect(tr.trip.day).toBe("{n}. Gün"); // a heading and a label, like "Day {n}"
     expect(tr.trip.formatting).toBe("Biçimlendirme");
   });

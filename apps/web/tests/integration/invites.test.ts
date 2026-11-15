@@ -82,7 +82,7 @@ describe("invites", () => {
   it("an email invite to a new address joins only whoever presents the emailed token, once", async () => {
     const ann = await signUpUser({ name: "Ann" });
     const id = await newTrip(ann);
-    const address = `New.Person.${Date.now()}@Test.Rota`;
+    const address = `New.Person.${Date.now()}@Test.Tripify`;
     const res = await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: address } });
     expect(res.status).toBe(201);
     expect(sent).toHaveLength(1);
@@ -187,7 +187,7 @@ describe("invites", () => {
     const bob = await signUpUser({ name: "Bob" });
     await call(postInvite, "POST", ann, { params: { id }, body: { kind: "email", email: bob.email } });
     expect(sent).toHaveLength(2);
-    expect(sent[0].subject).toBe("Ann sizi Rota'da “Kapadokya” gezisine davet etti");
+    expect(sent[0].subject).toBe("Ann sizi Tripify'da “Kapadokya” gezisine davet etti");
     expect(sent[0].text).toContain("Katılmak için hesabınızı oluşturun: http://localhost:3400/tr/sign-up?");
     expect(sent[0].html).toContain("Katılmak için hesabınızı oluşturun");
     expect(sent[1].text).toContain(`Geziyi açın: http://localhost:3400/tr/t/${id}`);

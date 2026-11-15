@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { addPlace, setPlaceStatus, vote } from "@rota/trip";
 import { renderIntl } from "./helpers";
@@ -21,6 +21,9 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import { TripScreen } from "@/components/trip/TripScreen";
+
+// Ideas & votes in the list column.
+beforeEach(() => window.history.replaceState(null, "", "/en/t/t1?view=ideas"));
 
 afterEach(() => {
   cleanup();
@@ -82,6 +85,43 @@ describe("suggestions", () => {
     expect(fake.view.days[1].places[0].status).toBe("planned");
   });
 
+  it("accepting into a day asks its time (the suggestion, editable) and stay first, as one undo step", () => {
+    const { doc, dayIds } = newTrip();
+    addPlace(doc, { name: "Breakfast", category: "food", stayMinutes: 45, dayId: dayIds[0], time: "08:00" }, "u1");
+    addPlace(doc, { name: "Moda Sahil", category: "nature", dayId: null, status: "suggested" }, "u2");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Accept Moda Sahil" }));
+    const dialog = screen.getByRole("dialog");
+    const time = () => within(dialog).queryByLabelText("Time") as HTMLInputElement | null;
+    // Day 1 is chosen: after Breakfast (08:00 + 45 min).
+    expect(time()!.value).toBe("08:45");
+    expect(within(within(dialog).getByRole("group", { name: "Stay" })).getByRole("button", { name: "1 h 30" }).getAttribute("aria-pressed")).toBe("true");
+    // Day 2 has nothing timed: empty. Ideas: no time at all.
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^Day 2/ }));
+    expect(time()!.value).toBe("");
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Ideas" }));
+    expect(time()).toBeNull();
+    fireEvent.click(within(dialog).getByRole("radio", { name: /^Day 1/ }));
+    expect(time()!.value).toBe("08:45");
+    // Not a time: said, nothing accepted.
+    fireEvent.change(time()!, { target: { value: "9am" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Accept" }));
+    expect(within(dialog).getByRole("alert").textContent).toBe("Enter a time like 09:30, or leave it empty.");
+    expect(fake.view.suggestions.map((p) => p.name)).toEqual(["Moda Sahil"]);
+    fireEvent.change(time()!, { target: { value: "07:30" } });
+    fireEvent.click(within(within(dialog).getByRole("group", { name: "Stay" })).getByRole("button", { name: "1 h" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Accept" }));
+    expect(fake.view.suggestions).toEqual([]);
+    // At its time: before Breakfast.
+    expect(fake.view.days[0].places.map((p) => [p.name, p.time, p.stayMinutes, p.status])).toEqual([
+      ["Moda Sahil", "07:30", 60, "planned"],
+      ["Breakfast", "08:00", 45, "planned"],
+    ]);
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(fake.view.suggestions.map((p) => p.name)).toEqual(["Moda Sahil"]);
+    expect(fake.view.days[0].places.map((p) => p.name)).toEqual(["Breakfast"]);
+  });
+
   it("dismiss and restore keep votes", () => {
     const { doc } = newTrip();
     const id = addPlace(doc, { name: "Moda Sahil", category: "nature", dayId: null, status: "suggested" }, "u2");
@@ -103,9 +143,10 @@ describe("suggestions", () => {
   it("Suggest adds a suggestion instead of a planned place", () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
-    const form = screen.getByRole("form", { name: "Add a place" });
-    fireEvent.change(within(form).getByLabelText("Place name"), { target: { value: "Pierre Loti Hill" } });
-    fireEvent.click(within(form).getByRole("button", { name: "Suggest" }));
+    const search = screen.getByRole("combobox", { name: /^Add a place to/ });
+    fireEvent.change(search, { target: { value: "Pierre Loti Hill" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    fireEvent.click(within(screen.getByRole("form", { name: "Add Pierre Loti Hill" })).getByRole("button", { name: "Suggest" }));
     expect(fake.view.suggestions.map((p) => p.name)).toEqual(["Pierre Loti Hill"]);
     expect(fake.view.ideas).toEqual([]);
   });

@@ -15,6 +15,17 @@ export function friendKey(): string {
   return window.top === window.self ? "rota.friend" : "rota.friend.frame";
 }
 
+/** True in a friend window: opened with `?friend=1`, or already holding a friend session. */
+export function isFriendWindow(): boolean {
+  if (typeof window === "undefined") return false;
+  if (new URLSearchParams(window.location.search).get("friend") === "1") return true;
+  try {
+    return window.sessionStorage.getItem(friendKey()) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** The friend window's address for a trip, carrying `session` in the fragment. */
 export function friendUrl(locale: string, tripId: string, session: { token: string; user: object }): string {
   return `/${locale}/t/${tripId}?friend=1${HASH}${encodeURIComponent(JSON.stringify(session))}`;

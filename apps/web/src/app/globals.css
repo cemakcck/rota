@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
-/* Palette and type from docs/design-reference/rota-trip.html. Light theme only. */
+/* Palette and type from docs/design-reference/rota-trip-v2.html. Light theme only. */
 @theme {
   --color-canvas: #e9e7e2;
-  --color-paper: #f8f7f4;
+  --color-paper: #f5f3ef;
   --color-surface: #ffffff;
-  --color-ink: #1c1b19;
-  --color-ink-2: #57544e;
-  --color-line: #e8e5df;
+  --color-ink: #1c1917;
+  --color-ink-2: #57534e;
+  --color-line: #e7e5e4;
   --color-line-2: #f0eee9;
   --color-hover: #f3f1ec;
   --color-warn-bg: #fdf3dc;
@@ -15,7 +15,8 @@
   --color-warn-ink: #8a4b08;
   --color-danger: #b91c1c;
   --color-ok: #166534;
-  --font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-fraunces), "Fraunces", ui-serif, Georgia, serif;
   --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --shadow-1: 0 1px 2px rgba(28, 27, 25, 0.06), 0 1px 1px rgba(28, 27, 25, 0.04);
   --shadow-2: 0 6px 24px -6px rgba(28, 27, 25, 0.18), 0 2px 6px rgba(28, 27, 25, 0.06);
@@ -29,9 +30,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-ink);
-  outline-offset: 2px;
+/*
+ * The focus ring: 2 px of ink, 17:1 on paper and white. In the base layer, so utilities can change it
+ * (a white ring on the dark toast) or replace it (a box drawing the ring for the input inside it).
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * The map's focus rings match the rest (2 px ink, not maplibre's blurred blue). They are drawn inside: the
+ * canvas fills a box that clips, and the controls and credits sit against its edges.
+ */
+.maplibregl-canvas:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+.maplibregl-ctrl.maplibregl-ctrl-group button:focus-visible,
+.maplibregl-ctrl .maplibregl-ctrl-attrib-button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; box-shadow: none; }
+.maplibregl-ctrl-attrib a:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; }
+
+/* Phones: the map's zoom buttons are touch targets of 44 × 44 px (spec §5); the Fit button sits under them. */
+@media (width < 64rem) {
+  .maplibregl-ctrl.maplibregl-ctrl-group button { width: 44px; height: 44px; }
 }
 
 /* Landing animation: a place appears on one phone, then on the other. Static when motion is reduced. */
@@ -45,6 +66,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .rota-appear { animation: none; opacity: 1; transform: none; }
 }
+
+/* The place details slide in over the map's edge (up from below on phones); still when motion is reduced. */
+@keyframes rota-slide { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+@keyframes rota-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.rota-slide { animation: rota-rise 150ms ease-out; }
+@media (min-width: 64rem) { .rota-slide { animation-name: rota-slide; } }
+@media (prefers-reduced-motion: reduce) { .rota-slide { animation: none; } }
 
 /* Notes (Tiptap): lists keep their bullets; a friend's caret is a line in their colour with a name tag. */
 .note-editor { font-size: 13.5px; line-height: 1.5; }

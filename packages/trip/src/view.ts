@@ -2,8 +2,9 @@ import * as Y from "yjs";
 import { DEFAULT_STAY_MINUTES, isCategory, normaliseTags } from "./categories";
 import { compareOrder, isOrderKey } from "./order";
 import {
-  DEFAULT_START_TIME,
   DEFAULT_TRAVEL_MODE,
+  dayTitle,
+  isTime,
   type ChecklistItemView,
   type DayView,
   type Destination,
@@ -14,8 +15,6 @@ import {
 } from "./schema";
 
 type YRecord = Y.Map<unknown>;
-
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function str(value: unknown): string | null {
   return typeof value === "string" ? value : null;
@@ -102,6 +101,7 @@ function readPlace(id: string, m: YRecord): PlaceView | null {
   const rawTags = m.get("tags");
   const stayMinutes = m.get("stayMinutes");
   const createdAt = m.get("createdAt");
+  const time = m.get("time");
   const rawStatus = m.get("status");
   const status: PlaceStatus = rawStatus === "suggested" || rawStatus === "dismissed" ? rawStatus : "planned";
   const votes = readVotes(m.get("votes"));
@@ -115,6 +115,7 @@ function readPlace(id: string, m: YRecord): PlaceView | null {
     category,
     tags: Array.isArray(rawTags) ? normaliseTags(rawTags) : [],
     stayMinutes: finite(stayMinutes) && stayMinutes >= 0 ? stayMinutes : DEFAULT_STAY_MINUTES[category],
+    time: isTime(time) ? time : null,
     dayId: str(m.get("dayId")),
     order,
     addedBy: str(m.get("addedBy")) ?? "",
@@ -157,17 +158,14 @@ export function readTrip(doc: Y.Doc): TripView {
     if (place) places.push(place);
   }
 
-  const days: DayView[] = sortedDays(doc).map(([id, m], index) => {
-    const startTime = m.get("startTime");
-    return {
-      id,
-      index,
-      date: addDaysToDate(startDate, index),
-      startTime: typeof startTime === "string" && TIME.test(startTime) ? startTime : DEFAULT_START_TIME,
-      travelMode: m.get("travelMode") === "drive" ? "drive" : DEFAULT_TRAVEL_MODE,
-      places: [],
-    };
-  });
+  const days: DayView[] = sortedDays(doc).map(([id, m], index) => ({
+    id,
+    index,
+    date: addDaysToDate(startDate, index),
+    travelMode: m.get("travelMode") === "drive" ? "drive" : DEFAULT_TRAVEL_MODE,
+    title: dayTitle(str(m.get("title")) ?? ""),
+    places: [],
+  }));
   const dayById = new Map(days.map((d) => [d.id, d]));
 
   const ideas: PlaceView[] = [];

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist_Mono, Inter } from "next/font/google";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { FRIEND_HANDOFF_SCRIPT } from "@/client/friendHandoff";
@@ -8,7 +8,9 @@ import { RegisterSw } from "@/client/registerSw";
 import { routing } from "@/i18n/routing";
 import "../globals.css";
 
-const geist = Geist({ subsets: ["latin", "latin-ext"], variable: "--font-geist" });
+// Inter for the interface, Fraunces for trip and day titles (spec v2 §3).
+const inter = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-inter" });
+const fraunces = Fraunces({ subsets: ["latin", "latin-ext"], variable: "--font-fraunces", axes: ["opsz"] });
 const geistMono = Geist_Mono({ subsets: ["latin", "latin-ext"], variable: "--font-geist-mono" });
 
 export function generateStaticParams() {
@@ -26,7 +28,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   };
 }
 
-export const viewport: Viewport = { themeColor: "#f8f7f4" };
+export const viewport: Viewport = { themeColor: "#f5f3ef" };
 
 export default async function LocaleLayout({
   children,
@@ -40,7 +42,7 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
 
   return (
-    <html lang={locale} className={`${geist.variable} ${geistMono.variable}`}>
+    <html lang={locale} className={`${inter.variable} ${fraunces.variable} ${geistMono.variable}`}>
       <head>
         {/* First thing on the page: a friend window's session must be stored before any request goes out. */}
         <script dangerouslySetInnerHTML={{ __html: FRIEND_HANDOFF_SCRIPT }} />

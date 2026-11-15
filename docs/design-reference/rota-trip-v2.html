@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rota trip screen v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1c1917; --ink2:#57534e; --ink3:#a8a29e; --line:#e7e5e4; --bg:#f5f3ef; --card:#fff;
+  --d1:#1e3a8a; --d1s:#e6ebf7; --d2:#9f1239; --d2s:#f8e7ec; --d3:#166534; --d3s:#e5f2ea;
+  --idea:#78716c; --warn:#b45309; --warns:#fef3c7;
+  --deniz:#ea580c; --selin:#0d9488; --you:#2563eb;
+  --water:#cfe3f0; --land:#f4f1ea; --park:#dfeccf; --road:#ffffff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e6e0;font:14px/1.45 Inter,system-ui,sans-serif;color:var(--ink);padding:32px 24px 64px}
+h1.page{font:600 22px Fraunces,serif;margin:0 0 4px}
+p.sub{margin:0 0 24px;color:var(--ink2);max-width:880px}
+.label{font:600 12px Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:28px 0 10px}
+.frame{background:var(--bg);border-radius:14px;box-shadow:0 20px 50px -20px rgba(0,0,0,.35);overflow:hidden;position:relative}
+.desk{width:1280px;height:800px;display:grid;grid-template-rows:64px 1fr}
+/* header */
+.hdr{display:flex;align-items:center;gap:18px;padding:0 20px;background:var(--card);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700}
+.logo i{width:26px;height:26px;border-radius:8px;background:var(--ink);display:inline-block;position:relative}
+.logo i:after{content:"";position:absolute;inset:7px;border:2.5px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg)}
+.trip h2{margin:0;font:600 19px Fraunces,serif}
+.trip small{color:var(--ink2)}
+.sp{flex:1}
+.wx{display:flex;gap:6px}
+.wx span{background:var(--bg);border-radius:999px;padding:4px 10px;font-size:12.5px;color:var(--ink2)}
+.wx b{color:var(--ink);font-weight:600}
+.av{display:flex}
+.av span{width:30px;height:30px;border-radius:50%;color:#fff;font:600 12px Inter;display:grid;place-items:center;border:2px solid #fff;margin-left:-6px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;background:var(--card)}
+.pill.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.body{display:grid;grid-template-columns:208px 400px 1fr;min-height:0}
+/* rail */
+.rail{padding:16px 12px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.rail .day{border-radius:12px;padding:10px 12px;cursor:pointer;border:1px solid transparent}
+.rail .day b{display:block;font-weight:600}
+.rail .day small{color:var(--ink2);font-size:12px}
+.rail .day.on{background:var(--card);border-color:var(--line);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.rail .day .bar{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.rail hr{border:0;border-top:1px solid var(--line);margin:8px 4px}
+.rail .tab{display:flex;justify-content:space-between;padding:9px 12px;border-radius:10px;color:var(--ink2)}
+.rail .tab em{font-style:normal;background:var(--bg);border-radius:999px;padding:0 8px;font-size:12px}
+.demo{margin-top:auto;font-size:12px;color:var(--ink2);background:var(--warns);border-radius:10px;padding:10px}
+.demo .row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.demo .row span{background:#fff;border-radius:999px;padding:3px 9px;border:1px solid #f1e3b5;color:var(--ink)}
+/* list */
+.list{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--bg)}
+.dayhead{padding:18px 20px 10px}
+.dayhead h3{margin:0;font:600 22px Fraunces,serif;display:flex;align-items:center;gap:10px}
+.dayhead .meta{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.dayhead .meta span{font-size:12.5px;color:var(--ink2);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.search{margin:6px 20px 12px;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:var(--ink3);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.search svg{flex:none}
+.search .f{margin-left:auto;color:var(--ink2);font-size:12.5px;border-left:1px solid var(--line);padding-left:10px}
+.stops{padding:0 20px;overflow:hidden}
+.stop{display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+.stop.sel{border-color:var(--d1);box-shadow:0 0 0 3px var(--d1s)}
+.num{width:26px;height:26px;border-radius:50%;background:var(--d1);color:#fff;display:grid;place-items:center;font:600 12px Inter}
+.stop .t b{display:block;font-weight:600}
+.stop .t small{color:var(--ink2);font-size:12.5px}
+.stop .tm{text-align:right;font-size:13px;font-weight:600}
+.stop .tm small{display:block;font-weight:400;color:var(--ink2);font-size:12px}
+.warn{color:var(--warn);font-size:12px;font-weight:500}
+.leg{margin:0 0 0 13px;border-left:2px dotted #c8c3bb;padding:6px 0 6px 22px;font-size:12px;color:var(--ink2)}
+.editing{position:relative}
+.editing:after{content:"Deniz";position:absolute;right:-6px;top:-9px;background:var(--deniz);color:#fff;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px}
+.editing .stop{border-color:var(--deniz)}
+/* map */
+.map{position:relative;overflow:hidden;background:var(--land)}
+.map svg.base{position:absolute;inset:0;width:100%;height:100%}
+.mtools{position:absolute;right:14px;top:14px;display:flex;flex-direction:column;gap:6px}
+.mtools span{width:34px;height:34px;background:var(--card);border-radius:10px;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.15);font-weight:600}
+.pin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center}
+.pin .h{width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);background:var(--d1);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.25);display:grid;place-items:center}
+.pin .h span{transform:rotate(45deg);color:#fff;font:600 13px Inter}
+.pin.idea .h{background:var(--idea);width:24px;height:24px}
+.pin.big .h{width:42px;height:42px;outline:4px solid var(--d1s)}
+.cursor{position:absolute;display:flex;align-items:flex-start;gap:2px}
+.cursor b{background:var(--selin);color:#fff;font-size:11px;padding:1px 7px;border-radius:999px;margin-top:12px}
+/* detail panel */
+.panel{position:absolute;left:16px;top:16px;bottom:16px;width:340px;background:var(--card);border-radius:16px;box-shadow:0 18px 40px -12px rgba(0,0,0,.3);padding:18px;display:flex;flex-direction:column;gap:14px}
+.panel .top{display:flex;justify-content:space-between;align-items:flex-start}
+.panel h4{margin:2px 0 0;font:600 20px Fraunces,serif}
+.chip{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;background:var(--bg);color:var(--ink2);margin:0 4px 4px 0}
+.chip.cat{background:var(--d1s);color:var(--d1);font-weight:600}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kv div{background:var(--bg);border-radius:10px;padding:9px 11px}
+.kv small{display:block;color:var(--ink2);font-size:11.5px}
+.kv b{font-weight:600}
+.note{background:#fbfaf7;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink2);font-size:13.5px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;padding:10px;font-weight:600;font-size:13.5px}
+.btn.pri{background:var(--ink);color:#fff}
+.btn.sec{border:1px solid var(--line)}
+.panel .actions{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.x{width:30px;height:30px;border-radius:8px;background:var(--bg);display:grid;place-items:center;color:var(--ink2)}
+/* phones */
+.phones{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:390px;height:780px;border-radius:38px;border:10px solid #1c1917;display:grid;grid-template-rows:auto 1fr auto}
+.phone .ph{background:var(--card);padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.phone .ph .r{display:flex;align-items:center;justify-content:space-between}
+.phone .ph h2{margin:0;font:600 18px Fraunces,serif}
+.chips{display:flex;gap:6px;margin-top:10px;overflow:hidden}
+.chips span{white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;background:var(--card)}
+.chips span.on{background:var(--d1);color:#fff;border-color:var(--d1)}
+.phone .pb{overflow:hidden;position:relative}
+.nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--card);border-top:1px solid var(--line);padding:8px 6px 14px}
+.nav span{text-align:center;font-size:11.5px;color:var(--ink3)}
+.nav span i{display:block;width:22px;height:22px;margin:0 auto 3px;border-radius:7px;background:var(--line)}
+.nav span.on{color:var(--ink);font-weight:600}
+.nav span.on i{background:var(--ink)}
+.fab{position:absolute;right:16px;bottom:16px;background:var(--ink);color:#fff;border-radius:999px;padding:12px 18px;font-weight:600;box-shadow:0 8px 20px -6px rgba(0,0,0,.4)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px -10px rgba(0,0,0,.25);padding:10px 16px 16px}
+.sheet .grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 10px}
+.notes{max-width:1280px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px}
+.notes div{background:#fff;border-radius:12px;padding:14px 16px;font-size:13.5px;color:var(--ink2)}
+.notes b{color:var(--ink);display:block;margin-bottom:4px}
+.dd{position:absolute;left:20px;right:20px;top:198px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 30px -12px rgba(0,0,0,.25);padding:6px;z-index:2;display:none}
+</style>
+</head>
+<body>
+<h1 class="page">Rota — trip screen v2 (mockup)</h1>
+<p class="sub">One day at a time, details on demand. The demo's real data. Desktop at 1280 px, then two phone screens. The map is a drawing standing in for the real (muted) map style.</p>
+
+<div class="label">Desktop · Day 1 selected, Galata Tower opened</div>
+<div class="frame desk">
+  <header class="hdr">
+    <span class="logo"><i></i>rota</span>
+    <div class="trip"><h2>Istanbul long weekend</h2><small>Fri 27 – Sun 29 Nov · 3 days · 12 places</small></div>
+    <div class="sp"></div>
+    <div class="wx"><span>Fri <b>17°</b> ☀︎</span><span>Sat <b>14°</b> ☁︎</span><span>Sun <b>15°</b> ☂︎ 40%</span></div>
+    <span class="pill"><span class="dot" style="background:#16a34a"></span>Synced</span>
+    <div class="av"><span style="background:var(--you)">G</span><span style="background:var(--deniz)">D</span><span style="background:var(--selin)">S</span></div>
+    <span class="pill dark">Share</span>
+    <span class="x">⚙︎</span>
+  </header>
+  <div class="body">
+    <nav class="rail">
+      <div class="day on"><span class="bar" style="background:var(--d1)"></span><b style="display:inline">Day 1 · Fri 27</b><br><small>Karaköy &amp; Galata · 4 stops</small></div>
+      <div class="day"><span class="bar" style="background:var(--d2)"></span><b style="display:inline">Day 2 · Sat 28</b><br><small>Balat &amp; the Bosphorus · 4 stops</small></div>
+      <div class="day"><span class="bar" style="background:var(--d3)"></span><b style="display:inline">Day 3 · Sun 29</b><br><small>Kadıköy · 4 stops</small></div>
+      <div class="tab" style="padding-top:4px">+ Add a day</div>
+      <hr>
+      <div class="tab">Ideas &amp; votes <em>4</em></div>
+      <div class="tab">Checklist <em>2/5</em></div>
+      <div class="tab">Whole trip on map</div>
+      <div class="demo"><b style="color:var(--ink)">Demo trip</b> · deleted after 7 days idle
+        <div class="row"><span>Try it with a friend</span><span>Simulate offline</span></div></div>
+    </nav>
+
+    <section class="list">
+      <div class="dayhead">
+        <h3><span class="dot" style="background:var(--d1);width:12px;height:12px"></span>Day 1 · Friday</h3>
+        <div class="meta"><span>Start 09:30</span><span>On foot · 20 min walking</span><span>Back by 17:00</span><span>Open in Google Maps ↗</span></div>
+      </div>
+      <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Add a place to Day 1…<span class="f">Filter</span></div>
+      <div class="stops">
+        <div class="stop"><span class="num">1</span><div class="t"><b>🍴 Karaköy Güllüoğlu</b><small>Breakfast · baklava</small></div><div class="tm">09:30<small>45 min</small></div></div>
+        <div class="leg">🚶 9 min walk</div>
+        <div class="editing"><div class="stop"><span class="num">2</span><div class="t"><b>🏛 Istanbul Modern</b><small>Museum · 1 note</small></div><div class="tm">10:24<small>2 h</small></div></div></div>
+        <div class="leg">🚶 4 min walk</div>
+        <div class="stop sel"><span class="num">3</span><div class="t"><b>📷 Galata Tower</b><small>Sight · views</small></div><div class="tm">12:28<small>1 h</small></div></div>
+        <div class="leg">🚶 7 min walk</div>
+        <div class="stop"><span class="num">4</span><div class="t"><b>🍴 Karaköy Lokantası</b><small>Lunch</small></div><div class="tm">13:35<small>1 h 15</small></div></div>
+        <div class="leg" style="border:0;color:var(--ink3)">Drag to reorder · click a place for details</div>
+      </div>
+    </section>
+
+    <section class="map">
+      <svg class="base" viewBox="0 0 672 736" preserveAspectRatio="xMidYMid slice">
+        <rect width="672" height="736" fill="var(--land)"/>
+        <path d="M0 560 C140 520 260 600 380 560 S600 470 672 500 L672 736 L0 736Z" fill="var(--water)"/>
+        <path d="M430 0 C450 160 520 300 672 360 L672 0Z" fill="var(--water)" opacity=".7"/>
+        <ellipse cx="560" cy="150" rx="70" ry="40" fill="var(--park)"/>
+        <ellipse cx="180" cy="200" rx="60" ry="34" fill="var(--park)"/>
+        <g stroke="var(--road)" stroke-width="10" fill="none" stroke-linecap="round">
+          <path d="M0 470 C200 440 330 470 672 410"/><path d="M300 0 C310 200 290 380 330 736"/><path d="M60 0 C140 220 230 330 420 520"/>
+        </g>
+        <g stroke="#ebe7df" stroke-width="4" fill="none"><path d="M0 300 L672 260"/><path d="M500 0 L460 736"/><path d="M0 120 L672 180"/><path d="M160 736 L240 0"/></g>
+        <path d="M560 520 C520 470 470 450 455 400 S420 330 400 300 S470 250 470 190" stroke="var(--d1)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+        <path d="M400 300 C380 340 360 380 330 420" stroke="var(--d1)" stroke-width="6" fill="none" stroke-linecap="round" opacity=".9"/>
+      </svg>
+      <div class="pin" style="left:563px;top:520px"><div class="h"><span>1</span></div></div>
+      <div class="pin" style="left:470px;top:190px"><div class="h"><span>2</span></div></div>
+      <div class="pin big" style="left:400px;top:300px"><div class="h"><span>3</span></div></div>
+      <div class="pin" style="left:330px;top:420px"><div class="h"><span>4</span></div></div>
+      <div class="pin idea" style="left:610px;top:640px"><div class="h"><span></span></div></div>
+      <div class="cursor" style="left:520px;top:330px"><svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7-6 2-2 6z" fill="var(--selin)" stroke="#fff" stroke-width="1.5"/></svg><b>Selin</b></div>
+      <div class="mtools"><span>+</span><span>−</span><span>⤢</span></div>
+
+      <aside class="panel">
+        <div class="top"><div><span class="chip cat">③ Day 1 · Sight</span><h4>Galata Tower</h4><small style="color:var(--ink2)">Added by Selin</small></div><span class="x">✕</span></div>
+        <div class="kv"><div><small>Arrive</small><b>around 12:28</b></div><div><small>Stay</small><b>1 h ▾</b></div><div><small>From previous stop</small><b>4 min walk</b></div><div><small>Opening hours</small><b>09:00–20:30</b></div></div>
+        <div><span class="chip">views</span><span class="chip">+ tag</span></div>
+        <div class="note">Queue is shortest right at opening or around sunset.<br><span style="color:var(--ink3);font-size:12px">Notes · everyone can edit</span></div>
+        <div class="btn sec">Open in Google Maps ↗</div>
+        <div class="actions"><div class="btn sec">Move to…</div><div class="btn sec" style="color:#b91c1c">Delete</div></div>
+      </aside>
+    </section>
+  </div>
+</div>
+
+<div class="label">Phone · Plan tab and Map tab</div>
+<div class="phones">
+  <div class="frame phone">
+    <div class="ph">
+      <div class="r"><h2>Istanbul long weekend</h2><div class="av"><span style="background:var(--you);width:26px;height:26px">G</span><span style="background:var(--deniz);width:26px;height:26px">D</span><span style="background:var(--selin);width:26px;height:26px">S</span></div></div>
+      <div class="chips"><span class="on">Fri 27 · Day 1</span><span>Sat 28 · Day 2</span><span>Sun 29 · Day 3</span></div>
+    </div>
+    <div class="pb" style="background:var(--bg);padding:14px 14px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font:600 18px Fraunces,serif">Karaköy &amp; Galata</b><span style="font-size:12.5px;color:var(--ink2)">17° ☀︎ · 4 stops</span></div>
+      <div class="search" style="margin:0 0 12px">Add a place to Day 1…</div>
+      <div class="stop"><span class="num">1</span><div class="t"><b>🍴 Karaköy Güllüoğlu</b><small>Breakfast</small></div><div class="tm">09:30<small>45 min</small></div></div>
+      <div class="leg">🚶 9 min</div>
+      <div class="stop"><span class="num">2</span><div class="t"><b>🏛 Istanbul Modern</b><small>Museum</small></div><div class="tm">10:24<small>2 h</small></div></div>
+      <div class="leg">🚶 4 min</div>
+      <div class="stop"><span class="num">3</span><div class="t"><b>📷 Galata Tower</b><small>Sight · views</small></div><div class="tm">12:28<small>1 h</small></div></div>
+      <div class="leg">🚶 7 min</div>
+      <div class="stop"><span class="num">4</span><div class="t"><b>🍴 Karaköy Lokantası</b><small>Lunch</small></div><div class="tm">13:35<small>1 h 15</small></div></div>
+      <div class="fab">＋ Add place</div>
+    </div>
+    <div class="nav"><span class="on"><i></i>Plan</span><span><i></i>Map</span><span><i></i>Ideas</span><span><i></i>Checklist</span></div>
+  </div>
+
+  <div class="frame phone">
+    <div class="ph">
+      <div class="r"><h2>Istanbul long weekend</h2><span class="pill" style="font-size:12px"><span class="dot" style="background:#16a34a"></span>Synced</span></div>
+      <div class="chips"><span class="on">Day 1</span><span>Day 2</span><span>Day 3</span><span>All</span></div>
+    </div>
+    <div class="pb map">
+      <svg class="base" viewBox="0 0 370 640" preserveAspectRatio="xMidYMid slice">
+        <rect width="370" height="640" fill="var(--land)"/>
+        <path d="M0 470 C80 440 160 500 230 470 S330 410 370 430 L370 640 L0 640Z" fill="var(--water)"/>
+        <g stroke="var(--road)" stroke-width="8" fill="none"><path d="M0 380 C120 360 200 390 370 340"/><path d="M170 0 C180 200 160 320 190 640"/></g>
+        <path d="M300 430 C280 390 250 370 240 330 S220 270 210 250 S260 210 260 160" stroke="var(--d1)" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path d="M210 250 C200 280 180 310 160 340" stroke="var(--d1)" stroke-width="5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="pin" style="left:300px;top:430px"><div class="h"><span>1</span></div></div>
+      <div class="pin" style="left:260px;top:160px"><div class="h"><span>2</span></div></div>
+      <div class="pin big" style="left:210px;top:250px"><div class="h"><span>3</span></div></div>
+      <div class="pin" style="left:160px;top:340px"><div class="h"><span>4</span></div></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="stop sel" style="box-shadow:none"><span class="num">3</span><div class="t"><b>📷 Galata Tower</b><small>Arrive ~12:28 · stay 1 h · 4 min walk</small></div><div class="tm" style="font-weight:400">›</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><div class="btn sec">Google Maps ↗</div><div class="btn pri">Details</div></div>
+      </div>
+    </div>
+    <div class="nav"><span><i></i>Plan</span><span class="on"><i></i>Map</span><span><i></i>Ideas</span><span><i></i>Checklist</span></div>
+  </div>
+</div>
+
+<div class="notes">
+  <div><b>One day at a time</b>Days live in the left rail (phone: chips). Picking one filters the list and the map together, so they never disagree. "Whole trip on map" shows every day.</div>
+  <div><b>Rows, not forms</b>Each stop is one line: number, icon, name, arrival, stay. Travel time sits between rows. Everything else — notes, stay, tags, hours, Google Maps, move, delete — is in the details panel that slides over the map.</div>
+  <div><b>One way to add</b>A single search bar per day. Results offer Add to this day · Ideas · Suggest. Category/tag filters hide behind "Filter". Ideas, votes and the checklist get their own tabs.</div>
+</div>
+</body>
+</html>

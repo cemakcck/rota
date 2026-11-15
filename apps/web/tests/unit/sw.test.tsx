@@ -216,7 +216,7 @@ describe("service worker", () => {
   it("the map style, TileJSON, glyphs and sprites are served stale while revalidated; only tiles are cache-first", async () => {
     const sw = loadSw();
     const assets = [
-      "https://tiles.openfreemap.org/styles/liberty",
+      "https://tiles.openfreemap.org/styles/positron",
       "https://tiles.openfreemap.org/planet",
       "https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf",
       "https://tiles.openfreemap.org/sprites/ofm_f384/ofm.json",

@@ -74,6 +74,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dev = process.env.NODE_ENV !== "production";
   startServer({ port, dev }).then((server) => {
     exitOnSignals(server);
-    console.log(`Rota ready on ${server.url}`);
+    console.log(`Tripify ready on ${server.url}`);
   });
 }

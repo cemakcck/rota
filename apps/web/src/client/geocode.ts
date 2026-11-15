@@ -9,7 +9,16 @@ export async function searchPlaces(q: string, lang: string, near: { lat: number;
   const bias = near ? `&lat=${near.lat.toFixed(2)}&lng=${near.lng.toFixed(2)}` : "";
   const res = await apiFetch(`/api/geocode?q=${encodeURIComponent(q)}&lang=${lang}${bias}`, { signal });
   if (!res.ok) throw new SearchUnavailable(res.status);
-  return ((await res.json()) as { results: SearchResult[] }).results;
+  return uniqueResults(((await res.json()) as { results: SearchResult[] }).results);
+}
+
+/**
+ * Each place once: Photon can return the same OpenStreetMap element twice. `osmId` carries the element's
+ * type and number ("n555", "w555"), so a node and a way with the same number both stay. The first wins.
+ */
+export function uniqueResults(results: readonly SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  return results.filter((r) => !seen.has(r.osmId) && (seen.add(r.osmId), true));
 }
 
 /** The search service answered with an error (as opposed to the network failing). */

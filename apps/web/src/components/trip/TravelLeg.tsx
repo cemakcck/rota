@@ -13,6 +13,16 @@ export function useDuration(): (seconds: number) => string {
   };
 }
 
+/** A stay: "45 min", "1 h", "1 h 15 min" ("0 min" for none). */
+export function useStay(): (minutes: number) => string {
+  const t = useTranslations("trip");
+  return (minutes) => {
+    if (minutes < 60) return t("minutesShort", { m: minutes });
+    const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+    return m === 0 ? t("hoursOnly", { h }) : t("hoursShort", { h, m });
+  };
+}
+
 /** "≈" for sighted readers, "estimated" for screen readers: a straight-line estimate, not a route. */
 export function Approximate() {
   const t = useTranslations("trip");
@@ -31,11 +41,12 @@ export function TravelLeg({ leg, mode }: { leg: Leg; mode: TravelMode }) {
   const km = leg.meters >= 1000;
   const distance = new Intl.NumberFormat(locale, { style: "unit", unit: km ? "kilometer" : "meter", maximumFractionDigits: km ? 1 : 0 }).format(km ? leg.meters / 1000 : leg.meters);
   return (
-    <li data-testid="travel-leg" className="flex h-7 items-center gap-2 pl-[22px] font-mono text-[11.5px] text-ink-2">
-      <span aria-hidden="true" className="h-full border-l-2 border-dotted border-line" />
+    <span className="inline-flex min-w-0 items-center gap-1.5">
       <Icon name={mode === "walk" ? "walk" : "car"} size={14} />
-      {leg.approximate && <Approximate />}
-      <span>{`${t(mode === "walk" ? "legWalk" : "legDrive", { duration: duration(leg.seconds) })} · ${distance}`}</span>
-    </li>
+      <span className="min-w-0">
+        {leg.approximate && <Approximate />}
+        {`${t(mode === "walk" ? "legWalk" : "legDrive", { duration: duration(leg.seconds) })} · ${distance}`}
+      </span>
+    </span>
   );
 }

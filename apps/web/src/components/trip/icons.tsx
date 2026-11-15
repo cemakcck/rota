@@ -76,12 +76,25 @@ const PATHS = {
     </>
   ),
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  // The phone's trip tabs.
+  plan: <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />,
+  map: <path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6zM9 4v14M15 6v14" />,
+  idea: <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2h5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3z" />,
+  checklist: <path d="M4 6.5 5.5 8 8 5M4 12.5 5.5 14 8 11M4 18.5 5.5 20 8 17M11 6.5h9M11 12.5h9M11 18.5h9" />,
+  more: (
+    <>
+      <circle cx="5.5" cy="12" r="1.2" />
+      <circle cx="12" cy="12" r="1.2" />
+      <circle cx="18.5" cy="12" r="1.2" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="6.5" />
       <path d="m20 20-4.3-4.3" />
     </>
   ),
+  filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   warn: <path d="M10.3 4.2 2.8 17.5A2 2 0 0 0 4.5 20.5h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0zM12 9.5v4.5M12 17.2v.1" />,
   sun: (
     <>
@@ -137,6 +150,29 @@ export function CategoryIcon({ category, label, small = false }: { category: Cat
       className={`grid shrink-0 place-items-center rounded-[9px] bg-line-2 text-ink-2 ${small ? "size-6" : "size-8"}`}
     >
       <Icon name={category} size={small ? 14 : 17} />
+    </span>
+  );
+}
+
+const GLYPHS: Record<Category, string> = {
+  food: "🍴",
+  drinks: "🍸",
+  cafe: "☕",
+  museum: "🏛",
+  sight: "📷",
+  nightlife: "🌙",
+  shopping: "🛍",
+  nature: "🌳",
+  gym: "🏋",
+  stay: "🛏",
+  other: "📍",
+};
+
+/** A category as the emoji-style glyph rows use (spec §3), named for screen readers. */
+export function CategoryGlyph({ category, label }: { category: Category; label: string }) {
+  return (
+    <span role="img" aria-label={label} title={label} className="shrink-0 text-[14px] leading-none">
+      {GLYPHS[category]}
     </span>
   );
 }

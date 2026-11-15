@@ -1,8 +1,8 @@
-# Rota: plan a trip together, live and offline
+# Tripify: plan a trip together, live and offline
 
 A group trip planner. Everyone in a trip adds places from the map, sorts them into days and sees the same plan update live, on a good connection, a bad one or none at all. Edits made offline merge when the device reconnects, and **two people moving the same place at the same moment never end up with two copies of it or none**.
 
-[![CI](https://github.com/cemakcck/rota/actions/workflows/ci.yml/badge.svg)](https://github.com/cemakcck/rota/actions/workflows/ci.yml)
+[![CI](https://github.com/cemakcck/tripify/actions/workflows/ci.yml/badge.svg)](https://github.com/cemakcck/tripify/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Live demo:** launching soon · **Portfolio:** [cemakcicek.com](https://cemakcicek.com) · **GitHub:** [@cemakcck](https://github.com/cemakcck)
@@ -97,7 +97,7 @@ Sync, offline and the failure cases are covered in more depth in [docs/ARCHITECT
 You need **Node.js 22+** and **Docker** (with Compose). No cloud account or API key is needed.
 
 ```bash
-git clone https://github.com/cemakcck/rota.git && cd rota
+git clone https://github.com/cemakcck/tripify.git && cd tripify
 npm install
 npm run db:up                           # Postgres 17 in Docker on localhost:5434
 cp apps/web/.env.example apps/web/.env.local   # the defaults work as-is for local use

@@ -22,7 +22,7 @@ export function AppPage({ title, action, children, narrow = true }: { title: str
 export function AuthPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main id="main" className="mx-auto grid min-h-screen max-w-md content-center px-4 py-10">
-      <p className="mb-6 text-[18px] font-semibold tracking-tight">Rota</p>
+      <p className="mb-6 text-[18px] font-semibold tracking-tight">Tripify</p>
       <div className={card}>
         <h1 className="mb-5 text-[22px] font-semibold tracking-tight">{title}</h1>
         {children}
