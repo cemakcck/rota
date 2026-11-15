@@ -250,9 +250,10 @@ const QUICK_SEARCHES = ["food", "sight", "cafe", "museum"] as const;
 
 /**
  * An empty day the search adds to: "Add your first stop", and quick searches (Food, Sight, Café, Museum)
- * that fill the search with "cafe near <destination>" and open its results.
+ * that fill the search with the category word ("cafe") and open its results, biased to the trip's area
+ * like any search.
  */
-function FirstStop({ destination, onSearch }: { destination: string | null; onSearch(text: string): void }) {
+function FirstStop({ onSearch }: { onSearch(text: string): void }) {
   const t = useTranslations("trip");
   const tcat = useTranslations("categories");
   return (
@@ -261,13 +262,13 @@ function FirstStop({ destination, onSearch }: { destination: string | null; onSe
       <p className="mt-0.5 text-[12.5px] text-ink-2">{t("dayEmptyStart")}</p>
       <div role="group" aria-label={t("quickSearch")} className="mt-2.5 flex flex-wrap gap-1.5">
         {QUICK_SEARCHES.map((category) => {
-          const what = t(`quickTerms.${category}`);
           return (
             <button
               key={category}
               type="button"
-              onClick={() => onSearch(destination ? t("quickNear", { what, place: destination }) : what)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-hover"
+              onClick={() => onSearch(t(`quickTerms.${category}`))}
+              // 44 px tall on phones (touch), 32 px from the small breakpoint up.
+              className="inline-flex h-11 sm:h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-hover"
             >
               <Icon name={category} size={14} className="text-ink-2" />
               {tcat(category)}
@@ -450,7 +451,7 @@ export function DayPlan({
           // Quick searches where the search adds to this day; elsewhere (read-only, full, another day of the whole trip) plain words.
           empty={
             actions && !full && day.id === targetDay?.id ? (
-              <FirstStop destination={view.destination?.name || null} onSearch={(text) => setQuery({ text })} />
+              <FirstStop onSearch={(text) => setQuery({ text })} />
             ) : (
               <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t("dayEmpty")}</p>
             )

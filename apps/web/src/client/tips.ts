@@ -30,8 +30,34 @@ function remember(userId: string, value: SeenHere): void {
   }
 }
 
+/** Forgets that this device saw the tour (the server says it was reset: "Show tips again" elsewhere). */
+export function forgetTipsSeenHere(userId: string): void {
+  remember(userId, null);
+}
+
+// A friend window (spec §11) shows the tour only on an open after the friend's first edit there.
+const editedKey = (userId: string) => `rota.tipsEdited.${userId}`;
+
+/** Whether this person has edited a trip in a friend window on this device. */
+export function friendEditedHere(userId: string): boolean {
+  try {
+    return localStorage.getItem(editedKey(userId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function rememberFriendEdited(userId: string): void {
+  try {
+    localStorage.setItem(editedKey(userId), "1");
+  } catch {
+    // Storage blocked: the tour stays away in friend windows.
+  }
+}
+
 /** Whether the server says this user has seen the tour; null when it cannot be asked (offline). */
 export async function tipsSeenOnServer(userId: string): Promise<boolean | null> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
   try {
     const res = await apiFetch(PATH);
     if (!res.ok) return null;

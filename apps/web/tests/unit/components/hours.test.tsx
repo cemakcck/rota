@@ -86,7 +86,7 @@ describe("opening hours", () => {
     const { fn, calls } = stubFetch({ "GET /api/hours?ids=n103": () => ({ body: { hours: { n103: null } } }) });
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    await vi.waitFor(() => expect(calls.filter((c) => c.key.startsWith("GET /api/hours"))).toHaveLength(1));
     expect(screen.queryByRole("note")).toBeNull();
   });
 });

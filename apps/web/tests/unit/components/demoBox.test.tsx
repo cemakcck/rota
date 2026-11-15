@@ -94,7 +94,8 @@ describe("demo box", () => {
     const [, , features] = open.mock.calls[0] as unknown as [string, string, string];
     expect(features).toContain("width=800");
     await waitFor(() => expect(child.location.href).not.toBe("about:blank"));
-    expect(calls).toEqual([{ key: "POST /api/demo/friend-token", body: { tripId: "t1" } }]);
+    // (Besides the background check of the first-time tips.)
+    expect(calls.filter((c) => !c.key.endsWith("/api/profile/tips"))).toEqual([{ key: "POST /api/demo/friend-token", body: { tripId: "t1" } }]);
     expect(child.location.href).toBe(`${window.location.origin}/en/t/t1?friend=1${handoff({ token: "tok-deniz", user: deniz })}`);
     expect(child.opener).toBeNull();
     expect(child.close).not.toHaveBeenCalled();

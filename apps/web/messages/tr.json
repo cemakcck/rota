@@ -411,13 +411,13 @@
     "dayEmptyFirst": "İlk durağınızı ekleyin",
     "dayEmptyStart": "Bir yer arayın ya da bunlardan biriyle başlayın.",
     "quickSearch": "Yakında ara",
-    "quickNear": "{place} yakınında {what}",
     "quickTerms": {
       "food": "restoran",
       "sight": "görülecek yerler",
       "cafe": "kafe",
       "museum": "müze"
-    }
+    },
+    "ideasEmptyReadOnly": "Henüz fikir yok. Gidebileceğiniz yerler burada görünür."
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",

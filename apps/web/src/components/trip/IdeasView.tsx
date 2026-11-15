@@ -206,7 +206,7 @@ export function IdeasView({
         </h2>
         <div ref={setNodeRef} className={`mx-5 min-w-0 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
           {view.ideas.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t("ideasEmpty")}</p>
+            <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t(suggestionActions ? "ideasEmpty" : "ideasEmptyReadOnly")}</p>
           ) : (
             <ol className="grid min-w-0">
               {view.ideas.map((place, i) => {

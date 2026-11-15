@@ -52,21 +52,22 @@ describe("empty states", () => {
     expect(within(quick()).getAllByRole("button").map((b) => b.textContent)).toEqual(["Food", "Sight", "Café", "Museum"]);
   });
 
-  it("a quick search fills the search with the category near the destination and opens its results", async () => {
+  it("a quick search fills the search with the category word, biased to the trip's area, and opens its results", async () => {
     istanbulTrip();
     renderIntl(<TripScreen tripId="t1" />);
     fireEvent.click(within(quick()).getByRole("button", { name: "Café" }));
-    expect(search().value).toBe("cafe near Istanbul");
+    expect(search().value).toBe("cafe");
     expect(document.activeElement).toBe(search());
     const results = await screen.findByRole("listbox");
     expect(within(results).getByText("Kronotrop")).toBeTruthy();
-    expect(searchPlaces).toHaveBeenCalledWith("cafe near Istanbul", "en", expect.anything(), expect.anything());
+    // Near the destination, as any search is: the bias, not words in the query.
+    expect(searchPlaces).toHaveBeenCalledWith("cafe", "en", { lat: 41.01, lng: 28.97 }, expect.anything());
     // Picking a result goes on as any search does: the add step, asking when.
     fireEvent.click(within(results).getByText("Kronotrop"));
     expect(screen.getByRole("form", { name: /^Add Kronotrop/ })).toBeTruthy();
   });
 
-  it("without a destination, the category alone; in Turkish, Turkish words", async () => {
+  it("without a destination too, the category alone; in Turkish, Turkish words", async () => {
     newTrip();
     renderIntl(<TripScreen tripId="t1" />);
     fireEvent.click(within(quick()).getByRole("button", { name: "Museum" }));
@@ -76,7 +77,13 @@ describe("empty states", () => {
     istanbulTrip();
     renderIntl(<TripScreen tripId="t1" />, "tr");
     fireEvent.click(within(screen.getByRole("group", { name: "Yakında ara" })).getByRole("button", { name: "Yemek" }));
-    await waitFor(() => expect(screen.getByRole<HTMLInputElement>("combobox").value).toBe("Istanbul yakınında restoran"));
+    await waitFor(() => expect(screen.getByRole<HTMLInputElement>("combobox").value).toBe("restoran"));
+  });
+
+  it("quick searches are touch-sized on phones (44 px)", () => {
+    istanbulTrip();
+    renderIntl(<TripScreen tripId="t1" />);
+    for (const button of within(quick()).getAllByRole("button")) expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-11", "sm:h-8"]));
   });
 
   it("without edit access, an empty day has no quick searches", () => {
@@ -106,5 +113,14 @@ describe("empty states", () => {
     at("?view=checklist");
     renderIntl(<TripScreen tripId="t1" />);
     expect(screen.getByText("Add things to pack or book")).toBeTruthy();
+  });
+
+  it("read-only, empty Ideas do not ask to suggest", () => {
+    istanbulTrip();
+    fake.userId = null;
+    at("?view=ideas");
+    renderIntl(<TripScreen tripId="t1" />);
+    expect(screen.getByText("No ideas yet. Places you might visit show up here.")).toBeTruthy();
+    expect(screen.queryByText(/suggest one/)).toBeNull();
   });
 });

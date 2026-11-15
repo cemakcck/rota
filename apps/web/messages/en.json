@@ -411,13 +411,13 @@
     "dayEmptyFirst": "Add your first stop",
     "dayEmptyStart": "Search for a place, or start with one of these.",
     "quickSearch": "Search nearby",
-    "quickNear": "{what} near {place}",
     "quickTerms": {
       "food": "restaurant",
       "sight": "sights",
       "cafe": "cafe",
       "museum": "museum"
-    }
+    },
+    "ideasEmptyReadOnly": "No ideas yet. Places you might visit show up here."
   },
   "map": {
     "sheetHandle": "Resize the list",

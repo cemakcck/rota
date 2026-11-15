@@ -5,7 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useTranslations } from "next-intl";
 import type * as Y from "yjs";
 import { isFriendWindow } from "@/client/friendHandoff";
-import { markTipsSeen, tipsSeenHere, tipsSeenOnServer } from "@/client/tips";
+import { forgetTipsSeenHere, friendEditedHere, markTipsSeen, rememberFriendEdited, tipsSeenHere, tipsSeenOnServer } from "@/client/tips";
 import { btn, btnPrimary, btnSm } from "../ui";
 
 /** The tour's steps (spec §4): what each says, and the element it points at (its `data-tour` attribute). */
@@ -16,45 +16,67 @@ const GAP = 12;
 const EDGE = 16;
 const CARD_WIDTH = 320;
 
+/** True while the person is in the middle of something: typing in a field, or in another dialog or sheet. */
+function busy(): boolean {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return true;
+  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+}
+
 /**
  * Whether the first-time tour is shown, and `finish` (Done, Skip or Escape) to remember it was seen.
- * Shown once per user (this device first, then the server) to someone who can edit the trip, once it
- * has loaded. In a friend window only after their first edit; offline with nothing known, not at all
- * (it waits for a time the server can say whether it was seen elsewhere).
+ * Decided once, when the trip opens (loaded, for someone who can edit it): shown when this device and
+ * then the server say it was not seen, unless the person has meanwhile started doing something (a key
+ * or a press, focus in a field, another dialog open), in which case it waits for the next open, as it
+ * does offline. A friend window shows it only on an open after the friend's first edit there. When this
+ * device says seen, the server is still asked in the background: a reset ("Show tips again" on another
+ * device) clears this device's flag, for the next open.
  */
 export function useTour(doc: Y.Doc, editor: string | null, ready: boolean): { open: boolean; finish(): void } {
   const [friend] = useState(isFriendWindow);
-  const [editedBy, setEditedBy] = useState<string | null>(null);
   const [shownFor, setShownFor] = useState<string | null>(null);
-  const edited = editor !== null && editedBy === editor;
 
-  // A friend window waits for this person's first edit (a change of theirs, not one arriving).
+  // A friend window remembers this person's first edit (a change of theirs, not one arriving), for the next open.
   useEffect(() => {
-    if (!friend || editor === null || edited) return;
+    if (!friend || editor === null || friendEditedHere(editor)) return;
     const onTransaction = (tr: Y.Transaction) => {
-      if (tr.origin === editor && tr.changed.size > 0) setEditedBy(editor);
+      if (tr.origin !== editor || tr.changed.size === 0) return;
+      rememberFriendEdited(editor);
+      doc.off("afterTransaction", onTransaction);
     };
     doc.on("afterTransaction", onTransaction);
     return () => doc.off("afterTransaction", onTransaction);
-  }, [doc, friend, editor, edited]);
+  }, [doc, friend, editor]);
 
-  const eligible = ready && editor !== null && (!friend || edited);
   useEffect(() => {
-    if (!eligible || editor === null) return;
+    if (!ready || editor === null || (friend && !friendEditedHere(editor))) return;
     const here = tipsSeenHere(editor);
-    if (here === "pending") void markTipsSeen(editor);
-    if (here !== null) return;
+    if (here === "pending") return void markTipsSeen(editor);
     let live = true;
+    let interacted = false;
+    const onInteract = () => {
+      interacted = true;
+    };
+    window.addEventListener("pointerdown", onInteract, true);
+    window.addEventListener("keydown", onInteract, true);
+    const stopListening = () => {
+      window.removeEventListener("pointerdown", onInteract, true);
+      window.removeEventListener("keydown", onInteract, true);
+    };
     void tipsSeenOnServer(editor).then((seen) => {
-      if (live && seen === false) setShownFor(editor);
+      stopListening();
+      if (!live || seen !== false) return;
+      if (here === "seen") forgetTipsSeenHere(editor);
+      else if (!interacted && !busy()) setShownFor(editor);
     });
     return () => {
       live = false;
+      stopListening();
     };
-  }, [eligible, editor]);
+  }, [ready, editor, friend]);
 
   return {
-    open: eligible && shownFor !== null && shownFor === editor,
+    open: ready && shownFor !== null && shownFor === editor,
     finish() {
       if (editor !== null) void markTipsSeen(editor);
       setShownFor(null);
@@ -137,7 +159,6 @@ export function Tour({ onDone }: { onDone(): void }) {
         />
         <Dialog.Content
           ref={card}
-          aria-modal="true"
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             next.current?.focus();
