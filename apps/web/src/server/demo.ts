@@ -5,6 +5,7 @@ import { auth } from "./auth";
 import { db } from "./db/client";
 import { tripMembers, trips, user } from "./db/schema";
 import { HttpError } from "./httpError";
+import { demoLimitApplies } from "./demoLimit";
 import { hashIp } from "./ipHash";
 import { hit } from "./rateLimit";
 import { addMember, createTrip, deleteTrip } from "./trips/repo";
@@ -55,8 +56,10 @@ async function createDemoUser(name: string, colour: string, kind: "visitor" | "f
  * exactly as Better Auth expects when it reads the cookie back.
  */
 export async function startDemo(input: { ip: string; locale: Locale }): Promise<{ sessionCookie: string; tripId: string }> {
-  const limited = await hit("demo:" + hashIp(input.ip), DEMO_STARTS_PER_IP_PER_DAY, DAY_SEC);
-  if (!limited.ok) throw new HttpError(429, "rate_limited");
+  if (demoLimitApplies()) {
+    const limited = await hit("demo:" + hashIp(input.ip), DEMO_STARTS_PER_IP_PER_DAY, DAY_SEC);
+    if (!limited.ok) throw new HttpError(429, "rate_limited");
+  }
 
   const created: string[] = [];
   let tripId: string | undefined;
