@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { DAY_TITLE_MAX, dayNote, dayTimeline, dayUrls, type DayPatch, type DayView, type PlaceView, type Slot, type TripView } from "@rota/trip";
 import type { StopWarning } from "@/client/useHours";
 import type { Travel } from "@/client/useTravel";
+import type { DayWeather } from "@/client/useWeather";
 import { dayColour } from "../map/mapFeatures";
 import { CommitInput } from "./CommitInput";
 import { Connector } from "./Connector";
@@ -20,6 +21,7 @@ import type { SuggestionActions } from "./Suggestions";
 import { Approximate, useDuration } from "./TravelLeg";
 import { listDropId, plannedLists, type Filter, type ListId } from "./plan";
 import type { TripViewState } from "./view";
+import { WeatherChip } from "./WeatherChip";
 
 /**
  * dnd-kit's own screen reader output (an assertive live region with English "Picked up draggable item
@@ -165,6 +167,7 @@ function DayHeader({
   end,
   onDay,
   onShift,
+  weather,
 }: {
   day: DayView;
   headingId: string;
@@ -172,6 +175,8 @@ function DayHeader({
   end: { time: string; nextDay: boolean } | null;
   onDay: ((patch: DayPatch) => void) | null;
   onShift: ((minutes: number) => void) | null;
+  /** The day's weather, on its title line (phones, where the header has no weather strip). */
+  weather?: DayWeather;
 }) {
   const t = useTranslations("trip");
   const locale = useLocale();
@@ -181,15 +186,25 @@ function DayHeader({
   const weekday = date ? new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(date) : "";
   const short = date ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(date) : "";
   const chip = "inline-flex h-[26px] items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[12.5px] text-ink-2";
+  const heading = (
+    <h2 id={headingId} className="flex min-w-0 items-center gap-2.5 font-serif text-[22px] font-semibold leading-tight">
+      <span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ background: dayColour(day.index) }} />
+      <span className="min-w-0">
+        {weekday ? t("dayTitle", { n: day.index + 1, weekday }) : t("day", { n: day.index + 1 })}{" "}
+        <span className="font-sans text-[13px] font-normal text-ink-2">{short}</span>
+      </span>
+    </h2>
+  );
   return (
     <div className="px-5 pb-2.5 pt-4">
-      <h2 id={headingId} className="flex min-w-0 items-center gap-2.5 font-serif text-[22px] font-semibold leading-tight">
-        <span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ background: dayColour(day.index) }} />
-        <span className="min-w-0">
-          {weekday ? t("dayTitle", { n: day.index + 1, weekday }) : t("day", { n: day.index + 1 })}{" "}
-          <span className="font-sans text-[13px] font-normal text-ink-2">{short}</span>
-        </span>
-      </h2>
+      {weather ? (
+        <div className="flex items-center justify-between gap-2">
+          {heading}
+          <WeatherChip weather={weather} />
+        </div>
+      ) : (
+        heading
+      )}
       <DayTitle day={day} onDay={onDay} />
       {/* Positioned: the Shift times popover opens under this row, from its left edge. */}
       <div data-day-actions className="relative mt-2 flex flex-wrap items-center gap-1.5">
@@ -356,6 +371,7 @@ export function DayPlan({
   onPreview,
   hoveredId = null,
   onHover,
+  weather,
 }: {
   view: TripView;
   shown: PlanView;
@@ -393,6 +409,8 @@ export function DayPlan({
   hoveredId?: string | null;
   /** The pointer went onto a row, or off it (null). */
   onHover?(id: string | null): void;
+  /** Each date's weather, shown on its day's title line (phones); none on wide screens, where the header has it. */
+  weather?: Record<string, DayWeather>;
 }) {
   const t = useTranslations("trip");
   const headingBase = useId();
@@ -440,6 +458,7 @@ export function DayPlan({
           end={end}
           onDay={actions && ((patch) => actions.setDay(day.id, patch))}
           onShift={actions && ((minutes) => actions.shiftTimes(day.id, minutes))}
+          weather={weather?.[day.date]}
         />
         {/* The day's note at the top, under its header (spec §2). */}
         <DayNote day={day} title={listLabel(day.id)} editable={actions !== null} />

@@ -138,7 +138,7 @@ export function Presence({
       aria-label={ts("peopleHere", { names: (members.length > 0 ? members.map((m) => m.name || t("someone")) : people.map((p) => p.name)).join(", ") })}
       title={ts("people")}
       onClick={(e) => onOpen(e.currentTarget)}
-      className="flex h-9 items-center rounded-full px-1 hover:bg-hover"
+      className="flex h-9 items-center rounded-full px-1 hover:bg-hover max-lg:h-11"
     >
       {list}
     </button>

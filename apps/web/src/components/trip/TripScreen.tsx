@@ -42,7 +42,6 @@ import { useWeather } from "@/client/useWeather";
 import { useRouter } from "@/i18n/navigation";
 import type { FriendWindow } from "../demo/FriendButton";
 import { SideBySide } from "../demo/SideBySide";
-import { BottomSheet, type Snap } from "../map/BottomSheet";
 import { dayColour } from "../map/mapFeatures";
 import { TripMap } from "../map/TripMap";
 import { card } from "../ui";
@@ -53,6 +52,8 @@ import { ClosedNotice } from "./ClosedNotice";
 import { DayPlan, SILENT, signedMinutes, type PlanActions } from "./DayPlan";
 import { DemoBox } from "./DemoBox";
 import { MoveDialog } from "./MoveDialog";
+import { AddPlaceButton, PhoneTabs, usePhoneTabs } from "./PhoneTripShell";
+import { PIN_CARD_DETAILS_ID, PIN_CARD_PX, PinCard } from "./PinCard";
 import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
 import { usePlaceControls } from "./placeControls";
 import { CollabContext, type Collab } from "./Presence";
@@ -63,6 +64,7 @@ import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
 import { Tour, useTour } from "./Tour";
 import { TripSettingsScreen } from "./TripSettingsScreen";
+import { useWide } from "./useWide";
 import { useTripView } from "./view";
 
 type Props = { tripId: string };
@@ -131,11 +133,15 @@ function TripScreenFor({ tripId }: Props) {
   const [picked, setPicked] = useState<string | null>(null);
   // The place whose details panel is open (a row or pin opened it).
   const [openId, setOpenId] = useState<string | null>(null);
-  // Phones: the full-screen map under the list's sheet, or the list alone.
-  const [phoneView, setPhoneView] = useState<"map" | "list">("map");
-  const [snap, setSnap] = useState<Snap>("half");
+  // Phones (below 1024 px): chips, bottom tabs, the floating ＋ and the pin card instead of the rail
+  // and side-by-side list and map (spec §6). The same screen underneath, so a resize keeps its state.
+  const wide = useWide();
+  const phone = usePhoneTabs(view, shown, show);
+  const onMapTab = !wide && phone.tab === "map";
   // Demo trips on wide screens: the friend's window beside this one.
   const [friend, setFriend] = useState<FriendWindow | null>(null);
+  // Demo trips: whether offline is simulated (the demo box's switch).
+  const [demoOffline, setDemoOffline] = useState(false);
   // The place being dragged: rows drop on rows, on lists, and on the rail's days and Ideas.
   const [dragging, setDragging] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -478,19 +484,23 @@ function TripScreenFor({ tripId }: Props) {
   const closeDetails = () => {
     const id = openId;
     setOpenId(null);
-    if (id !== null) requestAnimationFrame(() => document.getElementById(placeFocusId(id))?.focus());
+    // On the phone's Map tab the row is not on screen: back to the pin card's Details.
+    if (id !== null) requestAnimationFrame(() => document.getElementById(onMapTab ? PIN_CARD_DETAILS_ID : placeFocusId(id))?.focus());
   };
   // A click on the empty map closes the details (the place stays selected); focus goes back to its row
   // only if it was in the panel, so a pointer click elsewhere is not followed by a jump.
   const closeOnMapClick = () => {
+    // The phone's pin card goes too (the place is no longer selected).
+    if (onMapTab) setPicked(null);
     if (openId === null) return;
     if (document.activeElement?.closest("#place-details")) closeDetails();
     else setOpenId(null);
   };
-  // A pin: its row is selected and brought into view (the sheet comes up if it was down), its details open.
+  // A pin: its row is selected and brought into view, its details open. On the phone's Map tab it is
+  // selected and its card shows; the card's Details opens them.
   const selectPin = (id: string) => {
+    if (onMapTab) return select(id);
     openDetails(id);
-    if (snap === "peek") setSnap("half");
     const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     requestAnimationFrame(() => document.getElementById(placeRowId(id))?.scrollIntoView?.({ block: "nearest", behavior }));
   };
@@ -500,21 +510,24 @@ function TripScreenFor({ tripId }: Props) {
     label: l.id === null ? t("ideas") : `${labelIn(view, l.id)} · ${dayDate(view.days.find((d) => d.id === l.id)!.date)}`,
   }));
 
-  // The open place's details: where it is (its day's number, timeline and travel, or Ideas), who added it, its hours.
+  // Where a place is: its day's number, timeline and travel, or Ideas.
+  const whereOf = (listId: ListId, index: number): DetailsWhere => {
+    const day = view.days.find((d) => d.id === listId);
+    if (!day) return { kind: "ideas", label: t("ideas") };
+    const dayTravel = travel[day.id];
+    const timing = dayTimeline(day, dayTravel?.legs ?? [])[index];
+    const leg = index > 0 ? dayTravel?.legs[index - 1] : undefined;
+    // As on the row: a late arrival is only said once the travel before it is known.
+    const late = timing?.lateBy && !(leg?.approximate && dayTravel?.loading) ? { minutes: timing.lateBy, from: day.places[index - 1]?.name || t("unnamed") } : null;
+    return { kind: "day", label: labelIn(view, day.id), number: index + 1, colour: dayColour(day.index), mode: day.travelMode, timing, leg, late };
+  };
+
+  // The open place's details: where it is, who added it, its hours.
   let details = null;
   if (openId !== null && openList) {
     const index = openList.places.findIndex((p) => p.id === openId);
     const place = openList.places[index];
-    const day = view.days.find((d) => d.id === openList.id);
-    let where: DetailsWhere = { kind: "ideas", label: t("ideas") };
-    if (day) {
-      const dayTravel = travel[day.id];
-      const timing = dayTimeline(day, dayTravel?.legs ?? [])[index];
-      const leg = index > 0 ? dayTravel?.legs[index - 1] : undefined;
-      // As on the row: a late arrival is only said once the travel before it is known.
-      const late = timing?.lateBy && !(leg?.approximate && dayTravel?.loading) ? { minutes: timing.lateBy, from: day.places[index - 1]?.name || t("unnamed") } : null;
-      where = { kind: "day", label: labelIn(view, day.id), number: index + 1, colour: dayColour(day.index), mode: day.travelMode, timing, leg, late };
-    }
+    const where = whereOf(openList.id, index);
     details = (
       <PlaceDetails
         key={place.id}
@@ -530,6 +543,36 @@ function TripScreenFor({ tripId }: Props) {
       />
     );
   }
+
+  // The phone's Map tab: the selected place's card over the bottom of the map.
+  let pinCard = null;
+  const pickedList = selectedPlaceId === null ? undefined : listOf(selectedPlaceId);
+  if (onMapTab && selectedPlaceId !== null && pickedList) {
+    const index = pickedList.places.findIndex((p) => p.id === selectedPlaceId);
+    const id = selectedPlaceId;
+    pinCard = <PinCard key={id} place={pickedList.places[index]} where={whereOf(pickedList.id, index)} onDetails={() => openDetails(id)} onClose={() => setPicked(null)} />;
+  }
+  const demoBox = view.isDemo ? (
+    <DemoBox
+      tripId={tripId}
+      offline={demoOffline}
+      simulateOffline={(on) => {
+        simulateOffline(on);
+        setDemoOffline(on);
+      }}
+      onSideBySide={setFriend}
+    />
+  ) : undefined;
+  // Phones: the details are a modal sheet, and everything under it is inert.
+  const sheetOpen = !wide && details !== null;
+
+  // The floating ＋: to the search (on the Plan tab, from the Map tab).
+  const focusSearch = () => {
+    const go = () => document.querySelector<HTMLElement>("#main [role=combobox]")?.focus();
+    if (phone.tab !== "map") return go();
+    phone.choose("plan");
+    requestAnimationFrame(go);
+  };
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
@@ -558,48 +601,38 @@ function TripScreenFor({ tripId }: Props) {
           onDragEnd={onDragEnd}
         >
           <div className="flex h-dvh flex-col bg-paper">
-            <TripHeader
-              tripId={tripId}
-              view={view}
-              status={status}
-              weather={weather}
-              history={undo && { canUndo: undo.canUndo(), canRedo: undo.canRedo(), undo: undo.undo, redo: undo.redo }}
-              onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
-              settings={<TripSettingsScreen tripId={tripId} />}
-              people={{ self: userId ? (self ?? { id: userId, name: "", colour: "" }) : null, peers, members: view.members }}
-            />
-            {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
-            <div role="group" aria-label={tm("view")} className="flex justify-end gap-1 border-b border-line bg-surface px-3 py-1.5 lg:hidden">
-              {(["list", "map"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={phoneView === v}
-                  onClick={() => setPhoneView(v)}
-                  className="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-medium text-ink-2 aria-pressed:bg-ink aria-pressed:text-white"
-                >
-                  {v === "list" ? tm("showList") : tm("showMap")}
-                </button>
-              ))}
-            </div>
-            {/* Desktop: rail · list · map. Phones (until their own layout): the rail as a strip above the sheet and map. */}
-            <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[208px_400px_minmax(0,1fr)]">
-              <Rail
+            <div className="contents" inert={sheetOpen}>
+              <TripHeader
                 tripId={tripId}
-                trip={view}
-                selected={shown}
-                onSelect={show}
-                canAddDay={editor !== null}
-                dayActions={dayActions}
-                demo={view.isDemo ? <DemoBox tripId={tripId} simulateOffline={simulateOffline} onSideBySide={setFriend} /> : undefined}
+                view={view}
+                status={status}
+                weather={weather}
+                history={undo && { canUndo: undo.canUndo(), canRedo: undo.canRedo(), undo: undo.undo, redo: undo.redo }}
+                onRename={editor === null ? null : (name) => setTripMeta(doc, { name }, editor)}
+                settings={<TripSettingsScreen tripId={tripId} />}
+                people={{ self: userId ? (self ?? { id: userId, name: "", colour: "" }) : null, peers, members: view.members }}
               />
-              <div className="relative flex min-h-0 flex-1 flex-col lg:contents">
-                <BottomSheet off={phoneView === "list"} snap={snap} onSnap={setSnap}>
+              {editor === null && <p className="border-b border-warn-line bg-warn-bg px-4 py-2 text-[13px] text-warn-ink">{t("readOnly")}</p>}
+            </div>
+            {/* Desktop: rail · list · map. Phones: the day chips, then the plan or the map (the Map tab). */}
+            <div className="relative flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[208px_400px_minmax(0,1fr)]">
+              <div className="contents" inert={sheetOpen}>
+                <Rail
+                  tripId={tripId}
+                  trip={view}
+                  selected={shown}
+                  onSelect={show}
+                  canAddDay={editor !== null}
+                  dayActions={dayActions}
+                  demo={demoBox}
+                  compact={!wide}
+                />
+                <div className="relative flex min-h-0 flex-1 flex-col lg:contents">
                   <main
                     id="main"
                     tabIndex={-1}
                     aria-label={shown.kind === "checklist" ? t("checklist") : t("plan")}
-                    className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-24 outline-none max-lg:flex-1 lg:border-r lg:border-line"
+                    className={`min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-paper pb-24 outline-none max-lg:relative max-lg:z-10 max-lg:flex-1 lg:border-r lg:border-line ${phone.tab === "map" ? "max-lg:hidden" : ""}`}
                   >
                     {shown.kind === "checklist" ? (
                       <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
@@ -628,48 +661,59 @@ function TripScreenFor({ tripId }: Props) {
                         onPreview={setPreview}
                         hoveredId={hovered}
                         onHover={setHovered}
+                        weather={wide ? undefined : weather}
                       />
                     )}
+                    {/* Phones: the demo box under the plan (the rail has it on wide screens). */}
+                    {!wide && demoBox && <div className="px-5 pt-2">{demoBox}</div>}
                   </main>
-                </BottomSheet>
-                <section aria-label={t("map")} className={`relative min-h-0 max-lg:absolute max-lg:inset-0 ${phoneView === "list" ? "max-lg:hidden" : ""}`}>
-                  <TripMap
-                    view={view}
-                    hiddenIds={hiddenIds}
-                    // The checklist has no places: the map shows the whole trip meanwhile.
-                    shown={shown.kind === "checklist" ? { kind: "all" } : shown}
-                    selectedPlaceId={selectedPlaceId}
-                    panel={details !== null}
-                    onSelectPlace={selectPin}
-                    routeGeometry={routeGeometry}
-                    awareness={awareness}
-                    userId={userId}
-                    add={
-                      editor === null || full
-                        ? null
-                        : {
-                            lists,
-                            reverseGeocode,
-                            suggest: (dayId, at) => suggestedFor(view.days.find((d) => d.id === dayId), legsFor(dayId), at),
-                            onAdd: (place) => select(addOwn(() => addPlace(doc, place, editor), place.name.trim(), place.dayId, place.dayId === null ? null : place.time)),
-                          }
-                    }
-                    sheet={phoneView === "map" ? snap : null}
-                    preview={preview}
-                    hoveredPlaceId={hovered}
-                    onHoverPlace={setHovered}
-                    onMapClick={closeOnMapClick}
-                  />
-                  {status.kind === "offline" && (
-                    <p className="pointer-events-none absolute right-14 top-3 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
-                      {tm("incompleteOffline")}
-                    </p>
-                  )}
-                </section>
+                  {/* Phones: under the plan (kept sized, so it is ready), on top on the Map tab. */}
+                  <section aria-label={t("map")} className={`relative min-h-0 max-lg:absolute max-lg:inset-0 ${phone.tab === "map" ? "" : "max-lg:invisible"}`}>
+                    <TripMap
+                      view={view}
+                      hiddenIds={hiddenIds}
+                      // The checklist has no places: the map shows the whole trip meanwhile.
+                      shown={shown.kind === "checklist" ? { kind: "all" } : shown}
+                      selectedPlaceId={selectedPlaceId}
+                      panel={details !== null}
+                      onSelectPlace={selectPin}
+                      routeGeometry={routeGeometry}
+                      awareness={awareness}
+                      userId={userId}
+                      add={
+                        editor === null || full
+                          ? null
+                          : {
+                              lists,
+                              reverseGeocode,
+                              suggest: (dayId, at) => suggestedFor(view.days.find((d) => d.id === dayId), legsFor(dayId), at),
+                              onAdd: (place) => select(addOwn(() => addPlace(doc, place, editor), place.name.trim(), place.dayId, place.dayId === null ? null : place.time)),
+                            }
+                      }
+                      coveredBottom={pinCard ? PIN_CARD_PX : 0}
+                      preview={preview}
+                      hoveredPlaceId={hovered}
+                      onHoverPlace={setHovered}
+                      onMapClick={closeOnMapClick}
+                    />
+                    {status.kind === "offline" && (
+                      <p className="pointer-events-none absolute right-14 top-3 z-[3] rounded-lg border border-warn-line bg-warn-bg px-2.5 py-1 text-[12.5px] text-warn-ink shadow-1">
+                        {tm("incompleteOffline")}
+                      </p>
+                    )}
+                    {pinCard}
+                  </section>
+                  {!wide && editor !== null && !full && phone.tab !== "checklist" && pinCard === null && <AddPlaceButton onClick={focusSearch} />}
+                </div>
               </div>
-              {/* Over the map's left edge (wide screens), or a full-height sheet (phones). */}
+              {/* Over the map's left edge (wide screens), or a full-height modal sheet (phones). */}
               {details}
             </div>
+            {!wide && (
+              <div className="contents" inert={sheetOpen}>
+                <PhoneTabs tab={phone.tab} onChoose={phone.choose} />
+              </div>
+            )}
             <p data-testid="plan-status" role="status" aria-live="polite" className="sr-only">
               {controls.status}
             </p>

@@ -417,18 +417,14 @@
       "cafe": "kafe",
       "museum": "müze"
     },
-    "ideasEmptyReadOnly": "Henüz fikir yok. Gidebileceğiniz yerler burada görünür."
+    "ideasEmptyReadOnly": "Henüz fikir yok. Gidebileceğiniz yerler burada görünür.",
+    "stayFor": "{duration} kalış",
+    "googleMaps": "Google Haritalar",
+    "details": "Ayrıntılar",
+    "phoneTabs": "Gezi bölümleri",
+    "addPlace": "Yer ekle"
   },
   "map": {
-    "sheetHandle": "Listeyi yeniden boyutlandır",
-    "sheet": {
-      "peek": "Liste küçültüldü",
-      "half": "Liste yarıya kadar açık",
-      "full": "Liste tamamen açık"
-    },
-    "view": "Göster",
-    "showList": "Liste",
-    "showMap": "Harita",
     "fit": "Haritayı yerlere sığdır",
     "zoomIn": "Yakınlaştır",
     "zoomOut": "Uzaklaştır",
@@ -498,7 +494,9 @@
     "rename": "Yeniden adlandır",
     "deleteDay": "Günü sil",
     "lastDay": "Bir gezide en az bir gün olmalı.",
-    "dayMoved": "{day} artık {n}. Gün, {date}"
+    "dayMoved": "{day} artık {n}. Gün, {date}",
+    "days": "Günler",
+    "allShort": "Tümü"
   },
   "share": {
     "title": "Paylaş",

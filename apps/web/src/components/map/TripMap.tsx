@@ -10,7 +10,6 @@ import { Icon } from "../trip/icons";
 import type { ListChoice } from "../trip/MoveDialog";
 import type { PreviewPlace } from "../trip/SearchBar";
 import { AddHere, type NewMapPlace, type ReverseGeocode, type SuggestAt } from "./AddHere";
-import { PEEK_PX, type Snap } from "./BottomSheet";
 import { MapLoaderContext, type Camera, type LngLat, type MapView, type Padding } from "./engine";
 import { labelledPins, mapFeatures, pinLabel, type MapShown, type Pin } from "./mapFeatures";
 
@@ -52,8 +51,8 @@ type Props = {
     suggest?: SuggestAt;
     onAdd(place: NewMapPlace): void;
   } | null;
-  /** How far the phone's list sheet is pulled up over the map; null when it is not over the map. */
-  sheet: Snap | null;
+  /** How much of the map's bottom (px) something covers on phones (the Map tab's pin card); 0 for nothing. */
+  coveredBottom?: number;
   /** A search result hovered or arrowed to: a temporary pin, drawn on this map only (never saved or shared). */
   preview?: PreviewPlace | null;
   /** The place hovered in the list or on the map: its pin is highlighted, its label shown. */
@@ -88,7 +87,7 @@ export function TripMap({
   awareness,
   userId,
   add,
-  sheet,
+  coveredBottom = 0,
   preview = null,
   hoveredPlaceId = null,
   onHoverPlace,
@@ -107,12 +106,12 @@ export function TripMap({
     [view, shownKey, shownDayId, hiddenIds, routeGeometry],
   );
 
-  // Room for the controls, for the details panel over the left edge (wide screens), and for the sheet
-  // where it covers the bottom of the map (phones). The panel's share is capped so at least
+  // Room for the controls, for the details panel over the left edge (wide screens), and for the pin
+  // card where it covers the bottom of the map (phones). The panel's share is capped so at least
   // MIN_FIT_WIDTH px are left to fit into: a narrow map (a window just over 1024 px) is mostly under it.
   const padding = ({ width, height }: { width: number; height: number }): Padding => {
     const isWide = wide();
-    const covered = isWide || sheet === null || sheet === "full" ? 0 : sheet === "half" ? height / 2 : PEEK_PX;
+    const covered = isWide ? 0 : Math.min(coveredBottom, height / 2);
     const right = 56;
     const left = isWide && panel ? Math.max(32, Math.min(32 + PANEL_COVER_PX, width - right - MIN_FIT_WIDTH)) : 32;
     return { top: 48, right, bottom: 32 + covered, left };

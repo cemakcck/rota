@@ -26,6 +26,8 @@ function useWide(): boolean {
 
 type Props = {
   tripId: string;
+  /** Whether offline is simulated now (kept by the screen, so the box can move between layouts). */
+  offline: boolean;
   simulateOffline(on: boolean): void;
   onSideBySide(friend: FriendWindow): void;
 };
@@ -35,7 +37,7 @@ type Props = {
  * (and "Side by side" on wide screens) and "Simulate offline". A friend window shows who you are there
  * instead.
  */
-export function DemoBox({ tripId, simulateOffline, onSideBySide }: Props) {
+export function DemoBox({ tripId, offline, simulateOffline, onSideBySide }: Props) {
   const t = useTranslations("demo");
   const locale = useLocale();
   // Window state, read after hydration (the server renders the visitor's view).
@@ -45,7 +47,6 @@ export function DemoBox({ tripId, simulateOffline, onSideBySide }: Props) {
     () => null,
   );
   const wide = useWide();
-  const [offline, setOffline] = useState(false);
   const [failed, setFailed] = useState(false);
 
   if (friendName !== null)
@@ -53,7 +54,6 @@ export function DemoBox({ tripId, simulateOffline, onSideBySide }: Props) {
 
   const toggleOffline = () => {
     simulateOffline(!offline);
-    setOffline(!offline);
   };
   const sideBySide = async () => {
     setFailed(false);

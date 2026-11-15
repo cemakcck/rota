@@ -417,18 +417,14 @@
       "cafe": "cafe",
       "museum": "museum"
     },
-    "ideasEmptyReadOnly": "No ideas yet. Places you might visit show up here."
+    "ideasEmptyReadOnly": "No ideas yet. Places you might visit show up here.",
+    "stayFor": "stay {duration}",
+    "googleMaps": "Google Maps",
+    "details": "Details",
+    "phoneTabs": "Trip views",
+    "addPlace": "Add place"
   },
   "map": {
-    "sheetHandle": "Resize the list",
-    "sheet": {
-      "peek": "List minimised",
-      "half": "List half open",
-      "full": "List fully open"
-    },
-    "view": "Show",
-    "showList": "List",
-    "showMap": "Map",
     "fit": "Fit the map to the places",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -498,7 +494,9 @@
     "rename": "Rename",
     "deleteDay": "Delete day",
     "lastDay": "A trip needs at least one day.",
-    "dayMoved": "{day} is now Day {n}, {date}"
+    "dayMoved": "{day} is now Day {n}, {date}",
+    "days": "Days",
+    "allShort": "All"
   },
   "share": {
     "title": "Share",

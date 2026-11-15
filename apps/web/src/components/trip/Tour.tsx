@@ -108,15 +108,23 @@ function place(rect: DOMRect | null, card: { width: number; height: number }): C
 }
 
 /**
- * The first-time tour (spec §4): three steps pointing at the rail, the search and Share. A modal dialog:
+ * The first-time tour (spec §4): three steps pointing at the days (the rail, or the phone's day chips),
+ * the search and Share; a step whose target is not on the page when the tour opens is left out. A modal dialog:
  * focus moves into it (on Next) and stays there, Escape or Skip tour ends it, and focus goes back to
  * where it was. The step's target is outlined and brought into view (instantly when motion is reduced).
  */
 export function Tour({ onDone }: { onDone(): void }) {
   const t = useTranslations("tour");
+  // The steps whose targets are on the page as the tour opens (all of them if none is).
+  const [steps, setSteps] = useState<readonly Step[]>(STEPS);
+  useLayoutEffect(() => {
+    const here = STEPS.filter((s) => document.querySelector(`[data-tour="${s}"]`) !== null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read from the page once, before the first paint
+    if (here.length > 0 && here.length < STEPS.length) setSteps(here);
+  }, []);
   const [index, setIndex] = useState(0);
-  const step = STEPS[index];
-  const last = index === STEPS.length - 1;
+  const step = steps[index];
+  const last = index === steps.length - 1;
   const card = useRef<HTMLDivElement>(null);
   const next = useRef<HTMLButtonElement>(null);
   // Where focus was when the tour opened: it goes back there after (to the plan if that is gone).
@@ -173,7 +181,7 @@ export function Tour({ onDone }: { onDone(): void }) {
           className="fixed z-50 grid gap-3 rounded-xl border border-line bg-surface p-4 shadow-2 outline-none motion-safe:transition-[left,top] motion-safe:duration-200"
         >
           <Dialog.Title className="text-[16px] font-semibold leading-snug text-ink">{t(step)}</Dialog.Title>
-          <Dialog.Description className="text-[12.5px] text-ink-2">{t("progress", { n: index + 1, total: STEPS.length })}</Dialog.Description>
+          <Dialog.Description className="text-[12.5px] text-ink-2">{t("progress", { n: index + 1, total: steps.length })}</Dialog.Description>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={`${btn} ${btnSm}`} onClick={onDone}>
               {t("skip")}

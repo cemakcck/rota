@@ -104,7 +104,7 @@ function ToastView({ toast, onClose, fallbackFocus }: { toast: Shown | null; onC
       data-action-toast={toast ? "" : undefined}
       className={
         toast
-          ? "fixed bottom-4 left-1/2 z-30 flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-3"
+          ? "fixed bottom-4 left-1/2 z-30 max-lg:bottom-[76px] flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-3"
           : "sr-only"
       }
       onMouseEnter={() => setHovered(true)}

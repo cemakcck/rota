@@ -16,6 +16,7 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import { TripScreen } from "@/components/trip/TripScreen";
+import { Tour } from "@/components/trip/Tour";
 
 const at = (search: string) => window.history.replaceState(null, "", `/en/t/t1${search}`);
 
@@ -284,5 +285,21 @@ describe("first-time tour", () => {
     renderIntl(<TripScreen tripId="t1" />);
     await screen.findByRole("dialog");
     expect(scrolled.at(-1)?.behavior).toBe("smooth");
+  });
+
+  it("leaves out a step whose target is not on the page, without failing", () => {
+    renderIntl(
+      <>
+        <div data-tour="search" />
+        <button type="button" data-tour="share">
+          Share
+        </button>
+        <Tour onDone={() => undefined} />
+      </>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Add a place — pick a time before it goes in" });
+    expect(dialog.textContent).toContain("Step 1 of 2");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("dialog", { name: "Invite friends to plan together" }).textContent).toContain("Step 2 of 2");
   });
 });

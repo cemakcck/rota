@@ -17,7 +17,8 @@ import { Presence } from "./Presence";
 import { SyncIndicator } from "./SyncIndicator";
 import { WeatherChip } from "./WeatherChip";
 
-const iconButton = "grid size-8 place-items-center rounded-lg text-ink-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40";
+// 44 px touch targets on phones.
+const iconButton = "grid size-8 max-lg:size-11 place-items-center rounded-lg text-ink-2 hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40";
 
 /** "Fri, Nov 27 – Sun, Nov 29" for the trip's calendar days (formatted in UTC: they are dates, not instants). */
 function dateRange(locale: string, startDate: string, days: number): string {
@@ -279,8 +280,8 @@ export function TripHeader({
   const alone = userId !== null && people.members.length === 1 && people.members[0].id === userId;
   const places = view.days.reduce((n, d) => n + d.places.length, 0);
   return (
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-surface px-3 py-2.5 sm:px-5 lg:h-16 lg:flex-nowrap lg:py-0">
-      <Link href="/trips" aria-label={t("home")} className="flex h-8 items-center gap-2 text-[15px] font-bold">
+    <header className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-3 py-1.5 sm:gap-x-4 sm:px-5 lg:h-16 lg:flex-nowrap lg:py-0">
+      <Link href="/trips" aria-label={t("home")} className="flex h-8 items-center gap-2 text-[15px] font-bold max-lg:h-11">
         <svg viewBox="0 0 26 26" width={26} height={26} aria-hidden="true">
           <rect width="26" height="26" rx="8" fill="#1c1917" />
           <path d="M13 7a4.5 4.5 0 0 0-4.5 4.5c0 3.4 4.5 7.5 4.5 7.5s4.5-4.1 4.5-7.5A4.5 4.5 0 0 0 13 7z" stroke="#fff" strokeWidth="2.2" fill="none" />
@@ -289,7 +290,8 @@ export function TripHeader({
       </Link>
       <div className="grid min-w-0 flex-1 basis-40 gap-px">
         <TripName name={view.name} onRename={onRename} />
-        <p className="truncate text-[12.5px] text-ink-2">
+        {/* Phones keep the header compact: the dates are on the day chips and headings. */}
+        <p className="truncate text-[12.5px] text-ink-2 max-lg:hidden">
           {t("summary", {
             range: dateRange(locale, view.startDate, view.days.length),
             days: view.days.length,
@@ -312,7 +314,7 @@ export function TripHeader({
           aria-haspopup="dialog"
           data-tour="share"
           onClick={(e) => openPeople(e.currentTarget)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-ink-2"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-ink-2 max-lg:h-11"
         >
           {alone && <Icon name="plus" size={14} />}
           {alone ? ts("inviteFriends") : ts("title")}

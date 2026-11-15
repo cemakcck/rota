@@ -18,6 +18,9 @@ export const RAIL_IDEAS_DROP_ID = "rail:ideas";
 const entry =
   "w-full rounded-xl border border-transparent px-3 text-left hover:bg-hover aria-[current=true]:border-line aria-[current=true]:bg-surface aria-[current=true]:shadow-1 max-lg:w-auto max-lg:shrink-0";
 const overLook = "outline-2 outline-dashed outline-ink-2 -outline-offset-2";
+/** A day chip on phones (and the strip's other chips). */
+const chip =
+  "inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium text-ink hover:bg-hover aria-[current=true]:border-ink aria-[current=true]:bg-ink aria-[current=true]:text-white disabled:opacity-60";
 
 /** What can be done to a day from the rail (its ⋯ menu, or dragging it); null while the user cannot edit. */
 export type DayActions = {
@@ -147,7 +150,7 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
           e.stopPropagation();
           close();
         }}
-        className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover hover:text-ink aria-expanded:bg-hover aria-expanded:text-ink"
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover hover:text-ink aria-expanded:bg-hover aria-expanded:text-ink max-lg:size-11"
       >
         <Icon name="more" />
       </button>
@@ -251,6 +254,7 @@ function RailDay({
   onSelect,
   total,
   actions,
+  compact,
 }: {
   day: DayView;
   label: string;
@@ -259,11 +263,24 @@ function RailDay({
   onSelect(): void;
   total: number;
   actions: DayActions | null;
+  compact: boolean;
 }) {
   const { setNodeRef: dropRef, isOver } = useDroppable({ id: railDayDropId(day.id) });
   // Dragged by pointer only (the ⋯ menu's Move up/down is the keyboard way), so dnd-kit's attributes
-  // (a "draggable" role description and keyboard instructions) stay off.
-  const { setNodeRef: dragRef, listeners, isDragging } = useDraggable({ id: railDayDragId(day.id), disabled: actions === null });
+  // (a "draggable" role description and keyboard instructions) stay off. Not the phone's chips: a
+  // finger on them scrolls the strip.
+  const { setNodeRef: dragRef, listeners, isDragging } = useDraggable({ id: railDayDragId(day.id), disabled: actions === null || compact });
+  if (compact)
+    return (
+      <>
+        <button ref={dropRef} id={railDayButtonId(day.id)} type="button" data-drop={railDayDropId(day.id)} aria-current={selected ? "true" : undefined} onClick={onSelect} className={`${chip} ${isOver ? overLook : ""}`}>
+          <span data-day-colour aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: dayColour(day.index) }} />
+          {label}
+        </button>
+        {/* The chosen day's ⋯ only, to keep the strip short. */}
+        {actions && selected && <DayMenu day={day} n={day.index + 1} total={total} actions={actions} />}
+      </>
+    );
   return (
     <div className={`flex items-start gap-0.5 max-lg:shrink-0 ${isDragging ? "opacity-50" : ""}`}>
       <button
@@ -323,10 +340,14 @@ function RailDropTab({ id, ...props }: TabProps & { id: string }) {
 }
 
 /**
- * The trip's left rail (desktop; a scrolling strip on phones until the phone layout lands): each day
+ * The trip's left rail on wide screens: each day
  * with its colour, date and a one-line summary (its title, else how many stops), "Add a day", then Ideas & votes, the checklist and the
  * whole trip on the map, and the demo box at the bottom. Days and Ideas are drop targets for rows; an editor
  * also drags days onto each other to reorder them, or uses each day's ⋯ menu (Move up/down, Rename, Delete day).
+ * On phones (`compact`, spec §6) it is the header's strip of day chips (Day 1 · Day 2 · … · All) with the
+ * chosen day's ⋯ menu and "Add a day"; Ideas and the checklist are the phone's tabs, and the demo box
+ * goes under the plan (see TripScreen). The same element in
+ * both layouts, so a resize keeps it (and the tour's spotlight on it).
  */
 export function Rail({
   tripId,
@@ -336,6 +357,7 @@ export function Rail({
   canAddDay,
   dayActions,
   demo,
+  compact = false,
 }: {
   tripId: string;
   trip: TripView;
@@ -346,6 +368,8 @@ export function Rail({
   /** Reordering, renaming and deleting days; null while the user cannot edit. */
   dayActions: DayActions | null;
   demo?: ReactNode;
+  /** The phone's day chips instead of the rail. */
+  compact?: boolean;
 }) {
   const t = useTranslations("rail");
   const tt = useTranslations("trip");
@@ -360,6 +384,15 @@ export function Rail({
     const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(at);
     return t("date", { weekday, day: at.getUTCDate() });
   };
+  // Phones: the chosen chip is scrolled into the strip (a deep link to Day 4 shows Day 4).
+  const strip = useRef<HTMLElement>(null);
+  const selectedKey = selected.kind === "day" ? selected.dayId : selected.kind;
+  useEffect(() => {
+    const nav = strip.current;
+    const chosen = nav?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!compact || !nav || !chosen) return;
+    if (chosen.offsetLeft < nav.scrollLeft || chosen.offsetLeft + chosen.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = chosen.offsetLeft - 12;
+  }, [compact, selectedKey]);
   const done = trip.checklist.filter((i) => i.done).length;
   const ideas = trip.ideas.length + trip.suggestions.length;
 
@@ -383,9 +416,14 @@ export function Rail({
 
   return (
     <nav
+      ref={strip}
       data-tour="days"
-      aria-label={t("label")}
-      className="flex gap-1.5 border-line bg-paper px-3 py-4 max-lg:relative max-lg:z-20 max-lg:items-center max-lg:overflow-x-auto max-lg:border-b max-lg:py-2 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
+      aria-label={compact ? t("days") : t("label")}
+      className={
+        compact
+          ? "relative z-20 flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-3 py-1.5 [scrollbar-width:none]"
+          : "flex gap-1.5 border-line bg-paper px-3 py-4 max-lg:relative max-lg:z-20 max-lg:items-center max-lg:overflow-x-auto max-lg:border-b max-lg:py-2 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
+      }
     >
       {trip.days.map((day) => (
         <RailDay
@@ -397,10 +435,11 @@ export function Rail({
           onSelect={() => onSelect({ kind: "day", dayId: day.id })}
           total={trip.days.length}
           actions={dayActions}
+          compact={compact}
         />
       ))}
       {canAddDay && trip.days.length < 30 && (
-        <button type="button" disabled={adding} onClick={addDay} className={`${entry} py-2 text-ink-2 disabled:opacity-60`}>
+        <button type="button" disabled={adding} onClick={addDay} className={compact ? `${chip} text-ink-2` : `${entry} py-2 text-ink-2 disabled:opacity-60`}>
           {`+ ${t("addDay")}`}
         </button>
       )}
@@ -409,24 +448,32 @@ export function Rail({
           {failure}
         </p>
       )}
-      <hr className="mx-1 my-2 border-line max-lg:hidden" />
-      <RailDropTab
-        label={t("ideas")}
-        name={t("ideasCount", { count: ideas })}
-        count={String(ideas)}
-        id={RAIL_IDEAS_DROP_ID}
-        selected={selected.kind === "ideas"}
-        onSelect={() => onSelect({ kind: "ideas" })}
-      />
-      <RailTab
-        label={tt("checklist")}
-        name={trip.checklist.length > 0 ? `${tt("checklist")}, ${tt("checklistDone", { done, total: trip.checklist.length })}` : undefined}
-        count={trip.checklist.length > 0 ? `${done}/${trip.checklist.length}` : undefined}
-        selected={selected.kind === "checklist"}
-        onSelect={() => onSelect({ kind: "checklist" })}
-      />
-      <RailTab label={t("all")} selected={selected.kind === "all"} onSelect={() => onSelect({ kind: "all" })} />
-      {demo && <div className="max-lg:shrink-0 lg:mt-auto lg:pt-3">{demo}</div>}
+      {compact ? (
+        <button type="button" aria-current={selected.kind === "all" ? "true" : undefined} onClick={() => onSelect({ kind: "all" })} className={chip}>
+          {t("allShort")}
+        </button>
+      ) : (
+        <>
+          <hr className="mx-1 my-2 border-line max-lg:hidden" />
+          <RailDropTab
+            label={t("ideas")}
+            name={t("ideasCount", { count: ideas })}
+            count={String(ideas)}
+            id={RAIL_IDEAS_DROP_ID}
+            selected={selected.kind === "ideas"}
+            onSelect={() => onSelect({ kind: "ideas" })}
+          />
+          <RailTab
+            label={tt("checklist")}
+            name={trip.checklist.length > 0 ? `${tt("checklist")}, ${tt("checklistDone", { done, total: trip.checklist.length })}` : undefined}
+            count={trip.checklist.length > 0 ? `${done}/${trip.checklist.length}` : undefined}
+            selected={selected.kind === "checklist"}
+            onSelect={() => onSelect({ kind: "checklist" })}
+          />
+          <RailTab label={t("all")} selected={selected.kind === "all"} onSelect={() => onSelect({ kind: "all" })} />
+        </>
+      )}
+      {demo && !compact && <div className="max-lg:shrink-0 lg:mt-auto lg:pt-3">{demo}</div>}
     </nav>
   );
 }

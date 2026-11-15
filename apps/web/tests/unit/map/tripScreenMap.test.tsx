@@ -136,17 +136,4 @@ describe("trip screen map", () => {
     fireEvent.change(within(again).getByLabelText("Add to"), { target: { value: "" } });
     expect(within(again).queryByLabelText("Time")).toBeNull();
   });
-
-  it("phones switch between the map with the list's sheet and the list alone", async () => {
-    await open();
-    const toggle = screen.getByRole("group", { name: "Show" });
-    const map = screen.getByRole("region", { name: "Map" });
-    expect(screen.getByRole("button", { name: "Resize the list" })).toBeTruthy();
-    fireEvent.click(within(toggle).getByRole("button", { name: "List" }));
-    expect(within(toggle).getByRole("button", { name: "List" }).getAttribute("aria-pressed")).toBe("true");
-    expect(map.className).toContain("max-lg:hidden");
-    expect(screen.queryByRole("button", { name: "Resize the list" })).toBeNull();
-    fireEvent.click(within(toggle).getByRole("button", { name: "Map" }));
-    expect(map.className).not.toContain("max-lg:hidden");
-  });
 });

@@ -74,7 +74,6 @@ function setup(overrides: Partial<Parameters<typeof TripMap>[0]> = {}, map: Para
       ],
       onAdd: vi.fn(),
     },
-    sheet: null,
     ...overrides,
   };
   const ui = (p: typeof props) => (

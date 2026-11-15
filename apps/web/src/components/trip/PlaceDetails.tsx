@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { normaliseTags, placeNote, placeUrl, type Leg, type MemberView, type PlaceView, type TimelineEntry, type TravelMode } from "@rota/trip";
 import type { StopHours, StopWarning } from "@/client/useHours";
@@ -15,23 +15,10 @@ import { WarnLine, placeMoveId, type StopActions } from "./StopRow";
 import { TagInput } from "./TagInput";
 import { Approximate, TravelLeg, useStay } from "./TravelLeg";
 import { parseTime } from "./plan";
+import { useWide } from "./useWide";
 
 /** Stay lengths offered in the details (the place's own one is added when it is not among them; any other via Custom…). */
 const STAYS = [0, 5, 10, 15, 20, 30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480];
-
-/** Wide screens (the desktop layout, ≥ 1024 px): the details are a card beside the plan, not a modal sheet. */
-const WIDE = "(min-width: 1024px)";
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia?.(WIDE);
-      query?.addEventListener?.("change", onChange);
-      return () => query?.removeEventListener?.("change", onChange);
-    },
-    () => window.matchMedia?.(WIDE).matches ?? true,
-    () => true,
-  );
-}
 
 const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea, [contenteditable=true]";
 
