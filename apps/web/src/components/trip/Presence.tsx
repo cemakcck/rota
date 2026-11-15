@@ -105,18 +105,19 @@ export function Presence({
   ];
   const shown = people.slice(0, MAX_AVATARS);
   const rest = people.slice(MAX_AVATARS);
-  // Inside a button only phrasing content is allowed: the list is spans with list roles then.
+  // Inside a button (whose children are presentational) the list is plain spans: the button's name
+  // carries it instead.
   const List = onOpen ? "span" : "ul";
   const Item = onOpen ? "span" : "li";
   const list = (
-    <List role={onOpen ? "list" : undefined} aria-label={t("here")} className="flex items-center">
+    <List aria-label={onOpen ? undefined : t("here")} className="flex items-center">
       {shown.map((p, i) => (
-        <Item key={p.key} role={onOpen ? "listitem" : undefined} className={`flex ${i > 0 ? "-ml-1.5" : ""}`}>
+        <Item key={p.key} className={`flex ${i > 0 ? "-ml-1.5" : ""}`}>
           <Avatar name={p.name} colour={p.colour} label={p.label} />
         </Item>
       ))}
       {rest.length > 0 && (
-        <Item role={onOpen ? "listitem" : undefined} className="-ml-1.5 flex">
+        <Item className="-ml-1.5 flex">
           <span
             role="img"
             aria-label={t("moreHere", { count: rest.length, names: rest.map((p) => p.name).join(", ") })}
@@ -134,12 +135,16 @@ export function Presence({
     <button
       type="button"
       aria-haspopup="dialog"
-      // Named for who is on the trip (its content, the avatars of who is here now, is not read inside a button).
-      aria-label={ts("peopleHere", { names: (members.length > 0 ? members.map((m) => m.name || t("someone")) : people.map((p) => p.name)).join(", ") })}
       title={ts("people")}
       onClick={(e) => onOpen(e.currentTarget)}
       className="flex h-9 items-center rounded-full px-1 hover:bg-hover max-lg:h-11 max-lg:min-w-11 max-lg:justify-center"
     >
+      {/* Named by its content, not aria-label: who is on the trip, then the avatars shown (each named), so
+          what is seen is part of the name (label in name, WCAG 2.5.3). */}
+      <span className="sr-only">
+        {ts("peopleHere", { names: (members.length > 0 ? members.map((m) => m.name || t("someone")) : people.map((p) => p.name)).join(", ") })}
+        {`. ${t("here")}: `}
+      </span>
       {list}
     </button>
   );

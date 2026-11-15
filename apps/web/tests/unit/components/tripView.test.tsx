@@ -247,7 +247,7 @@ describe("trip view", () => {
         .map((c) => c.getAttribute("aria-label")),
     ).toEqual(["Fri: Clear, high 17°, low 9°", "Sat: Cloudy, high 14°, low 8°"]);
     expect(within(header).getByText("Synced")).toBeTruthy();
-    expect(within(within(header).getByRole("list", { name: "In this trip now" })).getByRole("img", { name: /Ann/ })).toBeTruthy();
+    expect(within(within(header).getByRole("button", { name: /^People: .*\. In this trip now:/ })).getByRole("img", { name: /Ann/ })).toBeTruthy();
 
     fireEvent.click(within(header).getByRole("button", { name: "Share" }));
     const dialog = await screen.findByRole("dialog", { name: "People" });

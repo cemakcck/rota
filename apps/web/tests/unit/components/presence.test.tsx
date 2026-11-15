@@ -77,7 +77,8 @@ describe("presence", () => {
     people.forEach((p) => upsertMember(doc, p));
     renderIntl(<TripScreen tripId="t1" />);
 
-    const here = () => screen.getByRole("list", { name: "In this trip now" });
+    // The avatars of who is here now, inside the people button (named by them: "… In this trip now: Ann (you) Deniz").
+    const here = () => screen.getByRole("button", { name: /^People: .*\. In this trip now:/ });
     // Just this person.
     expect(within(here()).getAllByRole("img").map((a) => a.getAttribute("aria-label"))).toEqual(["Ann (you)"]);
 
