@@ -376,4 +376,32 @@ describe("phone trip layout", () => {
     // Not chosen: no fill.
     expect(chip(/^Day 2 · /).style.backgroundColor).toBe("");
   });
+
+  it("a resize after focus left for the page does not pull focus back", () => {
+    openTrip();
+    chip(/^Day 2 · /).focus();
+    chip(/^Day 2 · /).blur();
+    expect(document.activeElement).toBe(document.body);
+    resize(1280);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("the pin card keeps one line for the name and one for the facts, whatever their length", async () => {
+    const { doc, dayIds } = newTrip();
+    const long = "The Very Long Named Rooftop Restaurant With A View Over The Golden Horn And Beyond";
+    const id = addPlace(doc, { name: long, category: "food", dayId: dayIds[0], lat: 41.0256, lng: 28.9742 }, "u1");
+    const map = fakeMap();
+    renderIntl(
+      <MapLoaderContext.Provider value={map.load}>
+        <TripScreen tripId="t1" />
+      </MapLoaderContext.Provider>,
+    );
+    fireEvent.click(tab("Map"));
+    await waitFor(() => expect(pin(id)).toBeTruthy());
+    fireEvent.click(pin(id));
+    // The full name is still the card's name, shown on one clipped line.
+    const card = screen.getByRole("region", { name: long });
+    expect(within(card).getByRole("heading", { name: long }).className).toContain("truncate");
+    expect(within(card).getByTestId("pin-card-facts").className).toContain("truncate");
+  });
 });

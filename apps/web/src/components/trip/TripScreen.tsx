@@ -286,8 +286,16 @@ function TripScreenFor({ tripId }: Props) {
     const onFocus = (e: FocusEvent) => {
       if (e.target instanceof HTMLElement) lastFocused.current = e.target;
     };
+    // Focus left for the page (the element is still there): nothing to bring back on a resize.
+    const onBlur = (e: FocusEvent) => {
+      if (e.relatedTarget === null && e.target instanceof Node && e.target.isConnected) lastFocused.current = null;
+    };
     document.addEventListener("focusin", onFocus);
-    return () => document.removeEventListener("focusin", onFocus);
+    document.addEventListener("focusout", onBlur);
+    return () => {
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("focusout", onBlur);
+    };
   }, []);
   const layoutSeen = useRef(wide);
   useLayoutEffect(() => {

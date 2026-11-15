@@ -19,6 +19,8 @@ export const PIN_CARD_PX = 140;
  * The phone's Map tab: the selected pin's card, pulled up over the bottom of the map (spec §6). Its
  * number in the day's colour, its name, when it is reached, how long it is stayed and the travel to it
  * (arrive · stay · walk), then Google Maps and Details; ✕ puts it away. Ideas have no number or timing.
+ * The name and the facts keep one line each (clipped with an ellipsis; the full name stays the card's
+ * accessible name), so the card's height is fixed and PIN_CARD_PX stays true.
  */
 export function PinCard({ place, where, onDetails, onClose }: { place: PlaceView; where: DetailsWhere; onDetails(): void; onClose(): void }) {
   const t = useTranslations("trip");
@@ -59,10 +61,10 @@ export function PinCard({ place, where, onDetails, onClose }: { place: PlaceView
           </span>
         )}
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 id={nameId} className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">
+          <h2 id={nameId} className="truncate text-[15px] font-semibold leading-snug">
             {name}
           </h2>
-          <p data-testid="pin-card-facts" className="mt-0.5 text-[12.5px] text-ink-2">
+          <p data-testid="pin-card-facts" className="mt-0.5 truncate text-[12.5px] text-ink-2">
             {facts.map((fact, i) => (
               <Fragment key={i}>
                 {i > 0 && " · "}
