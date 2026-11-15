@@ -98,8 +98,9 @@ function Item({
           <Icon name="grip" size={16} />
         </span>
       )}
-      {/* Phones: the box is drawn small, but the whole 44 × 44 px around it toggles it. */}
-      <label className="grid shrink-0 place-items-center max-lg:-m-2.5 max-lg:size-11">
+      {/* Phones: the box is drawn small, but the whole 44 × 44 px around it toggles it. Sideways it grows only
+          into the row's 8 px gaps (-mx-2), so it never covers the text field beside it. */}
+      <label className="grid shrink-0 place-items-center max-lg:-mx-2 max-lg:-my-2.5 max-lg:size-11">
         <input
           id={checkFocusId(item.id)}
           type="checkbox"

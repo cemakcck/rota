@@ -143,8 +143,7 @@ export function Presence({
           what is seen is part of the name (label in name, WCAG 2.5.3). */}
       <span className="sr-only">
         {ts("peopleHere", { names: (members.length > 0 ? members.map((m) => m.name || t("someone")) : people.map((p) => p.name)).join(", ") })}
-        {`. ${t("here")}: `}
-      </span>
+      </span>{" "}
       {list}
     </button>
   );

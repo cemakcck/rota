@@ -330,7 +330,7 @@ describe("people in the header", () => {
     renderIntl(<TripScreen tripId="t1" />);
     const header = screen.getByRole("banner");
     // Named for the trip's members, then who is here now: the avatars it shows are named by their content (label in name, WCAG 2.5.3).
-    const avatars = within(header).getByRole("button", { name: /^People: Ann, Deniz\. In this trip now: ?Ann \(you\)$/ });
+    const avatars = within(header).getByRole("button", { name: "People: Ann, Deniz. In this trip now: Ann (you)" });
     expect(avatars.hasAttribute("aria-label")).toBe(false);
     expect(avatars.getAttribute("aria-haspopup")).toBe("dialog");
     // Two members: the button says Share.

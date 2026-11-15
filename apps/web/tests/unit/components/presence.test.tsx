@@ -94,6 +94,6 @@ describe("presence", () => {
     expect(avatars).toHaveLength(6);
     expect(avatars.slice(0, 5).map((a) => a.getAttribute("aria-label"))).toEqual(["Ann (you)", "Deniz", "Selin", "Mert", "Ece"]);
     expect(avatars[5].textContent).toBe("+2");
-    expect(avatars[5].getAttribute("aria-label")).toBe("2 more: Can, Zeynep");
+    expect(avatars[5].getAttribute("aria-label")).toBe("+2 more: Can, Zeynep");
   });
 });

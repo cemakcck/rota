@@ -99,6 +99,19 @@ describe("checklist", () => {
     expect(within(panel).getByText(/The checklist is full/)).toBeTruthy();
   });
 
+  it("on phones the box's 44 px label stays clear of the item's text field", () => {
+    const { doc } = newTrip();
+    addChecklistItem(doc, "Passports", "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    const label = within(openChecklist()).getByRole("checkbox", { name: "Passports" }).closest("label")!;
+    // 44 × 44 px, grown sideways only into the row's gap-x-2 (8 px): an overlap of the field would take
+    // its edge, or lose the box's (found by the e2e elementFromPoint probe).
+    const classes = label.className.split(" ");
+    expect(classes).toEqual(expect.arrayContaining(["max-lg:-mx-2", "max-lg:-my-2.5", "max-lg:size-11"]));
+    expect(classes).not.toContain("max-lg:-m-2.5");
+    expect(label.parentElement!.className.split(" ")).toContain("gap-x-2");
+  });
+
   it("is read-only while the user is unknown", () => {
     const { doc } = newTrip();
     addChecklistItem(doc, "Passports", "u1");

@@ -45,6 +45,36 @@ test.describe("planning a day", () => {
     await expect(row(page, "Belém Tower")).toHaveCount(0);
   });
 
+  test("after a timed stop, the add step suggests a time: kept, cleared or chosen again", async ({ people }) => {
+    const ann = await people.signUp("Ann");
+    const { page } = ann;
+    await openTrip(page, await tripWith(ann));
+    // 10:30 plus its hour's stay (an "other" place, no travel known) suggests 11:30 for the next.
+    await addPlaceAt(page, "Belém Tower", "10:30");
+    const search = page.getByRole("combobox", { name: "Add a place to Day 1…" });
+    await search.fill("Time Out Market");
+    await search.press("Enter");
+    const step = page.getByRole("form", { name: "Add Time Out Market" });
+    const time = step.getByLabel("Time");
+    const suggested = step.getByRole("button", { name: "Suggested 11:30" });
+    await expect(time).toHaveValue("11:30");
+    await expect(suggested).toHaveAttribute("aria-pressed", "true");
+    await expect(step.getByRole("button", { name: "−30 min, earlier" })).toBeEnabled();
+
+    await step.getByRole("button", { name: "No set time" }).click();
+    await expect(time).toHaveValue("");
+    await expect(suggested).toHaveAttribute("aria-pressed", "false");
+    // −30/+30 still have the suggestion to start from.
+    await step.getByRole("button", { name: "+30 min, later" }).click();
+    await expect(time).toHaveValue("12:00");
+    await suggested.click();
+    await expect(time).toHaveValue("11:30");
+    await step.getByRole("button", { name: "Add to Day 1", exact: true }).click();
+
+    await expect(page.getByRole("button", { name: "Change the time for Time Out Market, now 11:30" })).toBeVisible();
+    await expect.poll(() => dayPlaces(page, 1)).toEqual(["Belém Tower", "Time Out Market"]);
+  });
+
   test("the time is edited in place, and the day re-sorts by time", async ({ people }) => {
     const ann = await people.signUp("Ann");
     const { page } = ann;
@@ -53,8 +83,18 @@ test.describe("planning a day", () => {
     await addPlaceAt(page, "Time Out Market", "12:00");
     await expect.poll(() => dayPlaces(page, 1)).toEqual(["Belém Tower", "Time Out Market"]);
 
+    // Escape leaves it as it was.
     await page.getByRole("button", { name: "Change the time for Time Out Market, now 12:00" }).click();
     const field = page.getByRole("textbox", { name: "Time for Time Out Market" });
+    await expect(field).toBeFocused();
+    await field.fill("08:00");
+    await field.press("Escape");
+    await expect(field).toBeHidden();
+    const button = page.getByRole("button", { name: "Change the time for Time Out Market, now 12:00" });
+    await expect(button).toBeFocused();
+    await expect.poll(() => dayPlaces(page, 1)).toEqual(["Belém Tower", "Time Out Market"]);
+
+    await button.click();
     await expect(field).toBeFocused();
     await field.fill("nine");
     await field.press("Enter");
@@ -90,6 +130,10 @@ test.describe("planning a day", () => {
     const ann = await people.signUp("Ann");
     const { page } = ann;
     await openTrip(page, await tripWith(ann));
+    // Day 2 already has a stop, so "at the end" means after it.
+    await railDay(page, 2).click();
+    await addPlace(page, "Sintra day trip", "Day 2");
+    await railDay(page, 1).click();
     for (const name of ["Alfama walk", "Belém Tower", "LX Factory"]) await addPlace(page, name);
     await expect.poll(() => dayPlaces(page, 1)).toEqual(["Alfama walk", "Belém Tower", "LX Factory"]);
 
@@ -101,7 +145,7 @@ test.describe("planning a day", () => {
     await drag(page, row(page, "Alfama walk"), railDay(page, 2));
     await expect.poll(() => dayPlaces(page, 1)).toEqual(["LX Factory", "Belém Tower"]);
     await railDay(page, 2).click();
-    await expect.poll(() => dayPlaces(page, 2)).toEqual(["Alfama walk"]);
+    await expect.poll(() => dayPlaces(page, 2)).toEqual(["Sintra day trip", "Alfama walk"]);
   });
 
   test("Shift times moves every set time of the day; the toast undoes it", async ({ people }) => {
@@ -112,7 +156,7 @@ test.describe("planning a day", () => {
     await addPlaceAt(page, "Time Out Market", "12:00");
 
     await day(page, 1).getByRole("button", { name: "Shift times" }).click();
-    await page.getByRole("group", { name: "Shift the times of Day 1" }).getByRole("button", { name: /^\+30 min\b.*\blater$/ }).click();
+    await page.getByRole("group", { name: "Shift the times of Day 1" }).getByRole("button", { name: "+30 min, later", exact: true }).click();
     await expect(toast(page)).toHaveText("Shifted 2 stops by +30 min.");
     await expect(page.getByRole("button", { name: "Change the time for Belém Tower, now 10:30" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Change the time for Time Out Market, now 12:30" })).toBeVisible();
@@ -144,6 +188,10 @@ test.describe("planning a day", () => {
     await expect(other.getByRole("main", { name: "Checklist" })).toBeVisible();
     await other.goto(`/en/t/${tripId}?view=ideas`);
     await expect(other.getByRole("navigation", { name: "Trip" }).getByRole("button", { name: "Ideas & votes" })).toHaveAttribute("aria-current", "true");
+    await expect(other.getByRole("region", { name: "Ideas", exact: true })).toContainText("No ideas yet.");
+    await expect(other.getByRole("region", { name: "Suggestions" })).toBeVisible();
+    await expect(other.getByRole("combobox", { name: "Add a place to Ideas…" })).toBeVisible();
+    await expect(day(other, 1)).toHaveCount(0);
     await other.goto(`/en/t/${tripId}?view=all`);
     await expect(day(other, 1)).toBeVisible();
     await expect(day(other, 2)).toBeVisible();

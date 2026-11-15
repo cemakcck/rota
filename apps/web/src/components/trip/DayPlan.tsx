@@ -126,15 +126,16 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
             <button
               key={minutes}
               type="button"
+              // The name starts with what is shown (label in name, WCAG 2.5.3), then which way. An aria-label,
+              // not an sr-only span: that one is positioned, so Chrome reads it as a block, "+30 min , later".
+              aria-label={t("shiftStep", { minutes: signedMinutes(minutes), direction: minutes < 0 ? t("shiftEarlier") : t("shiftLater") })}
               onClick={() => {
                 close();
                 onShift(minutes);
               }}
               className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-[13px] font-medium tabular-nums text-ink hover:bg-hover max-lg:h-11"
             >
-              {/* The name starts with what is shown (label in name), then which way. */}
-              <span>{t("shiftBy", { minutes: signedMinutes(minutes) })}</span>
-              <span className="sr-only">, {minutes < 0 ? t("shiftEarlier") : t("shiftLater")}</span>
+              {t("shiftBy", { minutes: signedMinutes(minutes) })}
             </button>
           ))}
         </div>

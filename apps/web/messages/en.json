@@ -277,7 +277,7 @@
     "close": "Close",
     "here": "In this trip now",
     "you": "{name} (you)",
-    "moreHere": "{count} more: {names}",
+    "moreHere": "+{count} more: {names}",
     "editingBy": "{name} is editing",
     "noteFor": "Note for {name}",
     "addNote": "Add a note",
@@ -391,6 +391,7 @@
     "shiftBy": "{minutes} min",
     "shiftEarlier": "earlier",
     "shiftLater": "later",
+    "shiftStep": "{minutes} min, {direction}",
     "shifted": "{count, plural, one {Shifted # stop by {minutes} min.} other {Shifted # stops by {minutes} min.}}",
     "shiftClamped": "{count, plural, one {# stop kept at {time}.} other {# stops kept at {time}.}}",
     "shiftUnchanged": "No times changed: they are already at {time}.",
@@ -502,7 +503,7 @@
     "title": "Share",
     "ownerOnly": "Only the trip's owner can invite people. Ask them for a join link.",
     "people": "People",
-    "peopleHere": "People: {names}",
+    "peopleHere": "People: {names}. In this trip now:",
     "inviteFriends": "Invite friends"
   },
   "tour": {

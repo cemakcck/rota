@@ -156,12 +156,11 @@ describe("shift times", () => {
     plan();
     renderIntl(<TripScreen tripId="t1" />);
     const menu = openShift();
-    expect(within(menu).getAllByRole("button").map((b) => b.firstChild?.textContent)).toEqual(["−60 min", "−30 min", "−15 min", "+15 min", "+30 min", "+60 min"]);
-    // Label in name (WCAG 2.5.3): each name starts with what is shown, and says which way.
     const buttons = within(menu).getAllByRole("button");
-    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([null, null, null, null, null, null]);
-    for (const b of buttons) expect(b.querySelector(".sr-only")).toBeTruthy();
-    expect(buttons.map((b) => (b.textContent ?? "").replace(/\s+/g, " "))).toEqual([
+    expect(buttons.map((b) => b.textContent)).toEqual(["−60 min", "−30 min", "−15 min", "+15 min", "+30 min", "+60 min"]);
+    // Label in name (WCAG 2.5.3): each name starts with what is shown, then says which way. An aria-label,
+    // as an sr-only span (positioned) reads as a block in Chrome and leaves a space: "+30 min , later".
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
       "−60 min, earlier",
       "−30 min, earlier",
       "−15 min, earlier",
@@ -169,6 +168,10 @@ describe("shift times", () => {
       "+30 min, later",
       "+60 min, later",
     ]);
+    for (const b of buttons) {
+      expect(b.querySelector(".sr-only")).toBeNull();
+      expect(b.getAttribute("aria-label")!.startsWith(b.textContent!)).toBe(true);
+    }
     expect(within(menu).getByRole("button", { name: "−30 min, earlier" })).toBe(buttons[1]);
     // Fits the 400 px list column: anchored to the left of the day's action row (not to the button, which
     // may sit at its right end), at most the row's width, the six steps on two rows of three.

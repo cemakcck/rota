@@ -277,7 +277,7 @@
     "close": "Kapat",
     "here": "Şu anda bu gezide",
     "you": "{name} (siz)",
-    "moreHere": "{count} kişi daha: {names}",
+    "moreHere": "+{count} kişi daha: {names}",
     "editingBy": "{name} düzenliyor",
     "noteFor": "Not: {name}",
     "addNote": "Not ekle",
@@ -391,6 +391,7 @@
     "shiftBy": "{minutes} dk",
     "shiftEarlier": "önce",
     "shiftLater": "sonra",
+    "shiftStep": "{minutes} dk, {direction}",
     "shifted": "{count, plural, one {# durak {minutes} dk kaydırıldı.} other {# durak {minutes} dk kaydırıldı.}}",
     "shiftClamped": "{count, plural, one {# durak {time} saatinde kaldı.} other {# durak {time} saatinde kaldı.}}",
     "shiftUnchanged": "Saatler değişmedi: zaten {time}.",
@@ -502,7 +503,7 @@
     "title": "Paylaş",
     "ownerOnly": "Yalnızca gezinin sahibi kişi davet edebilir. Ondan bir katılma bağlantısı isteyin.",
     "people": "Kişiler",
-    "peopleHere": "Kişiler: {names}",
+    "peopleHere": "Kişiler: {names}. Şu anda bu gezide:",
     "inviteFriends": "Arkadaşlarınızı davet edin"
   },
   "tour": {

@@ -6,16 +6,23 @@ const WCAG_22_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const DESKTOP = { width: 1280, height: 800 };
 const PHONE = { width: 390, height: 844 };
 
-/** Waits for finite animations (a panel sliding and fading in) to finish: contrast and sizes are read at rest. */
+/**
+ * Waits for the running animations (a panel sliding and fading in) to finish, so contrast and sizes are
+ * read at rest. Paused or endless ones are not waited for, and the wait gives up after 2 s.
+ */
 async function settled(page: Page) {
-  await page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
-        .map((a) => a.finished.catch(() => undefined)),
-    ),
+  const done = await page.evaluate(() =>
+    Promise.race([
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.playState === "running" && a.effect?.getComputedTiming().endTime !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)),
+      ).then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 2000)),
+    ]),
   );
+  expect(done, "animations still running after 2 s").toBe(true);
 }
 
 async function expectNoViolations(page: Page) {
@@ -123,7 +130,8 @@ test.describe("accessibility (axe, WCAG 2.2 AA)", () => {
 type Miss = { target: string; size?: string; at?: string; hit?: string };
 
 /**
- * Every visible control in `scope` (itself included) smaller than 44 × 44 px, or not owning its whole box.
+ * Every visible control in `scope` (itself included) smaller than 44 × 44 px, or not owning its whole box
+ * (for a checkbox or radio, its label's box).
  * Once animations have finished, each is scrolled into view, then `elementFromPoint` is asked about
  * points 1 px inside its edges (on the top and bottom edges: in from each corner by its radius, at least
  * 7 px, as hit testing follows rounded corners, and the middle; the middle of the left and right edges)
@@ -143,22 +151,24 @@ async function smallTargets(scope: Locator): Promise<Miss[]> {
       if (!(el instanceof HTMLElement)) continue;
       // Out of sight (another tab, the sr-only skip links until focused) is not a target.
       if (!el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
-      el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-      const r = el.getBoundingClientRect();
+      // A checkbox or radio inside its label: the label is what a finger hits (it toggles the box).
+      const box = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") ? (el.closest("label") ?? el) : el;
+      box.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+      const r = box.getBoundingClientRect();
       if (r.width <= 1 || r.height <= 1) continue;
       if (r.width < 44 || r.height < 44) {
         misses.push({ target: describe(el), size: `${Math.round(r.width)}×${Math.round(r.height)}` });
         continue;
       }
       // In from the corners by their radius (at least 7 px): hit testing follows rounded corners.
-      const radius = Number.parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      const radius = Number.parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0;
       const inset = Math.min(r.width / 2, Math.max(7, Math.min(radius, r.height / 2)));
       const xs = [r.left + inset, r.left + r.width / 2, r.right - inset];
       const midY = r.top + r.height / 2;
       const points = [...xs.map((x) => [x, r.top + 1]), ...xs.map((x) => [x, r.bottom - 1]), [r.left + 1, midY], [r.right - 1, midY], [r.left + r.width / 2, midY]];
       for (const [x, y] of points) {
         const hit = document.elementFromPoint(x, y);
-        if (hit !== null && (hit === el || el.contains(hit))) continue;
+        if (hit !== null && (hit === box || box.contains(hit))) continue;
         misses.push({ target: describe(el), at: `${Math.round(x - r.left)},${Math.round(y - r.top)}`, hit: hit ? describe(hit) : "nothing" });
         break;
       }
@@ -191,5 +201,31 @@ test.describe("touch targets at 390×844 (44 × 44 px)", () => {
 
     const details = await openDetails(page, true);
     expect(await smallTargets(details), "details").toEqual([]);
+  });
+
+  test("the Map tab's pin card, the Ideas and Checklist tabs, and the people sheet", async ({ context, page }) => {
+    await openDemo(page, await startDemo(context), PHONE);
+    const tab = (name: string) => page.getByRole("navigation", { name: "Trip views" }).getByRole("button", { name, exact: true });
+
+    const name = (await firstStop(page).textContent())!;
+    const id = (await firstStop(page).locator("..").getAttribute("id"))!.replace(/^place-open-/, "");
+    await tab("Map").click();
+    await page.locator(`[data-pin="${id}"]`).tap();
+    const card = page.getByRole("region", { name, exact: true });
+    await expect(card.getByRole("button", { name: "Details", exact: true })).toBeVisible();
+    expect(await smallTargets(card), "pin card").toEqual([]);
+
+    await tab("Ideas").click();
+    await expect(page.getByRole("region", { name: "Suggestions" })).toBeVisible();
+    expect(await smallTargets(page.getByRole("main")), "ideas").toEqual([]);
+
+    await tab("Checklist").click();
+    await expect(page.getByRole("list", { name: "Checklist items" })).toBeVisible();
+    expect(await smallTargets(page.getByRole("main")), "checklist").toEqual([]);
+
+    await page.getByRole("banner").getByRole("button", { name: /^People: / }).click();
+    const sheet = page.getByRole("dialog", { name: "People" });
+    await expect(sheet.getByRole("button", { name: "Create link" })).toBeVisible();
+    expect(await smallTargets(sheet), "people sheet").toEqual([]);
   });
 });
