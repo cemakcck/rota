@@ -104,6 +104,11 @@ When you run a column, replace "Owner" with ✅ or ❌, and add a line under the
 4. Type 16:30 and press Enter.
    - Expected: a status says "Added to Day 1 at 16:30", and focus moves to the new stop's name.
 
+**Screen readers:**
+- **NVDA:** the search, the Time field and the stay field are form fields: NVDA switches to focus mode by itself when you Tab into them. If you arrow into them in browse mode, press Enter (or NVDA+Space) first, so ↓ moves through the results and Enter adds. Press / only in focus mode (or NVDA+F2, then /).
+- **VoiceOver, macOS:** with Quick Nav off, typing and ↓ reach the combo box. VO+Space on a result chooses it.
+- **VoiceOver, iOS:** double-tap the search to open the keyboard and type. Swipe right to the results ("… , 1 of 8"), double-tap one. The step's Time field takes focus: double-tap it to type (on iOS it is a time picker; turn the wheels by swiping up or down), then swipe right to "Add to Day 1" and double-tap.
+
 **Recorded:**
 - Keyboard ✅ at 1280 × 800 and at 390 × 844.
 - Fix 1 was needed: focus did not move to the new stop in the real app.
@@ -120,6 +125,11 @@ When you run a column, replace "Owner" with ✅ or ❌, and add a line under the
    - Expected: an alert says the time is not valid, and the field stays open.
 5. Press Escape.
    - Expected: the edit is cancelled.
+
+**Screen readers:**
+- **NVDA:** the time is a button: in browse mode press Enter on it. The field that opens takes focus and NVDA switches to focus mode; if it says "edit" but typing does nothing, press NVDA+Space. Enter saves and focus returns to the button (NVDA goes back to browse mode by itself).
+- **VoiceOver, macOS:** VO+Space on the time opens the field; type, then Return.
+- **VoiceOver, iOS:** the time sits at the right end of the row. Swipe right from the stop's name until VoiceOver says "Change the time for …, button", then double-tap. The keyboard opens on "Time for …": type the time and tap Return (or double-tap Done). On phones the button is 44 px tall: a tap on the stay below the time opens it too.
 
 **Recorded:** keyboard ✅. Tree ✅ (unit tests).
 
@@ -154,6 +164,11 @@ When you run a column, replace "Owner" with ✅ or ❌, and add a line under the
    - Expected: the panel closes and focus is back on the stop's name.
 4. Open it again, Shift+Tab back into the list, and press Escape.
    - Expected: the panel closes and focus stays where it is.
+
+**Screen readers:**
+- **NVDA:** the panel is a region on wide screens: browse mode reads it, and D (landmarks) or NVDA+F7 reaches "Details for …". Its fields (Name, Arrive, Stay, tags) need focus mode: NVDA switches when you Tab into them. In focus mode NVDA may take the first Escape to go back to browse mode; if the panel stays open, press Escape again (or NVDA+F2, then Escape).
+- **VoiceOver, macOS:** VO+Shift+↓ interacts with the panel; Escape closes it.
+- **VoiceOver, iOS:** on phones the panel is a full-screen dialog: swipe right through it; VoiceOver stays inside. Close it with "Close" (top right) or the two-finger scrub (Z shape), which acts as Escape. Focus returns to the stop.
 
 **Recorded:**
 - Keyboard ✅, both at 1280 and 390.
@@ -234,14 +249,21 @@ When you run a column, replace "Owner" with ✅ or ❌, and add a line under the
 
 Every interactive element has a 2 px ring at least 3:1 against what is around it:
 
-- By default, the ring is 2 px of ink (#1c1917), 2 px outside the element. That is 17:1 on paper and on white.
-- On the dark toast the ring is white, which is also 17:1.
+- By default, the ring is 2 px of ink (#1c1917), 2 px outside the element. That is 17:1 on paper and on white. The rule is in CSS `@layer base`, so Tailwind utilities can change it or turn it off.
+- On the dark toast the Undo ring is white: computed `outline: solid 2px rgb(255, 255, 255)`, on the toast's `rgb(28, 25, 23)`, 17.5:1.
+- The search input and the note editor do not draw a ring themselves (`outline-none`); their box draws one 2 px ink ring. Computed: input `outline-style: none`, box `solid 2px rgb(28, 25, 23)`. Exactly one ring each.
 
-**Checked:** Tab went through the whole screen at 1280 × 800 and at 390 × 844: plain, details open, Ideas, Checklist and the Map tab. At each stop the check measured the ring's width and contrast against the background around it, and whether an overflowing parent cut it off. After the fixes, it found 0 problems.
+**Checked (2026-11-15, after review fix round 1):**
+- Tab went through the trip screen at 1280 × 800 (plain, details, Checklist) and at 390 × 844 (plain, details, Ideas, Checklist, the Map tab). At each stop the check read the computed outline of the element and up to three ancestors: its width, its contrast against the background around it, whether an overflowing parent cut it off, and whether more than one ring showed. 0 problems.
+- The same walk on the home page, sign-in, sign-up, My trips (EN and TR) and profile, at 1280 and 390: 0 problems.
+- The toast Undo was checked separately (focus moves to it after a delete), with the values above.
+
+An earlier version of this checklist said the toast ring was white when it was not: the global rule was unlayered CSS and beat the Tailwind utility, so the ring stayed ink on the ink toast (about 1:1). The same cascade gave the search input and the note editor two rings. Moving the rule into `@layer base` fixed both.
 
 Fixed along the way (fix 3):
-- **Search box:** the input had `outline: none`, and its 1 px border change did not count as a ring. The box now draws the ring.
-- **Note editor:** it had only a 1 px shadow; it now draws a 2 px ring.
+- **Global ring in `@layer base`** (see above): the toast's white ring and the boxes' own rings now apply.
+- **Search box:** its 1 px border change did not count as a ring. The box now draws the ring, and the input none.
+- **Note editor:** it had only a 1 px shadow; the box now draws a 2 px ring, and the editable text none.
 - **Map:** the canvas's ring was cut off by its box, and maplibre's zoom buttons had no outline, only a blurred blue shadow. Both now have inset 2 px ink rings, and so do the map credits.
 - **Phone day chips:** a chip half off the strip kept its ring cut off. A chip that gets focus now scrolls fully into the strip.
 - **Plan's bottom edge:** the last controls in the plan were cut off. The plan now has scroll padding, and on phones it keeps focused items clear of the floating ＋ (WCAG 2.4.11).
@@ -254,6 +276,11 @@ Fixed along the way (fix 3):
 - search results, toast, inline time, note, the add step, the Ideas add step
 
 After the fixes, nothing was smaller than 44 × 44 px. This includes what Task 5's review left: the day header controls (Walk/Drive, Shift times, Google Maps, the title), the stop rows' name and time, and the search input with its Filter button.
+
+A bounding box is not a tap area, though. The stop row's name and time buttons get their 44 px from negative margins, so they overlap the line below them, and that line was painted on top: taps on the bottom 12 px went to the text and opened the details. The buttons now sit above it (`relative z-[1]` on phones). Checked with `document.elementFromPoint` 1 px inside the top and bottom edges, at the left (7 px in, past the rounded corner), middle and right:
+- Before: name bottom-left hit the sub-line (`span[place-sub]`); time bottom middle and right hit the stay text.
+- After: every probe hits the button itself.
+- A tap on the stay text now opens the time field (checked with a touch tap), not the details.
 
 The map's pins are not counted: the list offers the same actions.
 

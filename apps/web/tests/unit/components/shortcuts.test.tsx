@@ -194,6 +194,92 @@ describe("keyboard shortcuts", () => {
   });
 });
 
+describe("keyboard shortcuts: review fixes", () => {
+  it("say the day again when [ or ] lands on the same day as before", () => {
+    openTrip(3);
+    at("?view=ideas");
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    press("]");
+    const first = screen.getByTestId("shortcut-status").textContent;
+    expect(first).toMatch(/^Day 1\b/);
+    at("?view=ideas");
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    press("]");
+    const second = screen.getByTestId("shortcut-status").textContent;
+    // The live region changes, so it is announced again.
+    expect(second).not.toBe(first);
+    expect(second!.trim()).toBe(first!.trim());
+  });
+
+  it("work from a checkbox or a button (they take no text)", () => {
+    const { dayIds } = openTrip();
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    main().append(box);
+    box.focus();
+    press("]", {}, box);
+    expect(window.location.search).toBe(`?view=day&day=${dayIds[1]}`);
+    box.remove();
+  });
+
+  it("do nothing while an input method is composing, or in a contenteditable", () => {
+    openTrip();
+    expect(press("]", { isComposing: true }, document.body)).toBe(true);
+    expect(window.location.search).toBe("");
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const inner = document.createElement("p");
+    editable.append(inner);
+    main().append(editable);
+    expect(press("]", {}, inner)).toBe(true);
+    expect(press("?", {}, inner)).toBe(true);
+    expect(window.location.search).toBe("");
+    expect(sheet()).toBeNull();
+    editable.remove();
+  });
+
+  it("the off switch works for the session when storage is blocked", async () => {
+    openTrip();
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      press("?");
+      const toggle = within(sheet()!).getByRole("switch", { name: "Single-key shortcuts" });
+      // (The session's choice may be left over from an earlier test: start from on.)
+      if (toggle.getAttribute("aria-checked") === "false") fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+      await waitFor(() => expect(sheet()).toBeNull());
+      press("]");
+      expect(window.location.search).toBe("");
+      // Back on, for the next tests (memory only).
+      fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+      fireEvent.click(within(sheet()!).getByRole("switch", { name: "Single-key shortcuts" }));
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it("the sheet shows Alt with both arrows for reordering", () => {
+    openTrip();
+    press("?");
+    const row = within(sheet()!).getByText("Move the stop up or down (on its name)").closest("div")!;
+    expect(within(row).getAllByText("Alt", { selector: "kbd" })).toHaveLength(2);
+    expect(row.textContent).toContain("Alt plus up arrow or Alt plus down arrow");
+  });
+});
+
 describe("skip link", () => {
   it("is the first thing to tab to, and takes focus to the plan", () => {
     openTrip();

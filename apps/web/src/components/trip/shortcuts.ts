@@ -4,9 +4,15 @@ import { useEffect, useEffectEvent, useState } from "react";
 import type { Undo } from "@rota/trip";
 import type { TripViewState } from "./view";
 
-/** True while focus is in something that takes text: the key is typing, not a shortcut. */
+/** Input types that take no typing: a key on them is a shortcut. */
+const NOT_TEXT = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"]);
+
+/** True while focus is in something that takes text (or a select's letters): the key is typing, not a shortcut. */
 function typing(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement) return !NOT_TEXT.has(target.type);
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+  return target.isContentEditable || target.closest('[contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]') !== null;
 }
 
 /**
@@ -46,7 +52,8 @@ export function useTripShortcuts(o: {
   /** Closes the details panel; false when none is open. */
   onEscape(): boolean;
 }): string {
-  const [said, setSaid] = useState("");
+  // What to say, and how often it was said: a repeat gets a no-break space, so the live region changes and speaks again.
+  const [said, setSaid] = useState({ text: "", count: 0 });
 
   const stepDay = (by: -1 | 1) => {
     const { days, shown } = o;
@@ -57,7 +64,8 @@ export function useTripShortcuts(o: {
     if (to === at) return;
     const dayId = days[to].id;
     o.show({ kind: "day", dayId });
-    setSaid(o.dayLabel(dayId));
+    const text = o.dayLabel(dayId);
+    setSaid((was) => ({ text, count: was.count + 1 }));
     // Focus on something of the day left behind would fall to the page: it goes to the plan instead.
     requestAnimationFrame(() => {
       if (!document.activeElement || document.activeElement === document.body) document.getElementById("main")?.focus();
@@ -99,5 +107,5 @@ export function useTripShortcuts(o: {
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  return said;
+  return said.count % 2 === 0 ? said.text : `${said.text}\u00a0`;
 }

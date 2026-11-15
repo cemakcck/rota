@@ -379,6 +379,21 @@ describe("phone trip layout", () => {
     for (const el of targets) expect(el.className).toMatch(/max-lg:(!?h-11|min-h-11|size-11)/);
   });
 
+  it("the stop row's name and time take taps over their whole 44 px, above the lines they overlap", () => {
+    openTrip();
+    const tower = within(main()).getByText("Galata Tower", { selector: "[data-testid=place-name]" }).closest("li")!;
+    for (const el of [within(tower).getByRole("button", { name: "Galata Tower" }), within(tower).getByTestId("place-time")]) {
+      expect(el.className.split(" ")).toEqual(expect.arrayContaining(["max-lg:-my-3", "max-lg:min-h-11", "max-lg:relative", "max-lg:z-[1]"]));
+    }
+  });
+
+  it("the screen-reader travel before a stop ends with a full stop, apart from the stop's own text", () => {
+    openTrip();
+    const tower = within(main()).getByText("Galata Tower", { selector: "[data-testid=place-name]" }).closest("li")!;
+    const said = tower.querySelector(":scope > .sr-only")!;
+    expect(said.textContent).toMatch(/walk · .+\. $/);
+  });
+
   it("a delete from the details sheet puts focus on the toast's Undo once the sheet is gone", async () => {
     openTrip();
     fireEvent.click(within(main()).getByRole("button", { name: "Karaköy Güllüoğlu" }));

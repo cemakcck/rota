@@ -30,9 +30,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-ink);
-  outline-offset: 2px;
+/*
+ * The focus ring: 2 px of ink, 17:1 on paper and white. In the base layer, so utilities can change it
+ * (a white ring on the dark toast) or replace it (a box drawing the ring for the input inside it).
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
 }
 
 /*
@@ -42,7 +48,7 @@ body {
 .maplibregl-canvas:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
 .maplibregl-ctrl.maplibregl-ctrl-group button:focus-visible,
 .maplibregl-ctrl .maplibregl-ctrl-attrib-button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; box-shadow: none; }
-.maplibregl-ctrl-attrib a:focus-visible { outline-offset: -2px; }
+.maplibregl-ctrl-attrib a:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; }
 
 /* Phones: the map's zoom buttons are touch targets of 44 × 44 px (spec §5); the Fit button sits under them. */
 @media (width < 64rem) {

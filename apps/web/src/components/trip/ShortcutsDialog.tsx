@@ -8,12 +8,14 @@ import { btn, btnSm } from "../ui";
 /** Where this device remembers that single-key shortcuts are off ("off"); on otherwise. */
 export const CHARACTER_KEYS_STORAGE = "rota.characterKeys";
 const CHANGED = "rota:character-keys";
+// Where the choice lives when storage is blocked (a private window): for this session only.
+let inMemory = true;
 
 function readCharacterKeys(): boolean {
   try {
     return localStorage.getItem(CHARACTER_KEYS_STORAGE) !== "off";
   } catch {
-    return true;
+    return inMemory;
   }
 }
 function subscribe(onChange: () => void) {
@@ -33,11 +35,12 @@ function subscribe(onChange: () => void) {
 export function useCharacterKeys(): [boolean, (on: boolean) => void] {
   const on = useSyncExternalStore(subscribe, readCharacterKeys, () => true);
   const set = useCallback((next: boolean) => {
+    inMemory = next;
     try {
       if (next) localStorage.removeItem(CHARACTER_KEYS_STORAGE);
       else localStorage.setItem(CHARACTER_KEYS_STORAGE, "off");
     } catch {
-      // Storage unavailable (a private window): nothing is remembered, and the shortcuts stay as they were.
+      // Storage unavailable: the choice holds for this session (inMemory), not across visits.
     }
     window.dispatchEvent(new Event(CHANGED));
   }, []);
@@ -105,7 +108,7 @@ export function ShortcutsDialog({ onClose, characterKeys, onCharacterKeys }: { o
     { label: t("search"), keys: [[key("/", t("keys.slash"))]] },
     { label: t("previousDay"), keys: [[key("[", t("keys.leftBracket"))]] },
     { label: t("nextDay"), keys: [[key("]", t("keys.rightBracket"))]] },
-    { label: t("reorder"), keys: [[k.alt, key("↑", t("keys.up"))], [key("↓", t("keys.down"))]] },
+    { label: t("reorder"), keys: [[k.alt, key("↑", t("keys.up"))], [k.alt, key("↓", t("keys.down"))]] },
     { label: t("undo"), keys: [[k.mod, key("Z")]] },
     { label: t("redo"), keys: [[k.mod, k.shift, key("Z")]] },
     { label: t("closePanel"), keys: [[key("Esc", t("keys.escape"))]] },

@@ -175,7 +175,7 @@ function When({
           arrive === null ? t("setTimeFor", { name }) : estimated ? t("setTimeForEstimated", { name, time: arrive }) : t("changeTimeFor", { name, time: arrive })
         }
         onClick={() => setEditing(true)}
-        className={`whitespace-nowrap rounded-md px-1 text-[13px] tabular-nums hover:bg-hover max-lg:-my-3 max-lg:min-h-11 max-lg:min-w-11 ${arrive === null ? "text-[12.5px] text-ink-2 underline underline-offset-2" : look}`}
+        className={`whitespace-nowrap rounded-md px-1 text-[13px] tabular-nums hover:bg-hover max-lg:relative max-lg:z-[1] max-lg:-my-3 max-lg:min-h-11 max-lg:min-w-11 ${arrive === null ? "text-[12.5px] text-ink-2 underline underline-offset-2" : look}`}
       >
         {shown ?? t("setTime")}
       </button>
@@ -304,7 +304,7 @@ export function StopRow({
       // Dimmed by filters: a quieter row whose text keeps AA contrast (no opacity on text).
       className={`relative min-w-0 rounded-xl border border-line motion-safe:transition-colors motion-safe:duration-700 ${highlighted ? "bg-warn-bg" : dimmed ? "bg-line-2" : hovered ? "bg-hover" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
     >
-      {travelBefore && <span className="sr-only">{travelBefore} </span>}
+      {travelBefore && <span className="sr-only">{travelBefore}. </span>}
       {peer && <EditingTag peer={peer} />}
       <div
         {...listeners}
@@ -327,7 +327,7 @@ export function StopRow({
               aria-keyshortcuts={actions ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
               onClick={() => onOpen(place.id, !open)}
               onKeyDown={onKeyDown}
-              className="min-w-0 rounded text-left text-[14px] font-semibold leading-snug max-lg:-my-3 max-lg:min-h-11"
+              className="min-w-0 rounded text-left text-[14px] font-semibold leading-snug max-lg:relative max-lg:z-[1] max-lg:-my-3 max-lg:min-h-11"
             >
               <span data-testid="place-name" title={name} className="block min-w-0 truncate">
                 {name}
