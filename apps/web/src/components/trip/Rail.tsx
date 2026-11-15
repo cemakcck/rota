@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
-import { DAY_TITLE_MAX, type DayView, type TripView } from "@rota/trip";
+import { DAY_TITLE_MAX, dayTitle, type DayView, type TripView } from "@rota/trip";
 import { apiFetch } from "@/client/authClient";
 import { errorMessage, readError } from "@/client/apiError";
 import { dayColour } from "../map/mapFeatures";
@@ -82,7 +82,7 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
   useEffect(() => {
     if (!open) return;
     const shut = () => {
-      if (typed.current !== null) actions.rename(day.id, typed.current);
+      if (typed.current !== null && dayTitle(typed.current) !== day.title) actions.rename(day.id, typed.current);
       typed.current = null;
       setOpen(false);
     };
@@ -102,7 +102,7 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
       window.removeEventListener("resize", onMove);
       document.removeEventListener("scroll", onMove, true);
     };
-  }, [open, actions, day.id]);
+  }, [open, actions, day.id, day.title]);
   if (!open && renaming) setRenaming(false);
 
   const close = () => {
@@ -116,8 +116,12 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
     // The rail reorders its entries: focus stays on the button used.
     requestAnimationFrame(() => from.isConnected && document.activeElement !== from && from.focus());
   };
+  // Saved only when it changes the title: leaving it as it was writes nothing.
+  const save = (value: string) => {
+    if (dayTitle(value) !== day.title) actions.rename(day.id, value);
+  };
   const commit = () => {
-    actions.rename(day.id, draft);
+    save(draft);
     close();
   };
   const edit = (value: string) => {
@@ -182,7 +186,7 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
                 // a resize; only Escape drops it.
                 onBlur={(e) => {
                   if (e.relatedTarget instanceof Node && !box.current?.contains(e.relatedTarget)) {
-                    actions.rename(day.id, draft);
+                    save(draft);
                     typed.current = null;
                     setOpen(false);
                   }

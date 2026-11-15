@@ -43,6 +43,19 @@ async function open() {
 }
 
 describe("trip screen map", () => {
+  it("a day move that changes which day is shown (the first day, by default) refits the map to it", async () => {
+    const { chora, map } = await open();
+    const rail = screen.getByRole("navigation", { name: "Trip" });
+    const fits = map.state.fits.length;
+    fireEvent.click(within(rail).getByRole("button", { name: "Day 2 options" }));
+    fireEvent.click(within(within(rail).getByRole("group", { name: "Day 2 options" })).getByRole("button", { name: "Move up" }));
+    // Chora's day is first now, and shown: the map fits it.
+    await waitFor(() => expect(pin(chora)).toBeTruthy());
+    expect(map.state.fits.length).toBeGreaterThan(fits);
+    expect(map.state.fits.at(-1)).toEqual([28.9393, 41.0312, 28.9393, 41.0312]);
+  });
+
+
   it("a pin selects its row and shows its day, and a row its pin", async () => {
     const { tower, chora, map } = await open();
     const rail = screen.getByRole("navigation", { name: "Trip" });

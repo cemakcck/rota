@@ -180,8 +180,9 @@ function TripScreenFor({ tripId }: Props) {
   // are not on this person's undo stack, so Undo never reverts them).
   useEffect(() => {
     if (!toastShown || !undo) return;
+    // (A write that changed nothing, such as a title saved unchanged, is not a later edit.)
     const onTransaction = (tr: Y.Transaction) => {
-      if (tr.origin === editor) dismissToast();
+      if (tr.origin === editor && tr.changed.size > 0) dismissToast();
     };
     doc.on("afterTransaction", onTransaction);
     const off = undo.onChange(dismissToast);

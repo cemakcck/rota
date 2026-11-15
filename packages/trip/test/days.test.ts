@@ -142,6 +142,21 @@ describe("moveDay", () => {
   });
 });
 
+describe("setDay", () => {
+  it("writes nothing (no transaction) when nothing would change", () => {
+    const { doc, ids } = trip(1);
+    setDay(doc, ids[0], { title: "Balat" }, "alice");
+    let transactions = 0;
+    doc.on("afterTransaction", () => transactions++);
+    setDay(doc, ids[0], { title: "  Balat " }, "alice");
+    setDay(doc, ids[0], { travelMode: "walk" }, "alice");
+    setDay(doc, ids[0], {}, "alice");
+    expect(transactions).toBe(0);
+    setDay(doc, ids[0], { travelMode: "drive" }, "alice");
+    expect(transactions).toBe(1);
+  });
+});
+
 describe("removeDay and undo", () => {
   it("one undo brings the day back with its places, times, title and note, keeping a friend's edit", () => {
     const { doc: a, ids } = trip(3);

@@ -152,6 +152,58 @@ describe("days in the rail", () => {
     expect(readTrip(fake.doc).days.map((d) => d.id)).toEqual(dayIds);
   });
 
+  it("the move's toast Undo works when pressed with the ⋯ menu still open (closing the menu writes nothing)", () => {
+    const { doc, dayIds } = newTrip({ days: 3 });
+    renderIntl(<TripScreen tripId="t1" />);
+    const group = openMenu(2);
+    fireEvent.click(within(group).getByRole("button", { name: "Move up" }));
+    expect(readTrip(doc).days.map((d) => d.id)).toEqual([dayIds[1], dayIds[0], dayIds[2]]);
+    expect(within(rail()).getByRole("group", { name: "Day 1 options" })).toBeTruthy();
+    // A mouse press on the toast's Undo: pointerdown (outside the menu, which closes it), then click.
+    const undo = screen.getByRole("button", { name: "Undo moving Day 2" });
+    fireEvent.pointerDown(undo);
+    fireEvent.mouseDown(undo);
+    fireEvent.click(undo);
+    expect(readTrip(doc).days.map((d) => d.id)).toEqual(dayIds);
+    expect(within(rail()).queryByRole("group", { name: /options$/ })).toBeNull();
+  });
+
+  it("the move's toast Undo still works after Rename was opened and left unchanged (leaving it writes nothing)", () => {
+    const { doc, dayIds } = newTrip({ days: 3 });
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(within(openMenu(2)).getByRole("button", { name: "Move up" }));
+    fireEvent.click(within(within(rail()).getByRole("group", { name: "Day 1 options" })).getByRole("button", { name: "Rename" }));
+    const input = within(rail()).getByRole("textbox", { name: "Title for Day 1" });
+    input.focus();
+    let writes = 0;
+    const count = (tr: { origin: unknown }) => void (tr.origin === "u1" && writes++);
+    doc.on("afterTransaction", count);
+    // The press on Undo: pointerdown (closes the menu), focus moves to Undo (the title field blurs), click.
+    const undo = screen.getByRole("button", { name: "Undo moving Day 2" });
+    fireEvent.pointerDown(undo);
+    fireEvent.mouseDown(undo);
+    fireEvent.blur(input, { relatedTarget: undo });
+    expect(writes).toBe(0);
+    fireEvent.click(undo);
+    doc.off("afterTransaction", count);
+    expect(readTrip(doc).days.map((d) => d.id)).toEqual(dayIds);
+  });
+
+  it("an own transaction that changes nothing (Rename left as it was, Enter) neither closes the toast nor costs its Undo", () => {
+    const { doc, dayIds } = newTrip({ days: 3 });
+    setDay(doc, dayIds[1], { title: "Balat" }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+    fireEvent.click(within(openMenu(2)).getByRole("button", { name: "Move up" }));
+    fireEvent.click(within(within(rail()).getByRole("group", { name: "Day 1 options" })).getByRole("button", { name: "Rename" }));
+    const input = within(rail()).getByRole("textbox", { name: "Title for Day 1" });
+    fireEvent.change(input, { target: { value: " Balat " } });
+    fireEvent.submit(input.closest("form")!);
+    // Any other empty write of this person's, too.
+    act(() => doc.transact(() => undefined, "u1"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo moving Balat" }));
+    expect(readTrip(doc).days.map((d) => d.id)).toEqual(dayIds);
+  });
+
   it("after Move up the menu follows its button and the moved day is scrolled into view", () => {
     newTrip({ days: 3 });
     const scrolled: Element[] = [];

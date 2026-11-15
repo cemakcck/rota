@@ -145,4 +145,17 @@ describe("undo", () => {
     expect(u.lastStep()).toBeNull();
     u.destroy();
   });
+
+  it("after undoMark, listeners hear of it with the stack as it really is", () => {
+    const { a, days } = setup();
+    const u = createUndo(a, "A");
+    const id = u.step(() => addPlace(a, { name: "Galata", category: "sight", dayId: days[0] }, "A"));
+    u.step(() => updatePlace(a, id, { name: "Galata Tower" }, "A"));
+    const seen: boolean[] = [];
+    u.onChange(() => seen.push(u.canUndo()));
+    u.undoMark(u.lastStep()!);
+    // The add is still there to undo; the last word listeners get says so.
+    expect(seen.at(-1)).toBe(true);
+    u.destroy();
+  });
 });

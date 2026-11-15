@@ -79,6 +79,8 @@ export function createUndo(doc: Y.Doc, userId: string): Undo {
       } finally {
         manager.undoStack = [...earlier, ...manager.undoStack];
       }
+      // The manager's own events fired while the earlier steps were set aside: say it again, truly.
+      notify();
       return true;
     },
     onChange(cb) {

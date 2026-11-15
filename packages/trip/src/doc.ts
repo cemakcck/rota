@@ -245,15 +245,18 @@ export function moveDay(doc: Y.Doc, dayId: string, toIndex: number, origin: stri
   return true;
 }
 
+/** Changes a day's travel mode or title. Writes nothing (no transaction) when neither would change. */
 export function setDay(doc: Y.Doc, dayId: string, patch: DayPatch, origin: string): void {
   const day = record(days(doc), dayId);
   if (!day) return;
+  const mode = patch.travelMode === "walk" || patch.travelMode === "drive" ? patch.travelMode : null;
+  const title = typeof patch.title === "string" ? dayTitle(patch.title) : null;
+  const newMode = mode !== null && day.get("travelMode") !== mode;
+  const newTitle = title !== null && day.get("title") !== title;
+  if (!newMode && !newTitle) return;
   doc.transact(() => {
-    if (patch.travelMode === "walk" || patch.travelMode === "drive") day.set("travelMode", patch.travelMode);
-    if (typeof patch.title === "string") {
-      const title = dayTitle(patch.title);
-      if (day.get("title") !== title) day.set("title", title);
-    }
+    if (newMode) day.set("travelMode", mode);
+    if (newTitle) day.set("title", title);
   }, origin);
 }
 
