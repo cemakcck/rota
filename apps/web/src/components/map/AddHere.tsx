@@ -147,7 +147,7 @@ export function AddHere({
               </label>
               <select
                 id={`${id}-to`}
-                className="h-10 w-full rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
+                className="h-10 max-lg:h-11 w-full rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
                 value={to ?? ""}
                 onChange={(e) => {
                   const list = e.target.value || null;

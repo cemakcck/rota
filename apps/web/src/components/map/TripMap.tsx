@@ -123,6 +123,7 @@ export function TripMap({
       zoomIn: tm("zoomIn"),
       zoomOut: tm("zoomOut"),
       attribution: tm("attribution"),
+      canvas: tm("canvas"),
     },
   }));
   useEffect(() => {
@@ -326,7 +327,7 @@ export function TripMap({
           type="button"
           aria-label={tm("fit")}
           title={tm("fit")}
-          className="absolute right-2.5 top-[86px] z-[3] grid size-[29px] place-items-center rounded-[4px] bg-surface text-ink-2 shadow-[0_0_0_2px_rgba(0,0,0,.1)] hover:bg-hover"
+          className="absolute right-2.5 top-[86px] z-[3] grid size-[29px] place-items-center max-lg:top-[116px] max-lg:size-11 rounded-[4px] bg-surface text-ink-2 shadow-[0_0_0_2px_rgba(0,0,0,.1)] hover:bg-hover"
           onClick={() =>
             map.fit(features.bounds, {
               padding: padding(map.size()),

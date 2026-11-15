@@ -81,7 +81,7 @@ function TimeInput({
       aria-label={t("timeFor", { name })}
       aria-invalid={invalid || undefined}
       aria-describedby={invalid ? errorId : undefined}
-      className="h-7 w-[68px] rounded-md border border-ink-2 bg-surface px-1.5 text-right text-[13px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
+      className="h-7 max-lg:-my-2 max-lg:h-11 w-[68px] rounded-md border border-ink-2 bg-surface px-1.5 text-right text-[13px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
       value={draft}
       onChange={(e) => {
         setDraft(e.target.value);
@@ -175,7 +175,7 @@ function When({
           arrive === null ? t("setTimeFor", { name }) : estimated ? t("setTimeForEstimated", { name, time: arrive }) : t("changeTimeFor", { name, time: arrive })
         }
         onClick={() => setEditing(true)}
-        className={`whitespace-nowrap rounded-md px-1 text-[13px] tabular-nums hover:bg-hover ${arrive === null ? "text-[12.5px] text-ink-2 underline underline-offset-2" : look}`}
+        className={`whitespace-nowrap rounded-md px-1 text-[13px] tabular-nums hover:bg-hover max-lg:-my-3 max-lg:min-h-11 max-lg:min-w-11 ${arrive === null ? "text-[12.5px] text-ink-2 underline underline-offset-2" : look}`}
       >
         {shown ?? t("setTime")}
       </button>
@@ -230,6 +230,7 @@ export function StopRow({
   actions,
   trailing,
   below,
+  travelBefore,
 }: {
   place: PlaceView;
   /** Stop number within a day; none in Ideas. */
@@ -256,6 +257,8 @@ export function StopRow({
   trailing?: ReactNode;
   /** Under the row, inside it (an idea's add-to-day step). */
   below?: ReactNode;
+  /** The travel from the stop before, read first (the dotted connector that shows it is not a list item). */
+  travelBefore?: ReactNode;
 }) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
@@ -301,10 +304,11 @@ export function StopRow({
       // Dimmed by filters: a quieter row whose text keeps AA contrast (no opacity on text).
       className={`relative min-w-0 rounded-xl border border-line motion-safe:transition-colors motion-safe:duration-700 ${highlighted ? "bg-warn-bg" : dimmed ? "bg-line-2" : hovered ? "bg-hover" : "bg-surface"} ${isDragging ? "opacity-40" : ""}`}
     >
+      {travelBefore && <span className="sr-only">{travelBefore} </span>}
       {peer && <EditingTag peer={peer} />}
       <div
         {...listeners}
-        className="grid min-w-0 cursor-pointer grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5"
+        className="grid min-w-0 cursor-pointer grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 max-lg:py-3"
       >
         {number !== undefined ? (
           <span aria-hidden="true" className="grid size-[26px] place-items-center rounded-full text-[12px] font-semibold text-white" style={{ background: colour }}>
@@ -323,7 +327,7 @@ export function StopRow({
               aria-keyshortcuts={actions ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
               onClick={() => onOpen(place.id, !open)}
               onKeyDown={onKeyDown}
-              className="min-w-0 rounded text-left text-[14px] font-semibold leading-snug"
+              className="min-w-0 rounded text-left text-[14px] font-semibold leading-snug max-lg:-my-3 max-lg:min-h-11"
             >
               <span data-testid="place-name" title={name} className="block min-w-0 truncate">
                 {name}

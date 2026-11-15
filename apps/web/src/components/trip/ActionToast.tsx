@@ -107,10 +107,22 @@ function ToastView({
     holding.current = false;
     (was?.returnFocus?.() ?? fallbackFocus?.())?.focus();
   }, [toast, fallbackFocus]);
+  // A toast that takes focus but arrives held (a delete from the phone's details sheet, which closes with
+  // it) takes focus when released, if focus was left with nowhere to be; never out of a sheet still open.
+  const pendingFocus = useRef<number | null>(null);
   useEffect(() => {
-    if (toast?.focus && !held) button.current?.focus();
+    if (!toast?.focus) return;
+    if (held) pendingFocus.current = toast.key;
+    else button.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- focus moves when a toast arrives, not when it is released
   }, [toast]);
+  // (Before the next frame, where the closed sheet would send focus to the plan.)
+  useLayoutEffect(() => {
+    if (held || !toast || pendingFocus.current !== toast.key) return;
+    pendingFocus.current = null;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) button.current?.focus();
+  }, [held, toast]);
   useEffect(() => {
     if (!toast || paused) return;
     // Focus inside (even with no focus event, as when a reused Undo keeps it): not yet; leaving it restarts the 6 s.
@@ -156,7 +168,8 @@ function ToastView({
         <button
           ref={button}
           type="button"
-          className={`${btn} ${btnSm} text-ink`}
+          // On the dark toast, the focus ring is white.
+          className={`${btn} ${btnSm} text-ink focus-visible:outline-white`}
           aria-label={toast.undoLabel}
           onClick={() => {
             toast.onUndo?.();

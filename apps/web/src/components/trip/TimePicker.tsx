@@ -66,9 +66,9 @@ export function TimePicker({
   // −30/+30 move a time: with none typed and none suggested they are disabled.
   const shift = (by: number) => shiftTime(value, by, suggested ?? "");
   const canShift = shift(0) !== null;
-  const step = "inline-flex h-9 min-w-9 items-center justify-center rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold tabular-nums hover:bg-hover disabled:cursor-not-allowed disabled:text-ink-2 disabled:hover:bg-surface";
+  const step = "inline-flex h-9 min-w-9 max-lg:h-11 max-lg:min-w-11 items-center justify-center rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold tabular-nums hover:bg-hover disabled:cursor-not-allowed disabled:text-ink-2 disabled:hover:bg-surface";
   const chip =
-    "inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
+    "inline-flex h-8 max-lg:h-11 items-center rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
   return (
     <div>
       <label htmlFor={`${id}-time`} className="mb-1 block text-[13px] font-medium">
@@ -85,7 +85,7 @@ export function TimePicker({
           autoFocus={autoFocus}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
-          className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
+          className="h-9 max-lg:h-11 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           {...(coarse ? { type: "time" } : { type: "text", inputMode: "numeric" as const, placeholder: "HH:MM", maxLength: 5 })}

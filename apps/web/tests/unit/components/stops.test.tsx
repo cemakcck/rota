@@ -49,7 +49,7 @@ describe("stops", () => {
     open("Galata Tower");
     expect(within(row("Galata Tower")).getByRole("button", { name: "Galata Tower" }).getAttribute("aria-expanded")).toBe("true");
     const details = screen.getByRole("region", { name: "Details for Galata Tower" });
-    fireEvent.click(within(details).getByRole("button", { name: /^Change category/ }));
+    fireEvent.click(within(details).getByRole("button", { name: /, change category$/ }));
     fireEvent.click(within(details).getByRole("radio", { name: "Museum" }));
     const tags = within(details).getByLabelText("Tags");
     fireEvent.change(tags, { target: { value: "views" } });

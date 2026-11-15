@@ -39,11 +39,11 @@ export function TagInput({ id, value, onChange }: { id: string; value: TagState;
       {tags.length > 0 && (
         <ul className="mb-1.5 flex flex-wrap gap-1.5">
           {tags.map((tag) => (
-            <li key={tag} className="inline-flex h-7 min-w-0 items-center gap-1 rounded-md bg-line-2 pl-2 text-[12.5px] font-medium text-ink-2">
+            <li key={tag} className="inline-flex h-7 min-w-0 items-center gap-1 rounded-md bg-line-2 pl-2 max-lg:h-11 text-[12.5px] font-medium text-ink-2">
               <span className="min-w-0 [overflow-wrap:anywhere]">{tag}</span>
               <button
                 type="button"
-                className="grid size-7 place-items-center rounded-md hover:bg-hover"
+                className="grid size-7 place-items-center rounded-md hover:bg-hover max-lg:size-11"
                 aria-label={t("removeTag", { tag })}
                 onClick={() => onChange({ tags: tags.filter((x) => x !== tag), draft })}
               >

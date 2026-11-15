@@ -48,7 +48,7 @@ export function FilterPopover({ view, filter, onChange }: { view: TripView; filt
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-l border-line pl-2.5 pr-1.5 text-[12.5px] font-medium text-ink-2 hover:text-ink aria-expanded:text-ink"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border-l max-lg:h-11 border-line pl-2.5 pr-1.5 text-[12.5px] font-medium text-ink-2 hover:text-ink aria-expanded:text-ink"
       >
         <Icon name="filter" size={14} />
         {t("filter")}
@@ -79,7 +79,7 @@ export function FilterPopover({ view, filter, onChange }: { view: TripView; filt
                 type="button"
                 aria-pressed={filter.categories.includes(c)}
                 onClick={() => toggle(c)}
-                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-medium text-ink-2 aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white"
+                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-medium text-ink-2 max-lg:h-11 max-lg:px-3.5 aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white"
               >
                 <Icon name={c} size={14} />
                 {tc(c)}
@@ -93,7 +93,7 @@ export function FilterPopover({ view, filter, onChange }: { view: TripView; filt
               </label>
               <select
                 id={`${id}-tag`}
-                className="h-8 min-w-0 flex-1 rounded-lg border border-ink-2 bg-surface px-2 text-[13px]"
+                className="h-8 max-lg:h-11 min-w-0 flex-1 rounded-lg border border-ink-2 bg-surface px-2 text-[13px]"
                 value={filter.tag ?? ""}
                 onChange={(e) => onChange({ ...filter, tag: e.target.value || null })}
               >

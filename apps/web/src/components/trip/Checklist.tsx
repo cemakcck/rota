@@ -21,7 +21,7 @@ export type ChecklistActions = {
 /** The id of an item's checkbox, where focus goes back to after undoing its delete. */
 export const checkFocusId = (id: string) => `check-${id}`;
 
-const ghost = "grid size-8 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-40";
+const ghost = "grid size-8 max-lg:size-11 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-40";
 
 function AddItem({ full, onAdd }: { full: boolean; onAdd: (text: string) => void }) {
   const t = useTranslations("trip");
@@ -98,20 +98,23 @@ function Item({
           <Icon name="grip" size={16} />
         </span>
       )}
-      <input
-        id={checkFocusId(item.id)}
-        type="checkbox"
-        className="size-[18px] shrink-0 accent-ink"
-        aria-label={text}
-        checked={item.done}
-        disabled={!actions}
-        onChange={(e) => actions?.update(item.id, { done: e.target.checked })}
-      />
+      {/* Phones: the box is drawn small, but the whole 44 × 44 px around it toggles it. */}
+      <label className="grid shrink-0 place-items-center max-lg:-m-2.5 max-lg:size-11">
+        <input
+          id={checkFocusId(item.id)}
+          type="checkbox"
+          className="size-[18px] accent-ink"
+          aria-label={text}
+          checked={item.done}
+          disabled={!actions}
+          onChange={(e) => actions?.update(item.id, { done: e.target.checked })}
+        />
+      </label>
       {actions ? (
         <CommitInput
           aria-label={t("editItem", { text })}
           maxLength={200}
-          className={`h-8 min-w-24 flex-1 rounded-md border border-transparent bg-transparent px-1.5 text-[14px] hover:border-line focus:border-ink-2 ${item.done ? "text-ink-2 line-through" : ""}`}
+          className={`h-8 max-lg:h-11 min-w-24 flex-1 rounded-md border border-transparent bg-transparent px-1.5 text-[14px] hover:border-line focus:border-ink-2 ${item.done ? "text-ink-2 line-through" : ""}`}
           value={item.text}
           onCommit={(next) => next.trim() && actions.update(item.id, { text: next.trim() })}
         />
@@ -123,7 +126,7 @@ function Item({
         <span className="flex items-center gap-0.5">
           <select
             aria-label={t("assignItem", { text })}
-            className="h-8 max-w-32 rounded-md border border-line bg-surface px-1 text-[12.5px]"
+            className="h-8 max-lg:h-11 max-w-32 rounded-md border border-line bg-surface px-1 text-[12.5px]"
             value={item.assignee ?? ""}
             onChange={(e) => actions.update(item.id, { assignee: e.target.value || null })}
           >

@@ -48,6 +48,8 @@ export type MapLabels = {
   zoomIn: string;
   zoomOut: string;
   attribution: string;
+  /** The canvas's own name (it is a region). */
+  canvas: string;
 };
 
 /** Creates the map in `container` around `bounds`, resolving once it has started; null where it cannot run (no WebGL 2). */
@@ -82,6 +84,8 @@ export const loadMapLibre: LoadMap = async (container, { bounds, labels }) => {
         "NavigationControl.ZoomIn": labels.zoomIn,
         "NavigationControl.ZoomOut": labels.zoomOut,
         "AttributionControl.ToggleAttribution": labels.attribution,
+        // The canvas is a region of its own: named apart from the "Map" section around it.
+        "Map.Title": labels.canvas,
       },
     });
   } catch {

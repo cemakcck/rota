@@ -18,7 +18,7 @@ import { SearchBar, type NewStop, type PreviewPlace } from "./SearchBar";
 import { StopRow, type StopActions } from "./StopRow";
 import { IdeasView, type RowProps, type Schedule } from "./IdeasView";
 import type { SuggestionActions } from "./Suggestions";
-import { Approximate, useDuration } from "./TravelLeg";
+import { Approximate, TravelLeg, useDuration } from "./TravelLeg";
 import { listDropId, plannedLists, type Filter, type ListId } from "./plan";
 import type { TripViewState } from "./view";
 import { WeatherChip } from "./WeatherChip";
@@ -99,7 +99,7 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
         aria-describedby={timed ? undefined : `${id}-why`}
         title={timed ? undefined : t("shiftNoTimes")}
         onClick={() => timed && setOpen((o) => !o)}
-        className="inline-flex h-[26px] items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[12.5px] text-ink hover:bg-hover aria-disabled:cursor-default aria-disabled:text-ink-2 aria-disabled:hover:bg-surface aria-expanded:border-ink"
+        className="inline-flex h-[26px] items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-[12.5px] text-ink hover:bg-hover max-lg:h-11 max-lg:px-3.5 aria-disabled:cursor-default aria-disabled:text-ink-2 aria-disabled:hover:bg-surface aria-expanded:border-ink"
       >
         <Icon name="clock" size={13} />
         {t("shiftTimes")}
@@ -130,7 +130,7 @@ function ShiftTimes({ day, onShift }: { day: DayView; onShift(minutes: number): 
                 close();
                 onShift(minutes);
               }}
-              className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-[13px] font-medium tabular-nums text-ink hover:bg-hover"
+              className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-[13px] font-medium tabular-nums text-ink hover:bg-hover max-lg:h-11"
             >
               {/* The name starts with what is shown (label in name), then which way. */}
               <span>{t("shiftBy", { minutes: signedMinutes(minutes) })}</span>
@@ -154,7 +154,7 @@ function DayTitle({ day, onDay }: { day: DayView; onDay: ((patch: DayPatch) => v
       maxLength={DAY_TITLE_MAX}
       placeholder={t("dayTitlePlaceholder")}
       aria-label={t("dayTitleFor", { n: day.index + 1 })}
-      className="mt-1 ml-[18px] h-8 w-[calc(100%-18px)] min-w-0 rounded-md border border-transparent bg-transparent px-1 text-[15px] font-medium text-ink placeholder:text-ink-2 hover:border-line focus:border-ink-2 focus:bg-surface"
+      className="mt-1 ml-[18px] h-8 max-lg:h-11 w-[calc(100%-18px)] min-w-0 rounded-md border border-transparent bg-transparent px-1 text-[15px] font-medium text-ink placeholder:text-ink-2 hover:border-line focus:border-ink-2 focus:bg-surface"
     />
   );
 }
@@ -208,7 +208,7 @@ function DayHeader({
       <DayTitle day={day} onDay={onDay} />
       {/* Positioned: the Shift times popover opens under this row, from its left edge. */}
       <div data-day-actions className="relative mt-2 flex flex-wrap items-center gap-1.5">
-        <div role="group" aria-label={t("travelMode", { n: day.index + 1 })} className="inline-flex h-[26px] items-center rounded-full border border-line bg-surface p-0.5 text-[12.5px] text-ink-2">
+        <div role="group" aria-label={t("travelMode", { n: day.index + 1 })} className="inline-flex h-[26px] items-center rounded-full border border-line bg-surface p-0.5 text-[12.5px] text-ink-2 max-lg:h-auto">
           {(["walk", "drive"] as const).map((mode) => (
             <button
               key={mode}
@@ -216,7 +216,7 @@ function DayHeader({
               aria-pressed={day.travelMode === mode}
               disabled={!onDay}
               onClick={() => onDay?.({ travelMode: mode })}
-              className="inline-flex h-[20px] items-center gap-1 rounded-full px-2 aria-pressed:bg-ink aria-pressed:text-white disabled:cursor-default"
+              className="inline-flex h-[20px] items-center gap-1 rounded-full px-2 max-lg:h-11 max-lg:px-3.5 aria-pressed:bg-ink aria-pressed:text-white disabled:cursor-default"
             >
               <Icon name={mode === "walk" ? "walk" : "car"} size={13} />
               {t(mode)}
@@ -232,7 +232,7 @@ function DayHeader({
         {end && <span className={chip}>{t(end.nextDay ? "dayEndsNextDay" : "dayEnds", { time: end.time })}</span>}
         {onShift && <ShiftTimes day={day} onShift={onShift} />}
         {urls.map((url, i) => (
-          <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`${chip} text-ink hover:bg-hover`}>
+          <a key={url} href={url} target="_blank" rel="noopener noreferrer" className={`${chip} text-ink hover:bg-hover max-lg:h-11 max-lg:px-3.5`}>
             <GoogleMapsPin />
             {urls.length === 1 ? t("openDay") : t("openDayPart", { part: i + 1, total: urls.length })}
             <span className="sr-only"> ({t("newTab")})</span>
@@ -283,7 +283,7 @@ function FirstStop({ onSearch }: { onSearch(text: string): void }) {
               type="button"
               onClick={() => onSearch(t(`quickTerms.${category}`))}
               // 44 px tall on phones (touch), 32 px from the small breakpoint up.
-              className="inline-flex h-11 sm:h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-hover"
+              className="inline-flex h-8 max-lg:h-11 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-hover"
             >
               <Icon name={category} size={14} className="text-ink-2" />
               {tcat(category)}
@@ -332,6 +332,7 @@ function StopList({ day, places, travel, empty, rows }: { day: DayView; places: 
                   onHover={rows.onHover}
                   onOpen={rows.onOpen}
                   actions={rows.actions}
+                  travelBefore={leg && <TravelLeg leg={leg} mode={day.travelMode} />}
                 />
               </Fragment>
             );

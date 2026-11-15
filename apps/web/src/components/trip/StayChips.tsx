@@ -30,7 +30,7 @@ export function StayChips({ id, value, onChange, autoFocus }: { id: string; valu
   });
   const custom = customChosen || !isChip(value);
   const chip =
-    "inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-[12.5px] font-medium tabular-nums hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
+    "inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-[12.5px] max-lg:h-11 max-lg:px-3.5 font-medium tabular-nums hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
   return (
     <div>
       <p id={`${id}-stay-label`} className="mb-1 text-[13px] font-medium">
@@ -82,7 +82,7 @@ export function StayChips({ id, value, onChange, autoFocus }: { id: string; valu
             max={1440}
             step={5}
             inputMode="numeric"
-            className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] tabular-nums"
+            className="h-9 w-24 rounded-lg border border-ink-2 bg-surface px-2.5 text-[14px] tabular-nums max-lg:h-11"
             value={value}
             onChange={(e) => onChange(e.target.value)}
           />

@@ -66,7 +66,7 @@ function TripName({ name, onRename }: { name: string; onRename: ((name: string) 
           maxLength={60}
           aria-invalid={invalid || undefined}
           aria-describedby={invalid ? "trip-name-error" : undefined}
-          className="h-8 w-full min-w-0 rounded-md border border-ink-2 bg-surface px-2 font-serif text-[18px] font-semibold"
+          className="h-8 max-lg:h-11 w-full min-w-0 rounded-md border border-ink-2 bg-surface px-2 font-serif text-[18px] font-semibold"
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -281,7 +281,7 @@ export function TripHeader({
   const places = view.days.reduce((n, d) => n + d.places.length, 0);
   return (
     <header className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-3 py-1.5 sm:gap-x-4 sm:px-5 lg:h-16 lg:flex-nowrap lg:py-0">
-      <Link href="/trips" aria-label={t("home")} className="flex h-8 items-center gap-2 text-[15px] font-bold max-lg:h-11">
+      <Link href="/trips" aria-label={t("home")} className="flex h-8 items-center gap-2 text-[15px] font-bold max-lg:h-11 max-lg:min-w-11 max-lg:justify-center">
         <svg viewBox="0 0 26 26" width={26} height={26} aria-hidden="true">
           <rect width="26" height="26" rx="8" fill="#1c1917" />
           <path d="M13 7a4.5 4.5 0 0 0-4.5 4.5c0 3.4 4.5 7.5 4.5 7.5s4.5-4.1 4.5-7.5A4.5 4.5 0 0 0 13 7z" stroke="#fff" strokeWidth="2.2" fill="none" />

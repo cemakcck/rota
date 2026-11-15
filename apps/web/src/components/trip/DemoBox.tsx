@@ -69,7 +69,7 @@ export function DemoBox({ tripId, offline, simulateOffline, onSideBySide }: Prop
         role="switch"
         aria-checked={offline}
         onClick={toggleOffline}
-        className="inline-flex h-8 items-center gap-2 rounded-lg font-medium text-ink hover:bg-hover"
+        className="inline-flex h-8 items-center gap-2 rounded-lg font-medium text-ink hover:bg-hover max-lg:h-11"
       >
         <span aria-hidden="true" className={`relative h-5 w-9 shrink-0 rounded-full border ${offline ? "border-ink bg-ink" : "border-ink-2 bg-surface"}`}>
           <span className={`absolute top-0.5 size-3.5 rounded-full motion-safe:transition-[left] ${offline ? "left-[18px] bg-white" : "left-0.5 bg-ink-2"}`} />

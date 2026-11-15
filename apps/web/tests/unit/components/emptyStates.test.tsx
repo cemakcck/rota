@@ -80,10 +80,10 @@ describe("empty states", () => {
     await waitFor(() => expect(screen.getByRole<HTMLInputElement>("combobox").value).toBe("restoran"));
   });
 
-  it("quick searches are touch-sized on phones (44 px)", () => {
+  it("quick searches are touch-sized on phones (44 px, below the 1024 px layout break)", () => {
     istanbulTrip();
     renderIntl(<TripScreen tripId="t1" />);
-    for (const button of within(quick()).getAllByRole("button")) expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-11", "sm:h-8"]));
+    for (const button of within(quick()).getAllByRole("button")) expect(button.className.split(" ")).toEqual(expect.arrayContaining(["h-8", "max-lg:h-11"]));
   });
 
   it("without edit access, an empty day has no quick searches", () => {

@@ -35,6 +35,20 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * The map's focus rings match the rest (2 px ink, not maplibre's blurred blue). They are drawn inside: the
+ * canvas fills a box that clips, and the controls and credits sit against its edges.
+ */
+.maplibregl-canvas:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -4px; }
+.maplibregl-ctrl.maplibregl-ctrl-group button:focus-visible,
+.maplibregl-ctrl .maplibregl-ctrl-attrib-button:focus-visible { outline: 2px solid var(--color-ink); outline-offset: -2px; box-shadow: none; }
+.maplibregl-ctrl-attrib a:focus-visible { outline-offset: -2px; }
+
+/* Phones: the map's zoom buttons are touch targets of 44 × 44 px (spec §5); the Fit button sits under them. */
+@media (width < 64rem) {
+  .maplibregl-ctrl.maplibregl-ctrl-group button { width: 44px; height: 44px; }
+}
+
 /* Landing animation: a place appears on one phone, then on the other. Static when motion is reduced. */
 @keyframes rota-appear {
   0%, 20% { opacity: 0; transform: translateY(6px); }

@@ -123,7 +123,7 @@ function ScheduleStep({
             <select
               id={`${id}-day`}
               autoFocus
-              className="h-9 max-w-[180px] rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
+              className="h-9 max-lg:h-11 max-w-[180px] rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
               value={dayId}
               onChange={(e) => {
                 setDayId(e.target.value);
@@ -237,7 +237,7 @@ export function IdeasView({
                               aria-label={t("addToDayFor", { name })}
                               aria-expanded={open}
                               onClick={() => (open ? cancel(place.id) : setScheduling(place.id))}
-                              className="whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover"
+                              className="whitespace-nowrap rounded-lg border border-line bg-surface px-2.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover max-lg:min-h-11"
                             >
                               {t("addToDay")}
                             </button>

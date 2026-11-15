@@ -362,6 +362,34 @@ describe("phone trip layout", () => {
     expect(toastEl.style.getPropertyValue("--toast-lift")).toBe("208px");
   });
 
+  it("day header controls, stop rows' controls and the search are 44 px touch targets on phones", () => {
+    openTrip();
+    const tower = within(main()).getByText("Galata Tower", { selector: "[data-testid=place-name]" }).closest("li")!;
+    const targets = [
+      within(main()).getByRole("button", { name: "Walk" }),
+      within(main()).getByRole("button", { name: "Drive" }),
+      within(main()).getByRole("button", { name: /^Shift times/ }),
+      within(main()).getByRole("link", { name: /^Open day in Google Maps/ }),
+      within(main()).getByRole("textbox", { name: "Title for Day 1" }),
+      within(main()).getByRole("button", { name: /^Filter/ }),
+      within(tower).getByRole("button", { name: "Galata Tower" }),
+      within(tower).getByTestId("place-time"),
+      search(),
+    ];
+    for (const el of targets) expect(el.className).toMatch(/max-lg:(!?h-11|min-h-11|size-11)/);
+  });
+
+  it("a delete from the details sheet puts focus on the toast's Undo once the sheet is gone", async () => {
+    openTrip();
+    fireEvent.click(within(main()).getByRole("button", { name: "Karaköy Güllüoğlu" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Karaköy Güllüoğlu" }));
+    const undo = screen.getByRole("button", { name: "Undo deleting Karaköy Güllüoğlu" });
+    await waitFor(() => expect(document.activeElement).toBe(undo));
+    // Undo puts the place back and focus on its row.
+    fireEvent.click(undo);
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Karaköy Güllüoğlu"));
+  });
+
   it("the chosen chip is in its day's colour, with white text at AA contrast", () => {
     openTrip();
     const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));

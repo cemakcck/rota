@@ -61,6 +61,9 @@ import { NO_FILTER, dayDropTarget, dropPlace, isDayDrag, moveKeepingTime, railDa
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { RAIL_CHECKLIST_ID, RAIL_IDEAS_ID, Rail, railDayButtonId, type DayActions } from "./Rail";
 import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
+import { onceRendered } from "./focus";
+import { useTripShortcuts } from "./shortcuts";
+import { ShortcutsDialog, SkipLinks, useCharacterKeys } from "./ShortcutsDialog";
 import { TripHeader } from "./TripHeader";
 import { Tour, useTour } from "./Tour";
 import { TripSettingsScreen } from "./TripSettingsScreen";
@@ -89,17 +92,6 @@ function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
     };
   }, [doc, userId]);
   return undo;
-}
-
-/**
- * True when Ctrl/Cmd+Z is not for the trip: typing in a field or an open note (its own undo wins), or
- * while a dialog (settings, Move to…) is open, where undoing would change the trip unseen.
- */
-function notForTrip(target: EventTarget | null): boolean {
-  if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return true;
-  // An open note (its toolbar too): the note's own undo, or nothing.
-  if (target instanceof Element && target.closest("[data-note-editor]")) return true;
-  return document.querySelector('[role="dialog"]') !== null;
 }
 
 /** Where focus goes when a toast holding it closes and it names no better place: the search, else the plan. */
@@ -189,19 +181,6 @@ function TripScreenFor({ tripId }: Props) {
   }, [awareness, userId, self?.name, self?.colour]);
   const collab = useMemo<Collab>(() => ({ doc, awareness, editor, peers, members: view.members }), [doc, awareness, editor, peers, view.members]);
 
-  // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z, except in text fields, which keep their own undo.
-  useEffect(() => {
-    if (!undo) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "z" || notForTrip(e.target)) return;
-      e.preventDefault();
-      if (e.shiftKey) undo.redo();
-      else undo.undo();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo]);
-
   // The toast's Undo reverts the action only while that is still the last thing this person did: any
   // later edit of theirs, or an undo/redo elsewhere, dismisses it. Others' edits do not (their changes
   // are not on this person's undo stack, so Undo never reverts them).
@@ -246,6 +225,44 @@ function TripScreenFor({ tripId }: Props) {
   const dayDate = (date: string) =>
     date ? new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`)) : "";
 
+  // To the search (on the Plan tab, from the phone's Map tab): the floating ＋ and the / shortcut. False
+  // when the view has none (the checklist).
+  const focusSearch = () => {
+    const go = () => document.querySelector<HTMLElement>("#main [role=combobox]")?.focus();
+    if (!document.querySelector("#main [role=combobox]")) return false;
+    if (phone.tab !== "map") go();
+    else {
+      phone.choose("plan");
+      requestAnimationFrame(go);
+    }
+    return true;
+  };
+  // "Skip to plan": focus to the plan, the Plan tab first if the phone shows the map.
+  const skipToPlan = () => {
+    const go = () => document.getElementById("main")?.focus();
+    if (phone.tab !== "map") return go();
+    phone.choose("plan");
+    requestAnimationFrame(go);
+  };
+  // Keyboard shortcuts (?, /, [, ], Escape, undo and redo) and their sheet.
+  const [characterKeys, setCharacterKeys] = useCharacterKeys();
+  const [keysOpen, setKeysOpen] = useState(false);
+  const shortcutSaid = useTripShortcuts({
+    undo,
+    characterKeys,
+    days: view.days,
+    shown,
+    show,
+    dayLabel: (dayId) => `${labelIn(view, dayId)} · ${dayDate(view.days.find((d) => d.id === dayId)?.date ?? "")}`,
+    onHelp: () => setKeysOpen(true),
+    onSearch: focusSearch,
+    // Focus in the panel: the panel's own Escape (which puts focus back on its row) came first.
+    onEscape: () => {
+      if (openId === null) return false;
+      setOpenId(null);
+      return true;
+    },
+  });
 
   // Selection, shared by the list and the map. A place removed meanwhile is no longer selected.
   const listOf = (id: string) => plannedLists(view).find((l) => l.places.some((p) => p.id === id));
@@ -276,7 +293,8 @@ function TripScreenFor({ tripId }: Props) {
   // held under the details sheet, so nothing on top of the modal sheet can be used.
   const { place: placeToast } = toast;
   const toastLift = wide ? 16 : pinShown ? 56 + PIN_CARD_PX + 12 : fabShown ? 56 + 16 + 48 + 12 : 56 + 16;
-  useEffect(() => placeToast({ lift: toastLift, held: sheetOpen }), [placeToast, toastLift, sheetOpen]);
+  // In the same commit as the sheet, so a toast released by its closing can take focus before anything else.
+  useLayoutEffect(() => placeToast({ lift: toastLift, held: sheetOpen }), [placeToast, toastLift, sheetOpen]);
 
   // Crossing the breakpoint replaces some controls (rail ↔ chips and tabs, the pin card): focus that was
   // on one goes to its counterpart, else to the plan (the Map tab when the plan is out of sight), never
@@ -343,9 +361,7 @@ function TripScreenFor({ tripId }: Props) {
       onUndo: undoLast(),
     });
     setHighlight(id);
-    requestAnimationFrame(() => {
-      const row = document.getElementById(placeRowId(id));
-      if (!row) return;
+    onceRendered(placeRowId(id), (row) => {
       const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
       row.scrollIntoView?.({ block: "nearest", behavior });
       document.getElementById(placeFocusId(id))?.focus();
@@ -453,7 +469,7 @@ function TripScreenFor({ tripId }: Props) {
       returnFocus: () => (neighbour ? document.getElementById(railDayButtonId(neighbour)) : null),
       onUndo: undoLast(() => {
         if (wasShown) show({ kind: "day", dayId });
-        requestAnimationFrame(() => document.getElementById(railDayButtonId(dayId))?.focus());
+        onceRendered(railDayButtonId(dayId), (el) => el.focus());
       }),
     });
   }
@@ -483,7 +499,7 @@ function TripScreenFor({ tripId }: Props) {
       message: t("deleted", { name }),
       undoLabel: t("undoDeleteFor", { name }),
       focus: true,
-      onUndo: undoLast(() => requestAnimationFrame(() => document.getElementById(focus)?.focus())),
+      onUndo: undoLast(() => onceRendered(focus, (el) => el.focus())),
     });
   }
 
@@ -622,14 +638,6 @@ function TripScreenFor({ tripId }: Props) {
     />
   ) : undefined;
 
-  // The floating ＋: to the search (on the Plan tab, from the Map tab).
-  const focusSearch = () => {
-    const go = () => document.querySelector<HTMLElement>("#main [role=combobox]")?.focus();
-    if (phone.tab !== "map") return go();
-    phone.choose("plan");
-    requestAnimationFrame(go);
-  };
-
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
     if (editor === null || !over) return;
@@ -658,6 +666,7 @@ function TripScreenFor({ tripId }: Props) {
         >
           <div className="flex h-dvh flex-col bg-paper">
             <div className="contents" inert={sheetOpen}>
+              <SkipLinks onPlan={skipToPlan} onShortcuts={() => setKeysOpen(true)} />
               <TripHeader
                 tripId={tripId}
                 view={view}
@@ -688,7 +697,8 @@ function TripScreenFor({ tripId }: Props) {
                     id="main"
                     tabIndex={-1}
                     aria-label={shown.kind === "checklist" ? t("checklist") : t("plan")}
-                    className={`min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-paper pb-24 outline-none max-lg:relative max-lg:z-10 max-lg:flex-1 lg:border-r lg:border-line ${phone.tab === "map" ? "max-lg:hidden" : ""}`}
+                    // Focus scrolled into view keeps clear of the edges, and on phones of the floating ＋ (WCAG 2.4.11).
+                    className={`min-h-0 min-w-0 scroll-py-3 overflow-y-auto overflow-x-hidden bg-paper pb-24 outline-none max-lg:scroll-pb-20 max-lg:relative max-lg:z-10 max-lg:flex-1 lg:border-r lg:border-line ${phone.tab === "map" ? "max-lg:hidden" : ""}`}
                   >
                     {shown.kind === "checklist" ? (
                       <Checklist items={view.checklist} members={view.members} full={isChecklistFull(view)} actions={checklistActions} />
@@ -773,6 +783,9 @@ function TripScreenFor({ tripId }: Props) {
             <p data-testid="plan-status" role="status" aria-live="polite" className="sr-only">
               {controls.status}
             </p>
+            <p data-testid="shortcut-status" role="status" aria-live="polite" className="sr-only">
+              {shortcutSaid}
+            </p>
             {controls.moving && actions && (
               <MoveDialog
                 place={controls.moving.place}
@@ -793,6 +806,7 @@ function TripScreenFor({ tripId }: Props) {
             )}
             <Announcer doc={doc} userId={userId} awareness={awareness} listLabel={labelIn} />
             {tour.open && <Tour onDone={tour.finish} />}
+            {keysOpen && <ShortcutsDialog onClose={() => setKeysOpen(false)} characterKeys={characterKeys} onCharacterKeys={setCharacterKeys} />}
           </div>
           <DragOverlay dropAnimation={null}>
             {dragged && (

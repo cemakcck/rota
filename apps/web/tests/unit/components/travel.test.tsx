@@ -44,7 +44,7 @@ describe("travel times", () => {
     });
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
-    expect(await within(day1()).findByText("12 min walk · 950 m")).toBeTruthy();
+    expect(await within(day1()).findByText("12 min walk · 950 m", { selector: "[data-testid=travel-leg] *" })).toBeTruthy();
     // Routed: neither the leg nor the day's total is marked as an estimate.
     expect(within(day1()).getByTestId("travel-leg").textContent).not.toMatch(/≈/);
     expect(within(day1()).getByTestId("travel-total").textContent).toBe("12 min travel");
@@ -73,7 +73,7 @@ describe("travel times", () => {
     vi.stubGlobal("fetch", fn);
     renderIntl(<TripScreen tripId="t1" />);
     // Five requests one after another, each re-rendering a five-day screen: slow on a busy machine.
-    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m")).toHaveLength(5), { timeout: 5000 });
+    await waitFor(() => expect(screen.getAllByText("5 min walk · 400 m", { selector: "[data-testid=travel-leg] *" })).toHaveLength(5), { timeout: 5000 });
     expect(screen.queryAllByTestId("travel-leg").filter((l) => l.textContent?.startsWith("≈"))).toHaveLength(0);
     // Each day asked once: none turned away.
     expect(fn.mock.calls.filter(([url]) => String(url).startsWith("/api/route"))).toHaveLength(5);
@@ -92,7 +92,7 @@ describe("travel times", () => {
       expect(calls).toHaveLength(0);
       online.mockReturnValue(true);
       act(() => void window.dispatchEvent(new Event("online")));
-      expect(await within(day1()).findByText("14 min walk · 1.1 km")).toBeTruthy();
+      expect(await within(day1()).findByText("14 min walk · 1.1 km", { selector: "[data-testid=travel-leg] *" })).toBeTruthy();
     } finally {
       online.mockRestore();
     }

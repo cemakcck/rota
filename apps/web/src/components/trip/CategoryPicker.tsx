@@ -15,7 +15,7 @@ export function CategoryPicker({ name, value, onChange }: { name: string; value:
         {CATEGORIES.map((c) => (
           <label
             key={c}
-            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] has-[:checked]:border-ink has-[:checked]:shadow-[0_0_0_1px_var(--color-ink)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink"
+            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] max-lg:min-h-11 has-[:checked]:border-ink has-[:checked]:shadow-[0_0_0_1px_var(--color-ink)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink"
           >
             <input type="radio" name={name} value={c} checked={value === c} onChange={() => onChange(c)} className="sr-only" />
             <Icon name={c} size={16} className="text-ink-2" />

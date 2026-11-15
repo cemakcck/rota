@@ -5,7 +5,7 @@ import type { PlaceView } from "@rota/trip";
 import { Icon } from "./icons";
 
 const toggle =
-  "grid size-8 place-items-center rounded-lg border border-line bg-surface text-ink-2 hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
+  "grid size-8 max-lg:size-11 place-items-center rounded-lg border border-line bg-surface text-ink-2 hover:bg-hover aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white";
 
 /**
  * A suggestion's score with up and down toggles for the signed-in member: pressing the active one

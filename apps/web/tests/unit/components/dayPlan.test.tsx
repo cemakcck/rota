@@ -97,9 +97,11 @@ describe("day plan", () => {
     expect(legs[0].textContent).toMatch(/^≈ estimated, \d+ min walk · \d+ m$/);
     // No pin, no travel: just the line between the rows.
     expect(legs[1].textContent).toBe("");
-    // The lines between rows are not list items: the list says "3 items" for 3 stops.
+    // The lines between rows are hidden from screen readers: the list says "3 items" for 3 stops, and
+    // has only list items (WCAG 1.3.1). The next stop reads the travel first.
     expect(within(within(day(1)).getByRole("list")).getAllByRole("listitem")).toHaveLength(3);
-    expect(legs.every((l) => l.getAttribute("role") === "none")).toBe(true);
+    expect(legs.every((l) => l.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(within(row("B")).getByText(/min walk/).closest(".sr-only")).not.toBeNull();
   });
 
   it("search result actions add to the day, to Ideas, or as a suggestion", async () => {

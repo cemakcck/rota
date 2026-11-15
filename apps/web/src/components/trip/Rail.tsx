@@ -40,7 +40,7 @@ export const RAIL_CHECKLIST_ID = "rail-checklist";
 export const railDayMenuId = (dayId: string) => `rail-day-menu-${dayId}`;
 
 const menuItem =
-  "flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-medium hover:bg-hover aria-disabled:cursor-default aria-disabled:text-ink-2 aria-disabled:hover:bg-transparent";
+  "flex h-9 max-lg:h-11 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-medium hover:bg-hover aria-disabled:cursor-default aria-disabled:text-ink-2 aria-disabled:hover:bg-transparent";
 
 /**
  * A day's ⋯ menu on the rail: Move up, Move down, Rename (its title) and Delete day. A disclosure like
@@ -198,7 +198,7 @@ function DayMenu({ day, n, total, actions }: { day: DayView; n: number; total: n
                     setOpen(false);
                   }
                 }}
-                className="h-9 w-full min-w-0 rounded-md border border-ink-2 bg-surface px-2 text-[13.5px]"
+                className="h-9 max-lg:h-11 w-full min-w-0 rounded-md border border-ink-2 bg-surface px-2 text-[13.5px]"
               />
             </form>
           ) : (
@@ -327,23 +327,30 @@ function RailDay({
   );
 }
 
-type TabProps = { id?: string; label: string; name?: string; count?: string; selected: boolean; onSelect(): void };
+/** `count` is shown ("3/5"); `spoken` is how it is read, after the label ("3 of 5 done"): the name starts with what is seen (WCAG 2.5.3). */
+type TabProps = { id?: string; label: string; count?: string; spoken?: string; selected: boolean; onSelect(): void };
 
 /** A rail entry that is not a day: Ideas & votes, the checklist, the whole trip. */
-function RailTab({ id, label, name, count, selected, onSelect, drop }: TabProps & { drop?: { id: string; ref(el: HTMLElement | null): void; over: boolean } }) {
+function RailTab({ id, label, count, spoken, selected, onSelect, drop }: TabProps & { drop?: { id: string; ref(el: HTMLElement | null): void; over: boolean } }) {
   return (
     <button
       ref={drop?.ref}
       id={id}
       type="button"
       data-drop={drop?.id}
-      aria-label={name}
       aria-current={selected ? "true" : undefined}
       onClick={onSelect}
       className={`${entry} flex items-center justify-between gap-2 py-2 text-ink-2 aria-[current=true]:font-medium aria-[current=true]:text-ink ${drop?.over ? overLook : ""}`}
     >
-      {label}
-      {count !== undefined && <span className="rounded-full bg-paper px-2 text-[12px] text-ink-2">{count}</span>}
+      <span>
+        {label}
+        {spoken && <span className="sr-only">, {spoken}</span>}
+      </span>
+      {count !== undefined && (
+        <span aria-hidden="true" className="rounded-full bg-paper px-2 text-[12px] text-ink-2">
+          {count}
+        </span>
+      )}
     </button>
   );
 }
@@ -433,10 +440,13 @@ export function Rail({
     <nav
       ref={strip}
       data-tour="days"
+      // Phones: a chip tabbed to is brought fully into the strip, its focus ring too (the browser leaves a
+      // partly shown one where it is).
+      onFocus={(e) => compact && e.target !== e.currentTarget && e.target.scrollIntoView?.({ block: "nearest", inline: "nearest" })}
       aria-label={compact ? t("days") : t("label")}
       className={
         compact
-          ? "relative z-20 flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-3 py-1.5 [scrollbar-width:none]"
+          ? "relative z-20 flex shrink-0 scroll-px-3 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-3 py-1.5 [scrollbar-width:none]"
           : "flex gap-1.5 border-line bg-paper px-3 py-4 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
       }
     >
@@ -472,8 +482,8 @@ export function Rail({
           <hr className="mx-1 my-2 border-line" />
           <RailDropTab
             label={t("ideas")}
-            name={t("ideasCount", { count: ideas })}
             count={String(ideas)}
+            spoken={String(ideas)}
             id={RAIL_IDEAS_ID}
             dropId={RAIL_IDEAS_DROP_ID}
             selected={selected.kind === "ideas"}
@@ -482,8 +492,8 @@ export function Rail({
           <RailTab
             id={RAIL_CHECKLIST_ID}
             label={tt("checklist")}
-            name={trip.checklist.length > 0 ? `${tt("checklist")}, ${tt("checklistDone", { done, total: trip.checklist.length })}` : undefined}
             count={trip.checklist.length > 0 ? `${done}/${trip.checklist.length}` : undefined}
+            spoken={trip.checklist.length > 0 ? tt("checklistDone", { done, total: trip.checklist.length }) : undefined}
             selected={selected.kind === "checklist"}
             onSelect={() => onSelect({ kind: "checklist" })}
           />

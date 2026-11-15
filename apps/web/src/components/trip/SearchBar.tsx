@@ -126,7 +126,7 @@ function AddStep({
             </label>
             <select
               id={`${id}-category`}
-              className="h-9 max-w-[180px] rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
+              className="h-9 max-lg:h-11 max-w-[180px] rounded-lg border border-ink-2 bg-surface px-2 text-[14px]"
               value={category}
               onChange={(e) => {
                 const next = e.target.value as Category;
@@ -239,7 +239,7 @@ export function SearchBar({
   return (
     <div className="grid">
       {/* The results list opens under this whole box (360 px in the 400 px column), as wide as it. */}
-      <div data-search-box data-tour="search" className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2">
+      <div data-search-box data-tour="search" className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2 has-[input:focus]:outline-2 has-[input:focus]:outline-offset-2 has-[input:focus]:outline-ink">
         <Icon name="search" size={16} className="text-ink-2" />
         <label htmlFor={`${id}-search`} className="sr-only">
           {label}
@@ -264,7 +264,7 @@ export function SearchBar({
             disabled={full}
             describedBy={full ? `${id}-full` : `${id}-help`}
             placeholder={label}
-            inputClassName="h-9 w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-2 disabled:cursor-not-allowed"
+            inputClassName="h-9 max-lg:h-11 w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-2 disabled:cursor-not-allowed"
           />
         </div>
         {filter}

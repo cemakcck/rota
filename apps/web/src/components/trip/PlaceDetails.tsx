@@ -47,7 +47,7 @@ function StayField({ id, value, onSave }: { id: string; value: number; onSave: (
         id={id}
         value={custom === null ? value : "custom"}
         onChange={(e) => (e.target.value === "custom" ? setCustom(String(value)) : onSave(Number(e.target.value)))}
-        className="h-8 max-w-full rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold"
+        className="h-8 max-w-full rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold max-lg:h-11"
       >
         {stays.map((m) => (
           <option key={m} value={m}>
@@ -77,7 +77,7 @@ function StayField({ id, value, onSave }: { id: string; value: number; onSave: (
             }
           }}
           onBlur={commit}
-          className="h-8 w-24 rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-normal tabular-nums"
+          className="h-8 w-24 rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-normal tabular-nums max-lg:h-11"
         />
       )}
     </div>
@@ -140,7 +140,7 @@ function TimeField({ id, place, estimate, onSet }: { id: string; place: PlaceVie
         maxLength={5}
         aria-invalid={invalid || undefined}
         aria-describedby={invalid ? errorId : undefined}
-        className="h-8 w-[72px] rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold tabular-nums aria-[invalid=true]:border-danger"
+        className="h-8 w-[72px] rounded-md border border-ink-2 bg-surface px-1.5 text-[13.5px] font-semibold tabular-nums max-lg:h-11 aria-[invalid=true]:border-danger"
         value={value}
         onChange={(e) => {
           setDraft(e.target.value);
@@ -282,10 +282,12 @@ export function PlaceDetails({
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 flex-1 justify-items-start gap-1">
           {actions ? (
-            <button type="button" id={ids.chip} aria-expanded={picking} aria-label={t("changeCategory", { category: tc(place.category) })} onClick={() => setPicking(!picking)} className={`${chip} hover:opacity-80`} style={chipStyle}>
+            <button type="button" id={ids.chip} aria-expanded={picking} onClick={() => setPicking(!picking)} className={`${chip} hover:opacity-80 max-lg:min-h-11 max-lg:px-3.5`} style={chipStyle}>
+              {/* Named by what it shows, then what it does (WCAG 2.5.3). */}
               <span data-testid="details-chip" className="min-w-0 truncate">
                 {chipText}
               </span>
+              <span className="sr-only">, {t("changeCategory")}</span>
               <Icon name="down" size={12} />
             </button>
           ) : (
@@ -302,7 +304,7 @@ export function PlaceDetails({
                 value={place.name}
                 maxLength={200}
                 onCommit={(value) => value.trim() && actions.save(place.id, { name: value.trim() })}
-                className="-mx-1 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1 font-serif text-[20px] font-semibold leading-tight hover:border-line focus:border-ink-2"
+                className="-mx-1 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1 font-serif text-[20px] font-semibold leading-tight max-lg:h-11 hover:border-line focus:border-ink-2"
               />
             </>
           ) : (
@@ -310,7 +312,7 @@ export function PlaceDetails({
           )}
           {addedBy && <p className="text-[12.5px] text-ink-2">{t("addedBy", { name: addedBy.name })}</p>}
         </div>
-        <button type="button" aria-label={t("close")} onClick={close} className="grid size-8 shrink-0 place-items-center rounded-lg bg-paper text-ink-2 hover:bg-hover">
+        <button type="button" aria-label={t("close")} onClick={close} className="grid size-8 shrink-0 place-items-center rounded-lg bg-paper text-ink-2 hover:bg-hover max-lg:size-11">
           <Icon name="close" size={14} />
         </button>
       </div>
@@ -415,10 +417,10 @@ export function PlaceDetails({
       {actions && (
         <div className="mt-auto flex flex-wrap items-center gap-2">
           {/* The single-pointer way to reorder (WCAG 2.5.7), besides dragging and Alt+↑/↓. */}
-          <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveUpFor", { name })} aria-disabled={first || undefined} onClick={() => !first && actions.nudge(place.id, -1)}>
+          <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40 max-lg:min-w-11`} aria-label={t("moveUpFor", { name })} aria-disabled={first || undefined} onClick={() => !first && actions.nudge(place.id, -1)}>
             <Icon name="up" size={14} />
           </button>
-          <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40`} aria-label={t("moveDownFor", { name })} aria-disabled={last || undefined} onClick={() => !last && actions.nudge(place.id, 1)}>
+          <button type="button" className={`${btn} ${btnSm} aria-disabled:opacity-40 max-lg:min-w-11`} aria-label={t("moveDownFor", { name })} aria-disabled={last || undefined} onClick={() => !last && actions.nudge(place.id, 1)}>
             <Icon name="down" size={14} />
           </button>
           <button type="button" id={placeMoveId(place.id)} className={`${btn} ${btnSm} flex-1`} aria-haspopup="dialog" onClick={() => actions.openMove(place.id)}>

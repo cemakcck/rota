@@ -119,7 +119,7 @@ function useNoteText(fragment: Y.XmlFragment): string {
   return useSyncExternalStore(subscribe, () => noteText(fragment), () => "");
 }
 
-const tool = "grid size-7 place-items-center rounded-md text-[13px] text-ink-2 hover:bg-hover aria-pressed:bg-ink aria-pressed:text-white";
+const tool = "grid size-7 max-lg:size-11 place-items-center rounded-md text-[13px] text-ink-2 hover:bg-hover aria-pressed:bg-ink aria-pressed:text-white";
 
 function Toolbar({ editor }: { editor: Editor }) {
   const t = useTranslations("trip");
@@ -183,7 +183,7 @@ function OpenEditor({ fragment, awareness, label, onClose }: { fragment: Y.XmlFr
   if (!editor) return null;
   return (
     <div
-      className="rounded-lg border border-ink-2 bg-surface focus-within:shadow-[0_0_0_1px_var(--color-ink)]"
+      className="rounded-lg border border-ink-2 bg-surface focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
       }}
@@ -230,7 +230,7 @@ function Preview({ text, name, lines, more, onOpen }: { text: string; name: stri
           type="button"
           aria-expanded={expanded}
           aria-label={expanded ? t("noteLessFor", { name }) : t("noteMoreFor", { name })}
-          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline"
+          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline max-lg:min-h-11 max-lg:px-2"
           onClick={() => setExpanded((e) => !e)}
         >
           {expanded ? t("noteLess") : t("noteMore")}
@@ -298,7 +298,7 @@ export function NoteEditor({
         <button
           ref={toggle}
           type="button"
-          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline"
+          className="rounded-md px-1 text-[12.5px] font-medium text-ink-2 underline-offset-2 hover:underline max-lg:min-h-11 max-lg:px-2"
           aria-label={text ? t("editNoteFor", { name }) : t("addNoteFor", { name })}
           onClick={() => change(true)}
         >

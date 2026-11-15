@@ -99,7 +99,7 @@ describe("place details", () => {
     expect(fake.view.days[0].places[1].tags).toEqual(["art", "views"]);
     fireEvent.click(within(panel).getByRole("button", { name: "Remove tag art" }));
     expect(fake.view.days[0].places[1].tags).toEqual(["views"]);
-    fireEvent.click(within(panel).getByRole("button", { name: /^Change category/ }));
+    fireEvent.click(within(panel).getByRole("button", { name: /, change category$/ }));
     fireEvent.click(within(panel).getByRole("radio", { name: "Sight" }));
     expect(fake.view.days[0].places[1].category).toBe("sight");
     const name = within(panel).getByRole("textbox", { name: "Name" });

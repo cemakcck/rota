@@ -121,7 +121,7 @@ export function Suggestions({
               type="button"
               aria-expanded={open}
               aria-controls={dismissedId}
-              className="inline-flex h-9 items-center rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-hover"
+              className="inline-flex h-9 max-lg:h-11 items-center rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-hover"
               onClick={() => setOpen((o) => !o)}
             >
               {t("dismissedCount", { count: dismissed.length })}

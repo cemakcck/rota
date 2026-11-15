@@ -195,9 +195,10 @@ describe("trip view", () => {
     renderIntl(<TripScreen tripId="t1" />);
 
     const ideas = within(rail()).getByRole("button", { name: "Ideas & votes, 3" });
-    expect(ideas.textContent).toBe("Ideas & votes3");
+    // Shown as a count; read after the label, which the name starts with (WCAG 2.5.3).
+    expect(ideas.querySelector("[aria-hidden=true]")?.textContent).toBe("3");
     const checklist = within(rail()).getByRole("button", { name: "Checklist, 1 of 3 done" });
-    expect(checklist.textContent).toBe("Checklist1/3");
+    expect(checklist.querySelector("[aria-hidden=true]")?.textContent).toBe("1/3");
 
     fireEvent.click(ideas);
     expect(screen.getByText("Pierre Loti")).toBeTruthy();
