@@ -37,6 +37,8 @@ type Props = {
    * under the field: the day plan's search box, so the list never reaches past the column.
    */
   anchorToParent?: boolean;
+  /** A search to run as if typed (the empty day's quick searches): each new object runs once. */
+  query?: { text: string } | null;
 };
 
 /** "680 m" or "7.9 km": to the nearest 10 m under a kilometre. */
@@ -73,6 +75,7 @@ export function PlaceSearch({
   from = null,
   onPreview,
   anchorToParent = false,
+  query = null,
 }: Props) {
   const t = useTranslations("trip");
   const tc = useTranslations("categories");
@@ -132,6 +135,12 @@ export function PlaceSearch({
       );
     }, DEBOUNCE_MS);
   }
+
+  const runQuery = useEffectEvent((text: string) => change(text));
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- runs a search asked for by a click outside the field, once per request
+    if (query) runQuery(query.text);
+  }, [query]);
 
   function pick(result: SearchResult) {
     cancel();

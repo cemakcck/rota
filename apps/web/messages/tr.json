@@ -145,7 +145,11 @@
     "deleteConfirmText": "Onaylamak için gezi adını yazın. Herkes erişimini kaybeder.",
     "deleteTypeLabel": "Gezi adı",
     "deleteConfirm": "Kalıcı olarak sil",
-    "loadFailed": "Gezi yüklenemedi."
+    "loadFailed": "Gezi yüklenemedi.",
+    "tipsTitle": "İpuçları",
+    "tipsText": "Gezi ekranının kısa turunu yeniden görün.",
+    "tipsAgain": "İpuçlarını yeniden göster",
+    "tipsReset": "İpuçları bir dahaki sefere bir gezi açtığınızda gösterilecek."
   },
   "members": {
     "title": "Üyeler",
@@ -199,7 +203,7 @@
     "plan": "Plan",
     "map": "Harita",
     "ideas": "Fikirler",
-    "ideasEmpty": "Gidebileceğiniz yerler. Karar verince birini bir güne taşıyın.",
+    "ideasEmpty": "Henüz fikir yok. Gidebileceğiniz yerleri burada tutun ya da herkesin oylayabilmesi için bir yer önerin.",
     "day": "{n}. Gün",
     "dayEmpty": "Henüz plan yok. Bir yer ekleyin ya da buraya sürükleyin.",
     "summary": "{range} · {days} gün · {places} yer",
@@ -286,7 +290,7 @@
     "bulletList": "Madde işaretli liste",
     "checklist": "Kontrol listesi",
     "checklistItems": "Kontrol listesi maddeleri",
-    "checklistEmpty": "Henüz bir şey yok. Toplanacakları, ayırtılacakları ya da yapılacakları ekleyin.",
+    "checklistEmpty": "Toplanacak ya da ayırtılacak şeyleri ekleyin",
     "checklistDone": "{total} maddeden {done} tanesi tamam",
     "addItem": "Madde ekle",
     "newItem": "Yeni madde",
@@ -403,7 +407,17 @@
     "undoClearTimeFor": "Saati kaldırmayı geri al: {name}",
     "undoTip": "Geri al (Ctrl+Z veya ⌘Z)",
     "redoTip": "Yinele (Ctrl+Shift+Z veya ⌘⇧Z)",
-    "undoMoveDayFor": "Gün taşımayı geri al: {day}"
+    "undoMoveDayFor": "Gün taşımayı geri al: {day}",
+    "dayEmptyFirst": "İlk durağınızı ekleyin",
+    "dayEmptyStart": "Bir yer arayın ya da bunlardan biriyle başlayın.",
+    "quickSearch": "Yakında ara",
+    "quickNear": "{place} yakınında {what}",
+    "quickTerms": {
+      "food": "restoran",
+      "sight": "görülecek yerler",
+      "cafe": "kafe",
+      "museum": "müze"
+    }
   },
   "map": {
     "sheetHandle": "Listeyi yeniden boyutlandır",
@@ -492,5 +506,15 @@
     "people": "Kişiler",
     "peopleHere": "Kişiler: {names}",
     "inviteFriends": "Arkadaşlarınızı davet edin"
+  },
+  "tour": {
+    "days": "Bunlar gezinizin günleri",
+    "search": "Bir yer ekleyin — eklemeden önce saatini seçin",
+    "share": "Arkadaşlarınızı birlikte planlamaya davet edin",
+    "progress": "Adım {n} / {total}",
+    "next": "İleri",
+    "back": "Geri",
+    "done": "Tamam",
+    "skip": "Turu geç"
   }
 }

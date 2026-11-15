@@ -61,6 +61,7 @@ import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { Rail, railDayButtonId, type DayActions } from "./Rail";
 import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
+import { Tour, useTour } from "./Tour";
 import { TripSettingsScreen } from "./TripSettingsScreen";
 import { useTripView } from "./view";
 
@@ -122,6 +123,8 @@ function TripScreenFor({ tripId }: Props) {
   // Edits need a known user (they are attributed and undone per person) and a trip that still syncs.
   const editor = closed === null ? userId : null;
   const undo = useUndo(doc, editor);
+  // The first-time tour: for someone who can edit, once the trip is here.
+  const tour = useTour(doc, editor, ready);
   const [filter, setFilter] = useState(NO_FILTER);
   // What the list and the map show (mirrored in the address), and the place selected in the list or on the map.
   const [shown, show] = useTripView(view, ready);
@@ -689,6 +692,7 @@ function TripScreenFor({ tripId }: Props) {
               />
             )}
             <Announcer doc={doc} userId={userId} awareness={awareness} listLabel={labelIn} />
+            {tour.open && <Tour onDone={tour.finish} />}
           </div>
           <DragOverlay dropAnimation={null}>
             {dragged && (

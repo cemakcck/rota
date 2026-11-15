@@ -245,8 +245,42 @@ function DayNote({ day, title, editable }: { day: DayView; title: string; editab
   );
 }
 
+/** The empty day's quick searches (spec §4), by category. */
+const QUICK_SEARCHES = ["food", "sight", "cafe", "museum"] as const;
+
+/**
+ * An empty day the search adds to: "Add your first stop", and quick searches (Food, Sight, Café, Museum)
+ * that fill the search with "cafe near <destination>" and open its results.
+ */
+function FirstStop({ destination, onSearch }: { destination: string | null; onSearch(text: string): void }) {
+  const t = useTranslations("trip");
+  const tcat = useTranslations("categories");
+  return (
+    <div className="rounded-xl border border-dashed border-line px-3 py-4">
+      <p className="text-[14px] font-semibold text-ink">{t("dayEmptyFirst")}</p>
+      <p className="mt-0.5 text-[12.5px] text-ink-2">{t("dayEmptyStart")}</p>
+      <div role="group" aria-label={t("quickSearch")} className="mt-2.5 flex flex-wrap gap-1.5">
+        {QUICK_SEARCHES.map((category) => {
+          const what = t(`quickTerms.${category}`);
+          return (
+            <button
+              key={category}
+              type="button"
+              onClick={() => onSearch(destination ? t("quickNear", { what, place: destination }) : what)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-hover"
+            >
+              <Icon name={category} size={14} className="text-ink-2" />
+              {tcat(category)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** A day's stops with connectors between them; also a drop target (its end). */
-function StopList({ day, places, travel, empty, rows }: { day: DayView; places: PlaceView[]; travel?: Travel; empty: string; rows: RowProps }) {
+function StopList({ day, places, travel, empty, rows }: { day: DayView; places: PlaceView[]; travel?: Travel; empty: ReactNode; rows: RowProps }) {
   const t = useTranslations("trip");
   const { setNodeRef, isOver } = useDroppable({ id: listDropId(day.id), disabled: !rows.actions });
   const timeline = dayTimeline(day, travel?.legs ?? []);
@@ -254,7 +288,7 @@ function StopList({ day, places, travel, empty, rows }: { day: DayView; places: 
   return (
     <div ref={setNodeRef} className={`mx-5 min-w-0 rounded-xl ${isOver ? "bg-hover outline-2 outline-dashed outline-ink-2" : ""}`}>
       {places.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{empty}</p>
+        empty
       ) : (
         <ol className="grid min-w-0">
           {places.map((place, i) => {
@@ -370,6 +404,8 @@ export function DayPlan({
   const shownDay = shown.kind === "day" ? view.days.find((d) => d.id === shown.dayId) : undefined;
   // Where the search bar adds: the day shown; the first day for the whole trip; else Ideas.
   const targetDay = shownDay ?? (shown.kind === "all" ? view.days[0] : undefined);
+  // An empty day's quick search, until the search bar has run it.
+  const [query, setQuery] = useState<{ text: string } | null>(null);
   const search = (
     <>
       <SearchBar
@@ -382,6 +418,8 @@ export function DayPlan({
         filter={filterButton}
         onAdd={actions && ((stop, to) => actions.add(stop, to))}
         onPreview={onPreview}
+        query={query}
+        onQueryRun={() => setQuery(null)}
       />
       <HiddenCount hidden={hidden} />
     </>
@@ -405,7 +443,20 @@ export function DayPlan({
         {/* The day's note at the top, under its header (spec §2). */}
         <DayNote day={day} title={listLabel(day.id)} editable={actions !== null} />
         {extra}
-        <StopList day={day} places={day.places} travel={dayTravel} empty={t("dayEmpty")} rows={rows} />
+        <StopList
+          day={day}
+          places={day.places}
+          travel={dayTravel}
+          // Quick searches where the search adds to this day; elsewhere (read-only, full, another day of the whole trip) plain words.
+          empty={
+            actions && !full && day.id === targetDay?.id ? (
+              <FirstStop destination={view.destination?.name || null} onSearch={(text) => setQuery({ text })} />
+            ) : (
+              <p className="rounded-xl border border-dashed border-line px-3 py-4 text-[13px] text-ink-2">{t("dayEmpty")}</p>
+            )
+          }
+          rows={rows}
+        />
       </section>
     );
   };

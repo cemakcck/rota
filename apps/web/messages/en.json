@@ -145,7 +145,11 @@
     "deleteConfirmText": "Type the trip name to confirm. Everyone loses access.",
     "deleteTypeLabel": "Trip name",
     "deleteConfirm": "Delete forever",
-    "loadFailed": "The trip could not be loaded."
+    "loadFailed": "The trip could not be loaded.",
+    "tipsTitle": "Tips",
+    "tipsText": "See the short tour of the trip screen again.",
+    "tipsAgain": "Show tips again",
+    "tipsReset": "Tips will show the next time you open a trip."
   },
   "members": {
     "title": "Members",
@@ -199,7 +203,7 @@
     "plan": "Plan",
     "map": "Map",
     "ideas": "Ideas",
-    "ideasEmpty": "Places you might visit. Move one into a day when you decide.",
+    "ideasEmpty": "No ideas yet. Keep places you might visit here, or suggest one so everyone can vote on it.",
     "day": "Day {n}",
     "dayEmpty": "Nothing planned yet. Add a place, or drag one here.",
     "summary": "{range} · {days, plural, one {# day} other {# days}} · {places, plural, one {# place} other {# places}}",
@@ -286,7 +290,7 @@
     "bulletList": "Bullet list",
     "checklist": "Checklist",
     "checklistItems": "Checklist items",
-    "checklistEmpty": "Nothing here yet. Add what to pack, book or do.",
+    "checklistEmpty": "Add things to pack or book",
     "checklistDone": "{done} of {total} done",
     "addItem": "Add an item",
     "newItem": "New item",
@@ -403,7 +407,17 @@
     "undoClearTimeFor": "Undo clearing the time of {name}",
     "undoTip": "Undo (Ctrl+Z or ⌘Z)",
     "redoTip": "Redo (Ctrl+Shift+Z or ⌘⇧Z)",
-    "undoMoveDayFor": "Undo moving {day}"
+    "undoMoveDayFor": "Undo moving {day}",
+    "dayEmptyFirst": "Add your first stop",
+    "dayEmptyStart": "Search for a place, or start with one of these.",
+    "quickSearch": "Search nearby",
+    "quickNear": "{what} near {place}",
+    "quickTerms": {
+      "food": "restaurant",
+      "sight": "sights",
+      "cafe": "cafe",
+      "museum": "museum"
+    }
   },
   "map": {
     "sheetHandle": "Resize the list",
@@ -492,5 +506,15 @@
     "people": "People",
     "peopleHere": "People: {names}",
     "inviteFriends": "Invite friends"
+  },
+  "tour": {
+    "days": "These are your days",
+    "search": "Add a place — pick a time before it goes in",
+    "share": "Invite friends to plan together",
+    "progress": "Step {n} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "skip": "Skip tour"
   }
 }

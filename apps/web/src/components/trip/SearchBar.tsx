@@ -177,6 +177,8 @@ export function SearchBar({
   filter,
   onAdd,
   onPreview,
+  query = null,
+  onQueryRun,
 }: {
   /** Where Add puts it: the day shown (or Ideas), with its label. */
   target: { id: ListId; label: string };
@@ -192,6 +194,10 @@ export function SearchBar({
   onAdd: ((stop: NewStop, to: ListId | "suggest") => void) | null;
   /** The result hovered or arrowed to, for a preview pin on the map; null when none. */
   onPreview?(place: PreviewPlace | null): void;
+  /** A search to run (an empty day's quick search): typed in, its results opened, the field focused. */
+  query?: { text: string } | null;
+  /** That search has been run (so it is not run again). */
+  onQueryRun?(): void;
 }) {
   const t = useTranslations("trip");
   const tm = useTranslations("map");
@@ -209,6 +215,13 @@ export function SearchBar({
   const tellPreview = useEffectEvent((place: PreviewPlace | null) => onPreview?.(place));
   useEffect(() => tellPreview(shownPreview), [previewKey]); // eslint-disable-line react-hooks/exhaustive-deps -- follows the place only
   useEffect(() => () => tellPreview(null), []);
+  // The field runs the search (its own effect comes first); here it is focused, so its results stay open.
+  const queryRun = useEffectEvent(() => onQueryRun?.());
+  useEffect(() => {
+    if (!query) return;
+    inputRef.current?.focus();
+    queryRun();
+  }, [query]);
   const label = t("searchIn", { list: target.label });
   // Distances are from the day's last pinned stop, else the trip's destination (or centre).
   const lastPinned = day?.places.findLast((p) => p.lat !== null && p.lng !== null);
@@ -226,7 +239,7 @@ export function SearchBar({
   return (
     <div className="grid">
       {/* The results list opens under this whole box (360 px in the 400 px column), as wide as it. */}
-      <div data-search-box className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2">
+      <div data-search-box data-tour="search" className="relative mx-5 mb-3 mt-1.5 flex items-center gap-2.5 rounded-xl border border-line bg-surface py-1 pl-3.5 pr-2 shadow-1 focus-within:border-ink-2">
         <Icon name="search" size={16} className="text-ink-2" />
         <label htmlFor={`${id}-search`} className="sr-only">
           {label}
@@ -246,6 +259,7 @@ export function SearchBar({
             near={near}
             from={from}
             anchorToParent
+            query={query}
             onPreview={(r) => setListPreview(r && { name: r.name, category: r.category, lat: r.lat, lng: r.lng })}
             disabled={full}
             describedBy={full ? `${id}-full` : `${id}-help`}

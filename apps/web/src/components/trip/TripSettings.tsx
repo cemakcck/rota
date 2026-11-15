@@ -5,17 +5,53 @@ import { useTranslations } from "next-intl";
 import { apiFetch } from "@/client/authClient";
 import { errorMessage, readError } from "@/client/apiError";
 import { forgetTrip } from "@/client/myTrips";
+import { showTipsAgain } from "@/client/tips";
 import { useRouter } from "@/i18n/navigation";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Field } from "../Field";
-import { btnDanger, btnPrimary, card, errorText } from "../ui";
+import { btn, btnDanger, btnPrimary, card, errorText } from "../ui";
 import { InvitePanel } from "./InvitePanel";
 import { MembersPanel, type TripMember } from "./MembersPanel";
 
 export type TripMeta = { id: string; name: string; startDate: string; days: number };
 
+/** "Show tips again" (spec §4): this person's first-time tour comes back the next time they open a trip. */
+function TipsAgain({ userId }: { userId: string }) {
+  const t = useTranslations("settings");
+  const te = useTranslations("errors");
+  const [result, setResult] = useState<"ok" | "failed" | "offline" | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className={`${card} grid gap-3`}>
+      <h3 className="text-[15px] font-semibold">{t("tipsTitle")}</h3>
+      <p className="text-ink-2">{t("tipsText")}</p>
+      <div aria-live="polite">{result === "ok" && <p role="status" className="font-medium text-ok">{t("tipsReset")}</p>}</div>
+      {(result === "failed" || result === "offline") && (
+        <p role="alert" className={errorText}>
+          {te(result === "offline" ? "offline" : "generic")}
+        </p>
+      )}
+      <div>
+        <button
+          type="button"
+          className={btn}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setResult(null);
+            setResult(await showTipsAgain(userId));
+            setBusy(false);
+          }}
+        >
+          {t("tipsAgain")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
- * The trip settings: details, members, invites (owner) and deleting the trip (owner). Standalone and
+ * The trip settings: details, members, this person's tips, invites (owner) and deleting the trip (owner). Standalone and
  * prop-driven: the trip screen's settings sheet hosts it (TripSettingsScreen loads it).
  */
 export function TripSettings({
@@ -111,6 +147,8 @@ export function TripSettings({
       <div className={card}>
         <MembersPanel tripId={trip.id} members={members} userId={userId} onChanged={onChanged} />
       </div>
+
+      <TipsAgain userId={userId} />
 
       {isOwner && (
         <>

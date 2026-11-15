@@ -383,6 +383,7 @@ export function Rail({
 
   return (
     <nav
+      data-tour="days"
       aria-label={t("label")}
       className="flex gap-1.5 border-line bg-paper px-3 py-4 max-lg:relative max-lg:z-20 max-lg:items-center max-lg:overflow-x-auto max-lg:border-b max-lg:py-2 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
     >

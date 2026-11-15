@@ -310,6 +310,7 @@ export function TripHeader({
         <button
           type="button"
           aria-haspopup="dialog"
+          data-tour="share"
           onClick={(e) => openPeople(e.currentTarget)}
           className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13px] font-medium text-white hover:bg-ink-2"
         >

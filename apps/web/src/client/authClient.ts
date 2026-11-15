@@ -3,7 +3,9 @@
 import { useEffect } from "react";
 import { createAuthClient } from "better-auth/react";
 import type { MemberView } from "@rota/trip";
-import { friendKey } from "./friendHandoff";
+import { friendKey, isFriendWindow } from "./friendHandoff";
+
+export { isFriendWindow };
 
 // Friend windows (spec §11) are a second person in the same browser: the cookie belongs to the
 // visitor, so the friend's requests and sync connection carry a bearer token kept in this window's
@@ -24,17 +26,6 @@ export function friendSession(): FriendSession | null {
     return { token, user: { id, name, colour } };
   } catch {
     return null;
-  }
-}
-
-/** True in a friend window: opened with `?friend=1`, or already holding a friend session. */
-export function isFriendWindow(): boolean {
-  if (typeof window === "undefined") return false;
-  if (new URLSearchParams(window.location.search).get("friend") === "1") return true;
-  try {
-    return window.sessionStorage.getItem(friendKey()) !== null;
-  } catch {
-    return false;
   }
 }
 

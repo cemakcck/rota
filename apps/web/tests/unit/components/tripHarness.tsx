@@ -25,6 +25,9 @@ type Fake = {
   simulated: boolean[];
 };
 
+/** Where this device remembers that u1 saw the tour (see client/tips). */
+export const TIPS_SEEN_U1 = "rota.tipsSeen.u1";
+
 const listeners = new Set<() => void>();
 let version = 0;
 const notify = () => {
@@ -45,8 +48,13 @@ export const fake: Fake = {
   simulated: [],
 };
 
-/** A fresh trip ("Istanbul long weekend", 27 Nov 2026) with Ann (u1, the user) and Deniz (u2). */
-export function newTrip({ days = 2 }: { days?: number } = {}): { doc: Y.Doc; dayIds: string[] } {
+/**
+ * A fresh trip ("Istanbul long weekend", 27 Nov 2026) with Ann (u1, the user) and Deniz (u2). Ann has
+ * seen the first-time tour on this device, so it stays out of the way, unless `tour` is true.
+ */
+export function newTrip({ days = 2, tour = false }: { days?: number; tour?: boolean } = {}): { doc: Y.Doc; dayIds: string[] } {
+  if (tour) localStorage.removeItem(TIPS_SEEN_U1);
+  else localStorage.setItem(TIPS_SEEN_U1, "seen");
   const doc = new Y.Doc();
   initTrip(doc, { name: "Istanbul long weekend", startDate: "2026-11-27", days, locale: "en" }, "seed");
   upsertMember(doc, { id: "u1", name: "Ann", colour: "#2563eb" });
