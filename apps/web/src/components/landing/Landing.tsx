@@ -6,7 +6,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { btn, btnPrimary, errorText } from "../ui";
 import { SyncAnimation } from "./SyncAnimation";
 
-export const GITHUB_URL = "https://github.com/cemakcck/rota";
+export const GITHUB_URL = "https://github.com/cemakcck/tripify";
 
 export function Landing({ locale }: { locale: "en" | "tr" }) {
   const t = useTranslations("landing");
