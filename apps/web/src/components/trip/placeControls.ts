@@ -17,7 +17,8 @@ export type UndoToast = (message: string, undoLabel: string) => void;
  * with a neighbour, and this person's own reorders and time changes are said politely (`status`;
  * others' changes come from the Announcer); Move to… opens the Move dialog (`moving`), which closes
  * by itself when the place goes (deleted or un-planned elsewhere). A move to another list (Move to…,
- * a drop on another day or Ideas) and a cleared time are said by an Undo toast (`undoToast`) instead.
+ * a drop on another day or Ideas, an idea's Add to day…) and a cleared time are said by an Undo toast
+ * (`undoToast`) instead.
  */
 export function usePlaceControls(
   doc: Y.Doc,
@@ -97,17 +98,18 @@ export function usePlaceControls(
     },
   };
 
-  // An idea put into a day: said politely (the view stays on Ideas, so it would otherwise go unseen).
+  // An idea put into a day: said by an Undo toast (the view stays on Ideas, so it would otherwise go
+  // unseen), whose Undo puts it back in Ideas.
   const schedule: Schedule | null =
     actions &&
     ((id, dayId, time, stayMinutes) => {
       const place = find(id)?.place;
-      actions.schedule(id, dayId, time, stayMinutes);
+      if (!actions.schedule(id, dayId, time, stayMinutes)) return;
       const index = view.days.findIndex((d) => d.id === dayId);
       if (!place || index < 0) return;
       const name = place.name || t("unnamed");
       const list = t("day", { n: index + 1 });
-      setStatus(time === null ? t("scheduled", { name, list }) : t("scheduledAt", { name, list, time }));
+      undoToast(time === null ? t("addedTo", { list }) : t("addedToAt", { list, time }), t("undoAddFor", { name }));
     });
 
   const moveTo = (id: string, to: ListId) => {

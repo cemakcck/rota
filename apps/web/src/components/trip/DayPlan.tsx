@@ -48,8 +48,8 @@ export type PlanActions = StopActions &
     shiftTimes(dayId: string, minutes: number): void;
     /** Adds a place to a day or Ideas, or as a suggestion. */
     add(stop: NewStop, to: ListId | "suggest"): void;
-    /** Puts an idea into a day at a time (or untimed), with its stay: one step. */
-    schedule: Schedule;
+    /** Puts an idea into a day at a time (or untimed), with its stay: one step. False if it could not move. */
+    schedule(...args: Parameters<Schedule>): boolean;
   };
 
 /** The day plan's views (the checklist has its own). */

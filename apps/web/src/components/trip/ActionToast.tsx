@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { btn, btnSm } from "../ui";
+import { focusFirst } from "./focus";
 
 /** How long a toast stays, counted only while the pointer and focus are elsewhere (WCAG 2.2.1). */
 export const ACTION_TOAST_MS = 6000;
@@ -15,7 +16,7 @@ export type ActionToastInput = {
   undoLabel?: string;
   /** Move focus to Undo: when what was acted on (and its buttons) is gone, e.g. after a delete. */
   focus?: boolean;
-  /** Where focus goes if the toast closes while holding it (the related row or day); else the screen's fallback. */
+  /** Where focus goes if the toast closes while holding it (the related row or day); else the screen's fallbacks. */
   returnFocus?: () => HTMLElement | null;
 };
 
@@ -49,9 +50,10 @@ export function useActionToast(): ToastApi {
  * Holds the one action toast of a screen and draws it: its message in a polite live region (always
  * present, so the change is announced), Undo beside it. Gone after 6 s, paused while hovered or while
  * focus is anywhere in it (however it got there); Escape closes it. Closing while it holds focus sends
- * focus to the toast's `returnFocus`, else to `fallbackFocus` (the screen's search), never to the page.
+ * focus to the toast's `returnFocus`, else to the first of `fallbackFocus` (the screen's controls, in
+ * order) that is on screen and can take it, never to the page.
  */
-export function ActionToastProvider({ children, fallbackFocus }: { children: ReactNode; fallbackFocus?: () => HTMLElement | null }) {
+export function ActionToastProvider({ children, fallbackFocus }: { children: ReactNode; fallbackFocus?: () => (HTMLElement | null)[] }) {
   const [current, setCurrent] = useState<Shown | null>(null);
   const counter = useRef(0);
   const show = useCallback((toast: ActionToastInput) => setCurrent({ ...toast, key: ++counter.current }), []);
@@ -76,7 +78,7 @@ function ToastView({
 }: {
   toast: Shown | null;
   onClose: () => void;
-  fallbackFocus?: () => HTMLElement | null;
+  fallbackFocus?: () => (HTMLElement | null)[];
   placement: Placement;
 }) {
   const t = useTranslations("trip");
@@ -105,7 +107,8 @@ function ToastView({
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected && !box.current?.contains(active)) return;
     holding.current = false;
-    (was?.returnFocus?.() ?? fallbackFocus?.())?.focus();
+    // (A target hidden meanwhile, such as the plan on the phone's Map tab, cannot take focus: the next one.)
+    focusFirst([was?.returnFocus?.(), ...(fallbackFocus?.() ?? [])]);
   }, [toast, fallbackFocus]);
   // A toast that takes focus but arrives held (a delete from the phone's details sheet, which closes with
   // it) takes focus when released, if focus was left with nowhere to be; never out of a sheet still open.
@@ -161,8 +164,9 @@ function ToastView({
         onClose();
       }}
     >
+      {/* A held toast's message goes in on release: written while inert and invisible, it would not be said. */}
       <div role="status" aria-live="polite" className="min-w-0 flex-1">
-        {toast && <p className="[overflow-wrap:anywhere]">{toast.message}</p>}
+        {toast && !held && <p className="[overflow-wrap:anywhere]">{toast.message}</p>}
       </div>
       {toast?.onUndo && (
         <button

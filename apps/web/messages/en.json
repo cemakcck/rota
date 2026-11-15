@@ -368,8 +368,6 @@
     "addToDay": "Add to day…",
     "addToDayFor": "Add {name} to a day",
     "scheduleDay": "Day",
-    "scheduled": "{name} added to {list}",
-    "scheduledAt": "{name} added to {list} at {time}",
     "timeEarlier": "min, earlier",
     "timeLater": "min, later",
     "timeSuggested": "Suggested {time}",

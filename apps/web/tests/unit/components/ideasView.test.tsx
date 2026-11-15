@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { addPlace, createUndo, setPlaceStatus, vote } from "@rota/trip";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { addPlace, createUndo, setPlaceStatus, updatePlace, vote } from "@rota/trip";
 import { renderIntl } from "./helpers";
 import { fake, newTrip, useFakeTrip } from "./tripHarness";
 
@@ -103,7 +103,30 @@ describe("ideas view", () => {
     expect(window.location.search).toBe("?view=ideas");
     expect(screen.queryByRole("region", { name: /^Details for / })).toBeNull();
     expect(names(ideasRegion())).toEqual(["Balat"]);
-    expect(screen.getByTestId("plan-status").textContent).toBe("Pierre Loti added to Day 1 at 10:15");
+    expect(document.querySelector("[data-action-toast] [role=status]")?.textContent).toBe("Added to Day 1 at 10:15");
+  });
+
+  it("adding to a day from ideas shows a toast whose Undo puts back just that, as its own step", () => {
+    const { doc } = newTrip();
+    const loti = addPlace(doc, { name: "Pierre Loti", category: "cafe", dayId: null }, "u1");
+    const balat = addPlace(doc, { name: "Balat", category: "sight", dayId: null }, "u1");
+    renderIntl(<TripScreen tripId="t1" />);
+
+    // An edit of Ann's just before (within the 500 ms an undo step would otherwise merge).
+    act(() => updatePlace(doc, balat, { stayMinutes: 90 }, "u1"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Pierre Loti to a day" }));
+    const form = screen.getByRole("form", { name: "Add Pierre Loti to a day" });
+    fireEvent.change(within(form).getByRole("textbox", { name: "Time" }), { target: { value: "10:15" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add to Day 1" }));
+    expect(fake.view.days[0].places.map((p) => p.id)).toEqual([loti]);
+
+    const toastEl = document.querySelector<HTMLElement>("[data-action-toast]")!;
+    expect(within(toastEl).getByRole("status").textContent).toBe("Added to Day 1 at 10:15");
+    fireEvent.click(within(toastEl).getByRole("button", { name: "Undo adding Pierre Loti" }));
+    // Back in Ideas, untimed; the edit before stays.
+    expect(fake.view.days[0].places).toEqual([]);
+    expect(fake.view.ideas.find((p) => p.id === loti)?.time).toBeNull();
+    expect(fake.view.ideas.find((p) => p.id === balat)?.stayMinutes).toBe(90);
   });
 
   it("adding to a day without a time leaves it untimed, as one undo step; Escape cancels", async () => {
@@ -122,7 +145,7 @@ describe("ideas view", () => {
     fireEvent.change(within(form).getByRole("combobox", { name: "Day" }), { target: { value: dayIds[1] } });
     fireEvent.click(within(form).getByRole("button", { name: "Add to Day 2" }));
     expect(fake.view.days[1].places.map((p) => [p.name, p.time])).toEqual([["Pierre Loti", null]]);
-    expect(screen.getByTestId("plan-status").textContent).toBe("Pierre Loti added to Day 2");
+    expect(document.querySelector("[data-action-toast] [role=status]")?.textContent).toBe("Added to Day 2");
     // The row went: focus is on the Ideas heading, not lost.
     await waitFor(() => expect(document.activeElement?.textContent).toBe("Ideas"));
     undo.undo();

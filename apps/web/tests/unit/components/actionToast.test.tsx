@@ -130,9 +130,37 @@ describe("ActionToast", () => {
     expect(screen.queryByText("Day 2 deleted.")).toBeNull();
   });
 
+  it("a toast held under a modal sheet is not in the live region until released, so it is announced then", () => {
+    function Holder() {
+      const toast = useActionToast();
+      return (
+        <>
+          <button type="button" onClick={() => toast.place({ lift: 16, held: true })}>
+            hold
+          </button>
+          <button type="button" onClick={() => toast.place({ lift: 16, held: false })}>
+            release
+          </button>
+        </>
+      );
+    }
+    renderIntl(
+      <ActionToastProvider>
+        <Holder />
+        <Shows toasts={[{ message: "Pera has no set time", undoLabel: "Undo clearing the time of Pera", onUndo: () => undefined }]} />
+      </ActionToastProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "hold" }));
+    fireEvent.click(screen.getByRole("button", { name: "show 0" }));
+    const live = screen.getByRole("status");
+    expect(live.textContent).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "release" }));
+    expect(live.textContent).toBe("Pera has no set time");
+  });
+
   it("closing while it holds focus sends focus where the toast says, else to the screen's fallback, never to the page", () => {
     renderIntl(
-      <ActionToastProvider fallbackFocus={() => document.getElementById("fallback")}>
+      <ActionToastProvider fallbackFocus={() => [document.getElementById("fallback")]}>
         <Shows
           toasts={[
             { message: "A deleted.", undoLabel: "Undo deleting A", onUndo: () => undefined, focus: true, returnFocus: () => document.getElementById("near") },

@@ -10,3 +10,18 @@ export function onceRendered(id: string, then: (el: HTMLElement) => void, frames
     else if (frames > 1) onceRendered(id, then, frames - 1);
   });
 }
+
+/** Whether focus can land on `el` and be seen there: in the page, not inert, not hidden (display:none, a hidden tab). */
+function canTakeFocus(el: HTMLElement): boolean {
+  return el.isConnected && !el.closest("[inert]") && (el.checkVisibility?.() ?? true);
+}
+
+/** Focuses the first of `candidates` that can take focus, and returns it (null when none could). */
+export function focusFirst(candidates: (HTMLElement | null | undefined)[]): HTMLElement | null {
+  for (const el of candidates) {
+    if (!el || !canTakeFocus(el)) continue;
+    el.focus();
+    if (document.activeElement === el) return el;
+  }
+  return null;
+}

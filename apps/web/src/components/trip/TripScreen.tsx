@@ -61,7 +61,7 @@ import { NO_FILTER, dayDropTarget, dropPlace, isDayDrag, moveKeepingTime, railDa
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
 import { RAIL_CHECKLIST_ID, RAIL_IDEAS_ID, Rail, railDayButtonId, type DayActions } from "./Rail";
 import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
-import { onceRendered } from "./focus";
+import { focusFirst, onceRendered } from "./focus";
 import { useTripShortcuts } from "./shortcuts";
 import { ShortcutsDialog, SkipLinks, useCharacterKeys } from "./ShortcutsDialog";
 import { TripHeader } from "./TripHeader";
@@ -94,8 +94,16 @@ function useUndo(doc: Y.Doc, userId: string | null): Undo | null {
   return undo;
 }
 
-/** Where focus goes when a toast holding it closes and it names no better place: the search, else the plan. */
-const toastFallbackFocus = () => document.querySelector<HTMLElement>("#main [role=combobox]") ?? document.getElementById("main");
+/**
+ * Where focus goes when a toast holding it closes and it names no better place, the first of these on
+ * screen: the search, else the plan; on the phone's Map tab (the plan hidden) the pin card, else the Map tab.
+ */
+const toastFallbackFocus = () => [
+  document.querySelector<HTMLElement>("#main [role=combobox]"),
+  document.getElementById("main"),
+  document.getElementById(PIN_CARD_DETAILS_ID),
+  document.getElementById(phoneTabId("map")),
+];
 
 /**
  * Controls that are a different element in the other layout: the rail's Ideas and Checklist and the
@@ -422,13 +430,19 @@ function TripScreenFor({ tripId }: Props) {
       const name = place.name || t("unnamed");
       undoToast(t("dismissedPlace", { name }), t("undoDismissFor", { name }));
     },
-    // An idea into a day, at its time (or untimed) and with its stay: one transaction, one undo step.
+    // An idea into a day, at its time (or untimed) and with its stay: one transaction, its own undo step
+    // (for the toast's Undo). False when the place could not move.
     schedule: (id, dayId, time, stayMinutes) =>
-      doc.transact(() => {
-        if (!movePlace(doc, id, { dayId }, editor)) return;
-        setPlaceTime(doc, id, time, editor);
-        updatePlace(doc, id, { stayMinutes }, editor);
-      }, editor),
+      step(() => {
+        let moved = false;
+        doc.transact(() => {
+          moved = movePlace(doc, id, { dayId }, editor);
+          if (!moved) return;
+          setPlaceTime(doc, id, time, editor);
+          updatePlace(doc, id, { stayMinutes }, editor);
+        }, editor);
+        return moved;
+      }),
     restore: (id) => setPlaceStatus(doc, id, "suggested", editor),
   };
   const controls = usePlaceControls(doc, view, actions, undoToast);
@@ -493,13 +507,14 @@ function TripScreenFor({ tripId }: Props) {
     });
   }
 
-  // "Galata Tower deleted. Undo": focus moves to Undo (the row's buttons are gone), and back to the restored row after.
+  // "Galata Tower deleted. Undo": focus moves to Undo (the row's buttons are gone), and back to the restored row
+  // after; on the phone's Map tab, where the row is hidden, to the place's pin card (it is selected again).
   function showDeleted(name: string, focus: string) {
     toast.show({
       message: t("deleted", { name }),
       undoLabel: t("undoDeleteFor", { name }),
       focus: true,
-      onUndo: undoLast(() => onceRendered(focus, (el) => el.focus())),
+      onUndo: undoLast(() => onceRendered(focus, (el) => focusFirst([el, ...toastFallbackFocus()]))),
     });
   }
 

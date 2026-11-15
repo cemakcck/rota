@@ -405,6 +405,49 @@ describe("phone trip layout", () => {
     await waitFor(() => expect(document.activeElement?.textContent).toBe("Karaköy Güllüoğlu"));
   });
 
+  describe("on the Map tab, where the plan is hidden", () => {
+    // jsdom has no layout: what `max-lg:hidden` hides on a phone is not visible (as checkVisibility says in a browser).
+    beforeEach(async () => {
+      // A frame for what the last test's unmount left queued (the details' focus-to-the-plan), so it does not land here.
+      await new Promise((r) => requestAnimationFrame(r));
+      Object.defineProperty(Element.prototype, "checkVisibility", {
+        configurable: true,
+        value(this: Element) {
+          return !this.closest(".max-lg\\:hidden");
+        },
+      });
+    });
+    afterEach(() => {
+      delete (Element.prototype as { checkVisibility?: unknown }).checkVisibility;
+    });
+
+    async function deleteFromPinCard() {
+      const ids = openTrip();
+      fireEvent.click(tab("Map"));
+      await waitFor(() => expect(pin(ids.tower)).toBeTruthy());
+      fireEvent.click(pin(ids.tower));
+      fireEvent.click(within(screen.getByRole("region", { name: "Galata Tower" })).getByRole("button", { name: "Details" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Galata Tower" }));
+      const undo = screen.getByRole("button", { name: "Undo deleting Galata Tower" });
+      await waitFor(() => expect(document.activeElement).toBe(undo));
+      return { ...ids, undo };
+    }
+
+    it("a toast closing while it holds focus sends focus to the Map tab, not to the hidden search or the page", async () => {
+      const { undo } = await deleteFromPinCard();
+      fireEvent.keyDown(undo, { key: "Escape" });
+      expect(document.activeElement).toBe(tab("Map"));
+    });
+
+    it("Undo of a delete puts focus on the restored place's pin card, not on its hidden row", async () => {
+      const { undo } = await deleteFromPinCard();
+      fireEvent.click(undo);
+      // Never the page, even for a moment.
+      expect(document.activeElement).not.toBe(document.body);
+      await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole("region", { name: "Galata Tower" })).getByRole("button", { name: "Details" })));
+    });
+  });
+
   it("the chosen chip is in its day's colour, with white text at AA contrast", () => {
     openTrip();
     const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
