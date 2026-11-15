@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { useLocale, useTranslations } from "next-intl";
 import * as Y from "yjs";
@@ -52,14 +52,14 @@ import { ClosedNotice } from "./ClosedNotice";
 import { DayPlan, SILENT, signedMinutes, type PlanActions } from "./DayPlan";
 import { DemoBox } from "./DemoBox";
 import { MoveDialog } from "./MoveDialog";
-import { AddPlaceButton, PhoneTabs, usePhoneTabs } from "./PhoneTripShell";
-import { PIN_CARD_DETAILS_ID, PIN_CARD_PX, PinCard } from "./PinCard";
+import { AddPlaceButton, PhoneTabs, phoneTabId, usePhoneTabs } from "./PhoneTripShell";
+import { PIN_CARD_DETAILS_ID, PIN_CARD_IDS, PIN_CARD_PX, PinCard } from "./PinCard";
 import { PlaceDetails, type DetailsWhere } from "./PlaceDetails";
 import { usePlaceControls } from "./placeControls";
 import { CollabContext, type Collab } from "./Presence";
 import { NO_FILTER, dayDropTarget, dropPlace, isDayDrag, moveKeepingTime, railDayDragId, passes, plannedLists, tripCentre, type ListId } from "./plan";
 import { placeFocusId, placeMoveId, placeRowId } from "./StopRow";
-import { Rail, railDayButtonId, type DayActions } from "./Rail";
+import { RAIL_CHECKLIST_ID, RAIL_IDEAS_ID, Rail, railDayButtonId, type DayActions } from "./Rail";
 import { suggestedFor, type NewStop, type PreviewPlace } from "./SearchBar";
 import { TripHeader } from "./TripHeader";
 import { Tour, useTour } from "./Tour";
@@ -104,6 +104,24 @@ function notForTrip(target: EventTarget | null): boolean {
 
 /** Where focus goes when a toast holding it closes and it names no better place: the search, else the plan. */
 const toastFallbackFocus = () => document.querySelector<HTMLElement>("#main [role=combobox]") ?? document.getElementById("main");
+
+/**
+ * Controls that are a different element in the other layout: the rail's Ideas and Checklist and the
+ * phone's tabs. (Day buttons, their ⋯ and the whole trip / "All" share an id in both.)
+ */
+const FOCUS_TWINS: Record<string, string> = {
+  [RAIL_IDEAS_ID]: phoneTabId("ideas"),
+  [phoneTabId("ideas")]: RAIL_IDEAS_ID,
+  [RAIL_CHECKLIST_ID]: phoneTabId("checklist"),
+  [phoneTabId("checklist")]: RAIL_CHECKLIST_ID,
+};
+
+/** Where focus that was on `id` goes in the other layout: its counterpart, or for the pin card the place's row. */
+function focusCounterpart(id: string, selected: string | null): HTMLElement | null {
+  if (!id) return null;
+  if (PIN_CARD_IDS.includes(id)) return selected === null ? null : document.getElementById(placeFocusId(selected));
+  return document.getElementById(FOCUS_TWINS[id] ?? id);
+}
 
 /** The trip screen. Remounted when the signed-in user changes, so nothing of one user's session reaches another's. */
 export function TripScreen(props: Props) {
@@ -250,6 +268,38 @@ function TripScreenFor({ tripId }: Props) {
   // The checklist view's map shows the whole trip.
   const shownPlaces = shown.kind === "all" || shown.kind === "checklist" ? plannedLists(view) : plannedLists(view).filter((l) => (shown.kind === "ideas" ? l.id === null : shown.kind === "day" && l.id === shown.dayId));
   if (hovered !== null && !shownPlaces.some((l) => l.places.some((p) => p.id === hovered))) setHovered(null);
+  // The phone's pin card, for the selected place while the map shows it; the details as a modal sheet.
+  const pinShown = onMapTab && selectedPlaceId !== null && shownPlaces.some((l) => l.places.some((p) => p.id === selectedPlaceId));
+  const sheetOpen = !wide && openId !== null && openList !== undefined;
+  const fabShown = !wide && editor !== null && !full && phone.tab !== "checklist" && !pinShown;
+  // The toast on phones: above the tab bar (56 px) and whatever floats over it (the ＋, or the pin card);
+  // held under the details sheet, so nothing on top of the modal sheet can be used.
+  const { place: placeToast } = toast;
+  const toastLift = wide ? 16 : pinShown ? 56 + PIN_CARD_PX + 12 : fabShown ? 56 + 16 + 48 + 12 : 56 + 16;
+  useEffect(() => placeToast({ lift: toastLift, held: sheetOpen }), [placeToast, toastLift, sheetOpen]);
+
+  // Crossing the breakpoint replaces some controls (rail ↔ chips and tabs, the pin card): focus that was
+  // on one goes to its counterpart, else to the plan (the Map tab when the plan is out of sight), never
+  // to the page.
+  const lastFocused = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      if (e.target instanceof HTMLElement) lastFocused.current = e.target;
+    };
+    document.addEventListener("focusin", onFocus);
+    return () => document.removeEventListener("focusin", onFocus);
+  }, []);
+  const layoutSeen = useRef(wide);
+  useLayoutEffect(() => {
+    if (layoutSeen.current === wide) return;
+    layoutSeen.current = wide;
+    const active = document.activeElement;
+    const was = lastFocused.current;
+    if (!was || (active && active !== document.body && active.isConnected)) return;
+    const fallback = !wide && phone.tab === "map" ? document.getElementById(phoneTabId("map")) : document.getElementById("main");
+    (focusCounterpart(was.id, selectedPlaceId) ?? fallback)?.focus();
+  }, [wide, phone.tab, selectedPlaceId]);
+
   const followed = useRef<{ id: string; list: string | null } | null>(null);
   useEffect(() => {
     const was = followed.current;
@@ -547,7 +597,7 @@ function TripScreenFor({ tripId }: Props) {
   // The phone's Map tab: the selected place's card over the bottom of the map.
   let pinCard = null;
   const pickedList = selectedPlaceId === null ? undefined : listOf(selectedPlaceId);
-  if (onMapTab && selectedPlaceId !== null && pickedList) {
+  if (pinShown && pickedList) {
     const index = pickedList.places.findIndex((p) => p.id === selectedPlaceId);
     const id = selectedPlaceId;
     pinCard = <PinCard key={id} place={pickedList.places[index]} where={whereOf(pickedList.id, index)} onDetails={() => openDetails(id)} onClose={() => setPicked(null)} />;
@@ -563,8 +613,6 @@ function TripScreenFor({ tripId }: Props) {
       onSideBySide={setFriend}
     />
   ) : undefined;
-  // Phones: the details are a modal sheet, and everything under it is inert.
-  const sheetOpen = !wide && details !== null;
 
   // The floating ＋: to the search (on the Plan tab, from the Map tab).
   const focusSearch = () => {
@@ -703,7 +751,7 @@ function TripScreenFor({ tripId }: Props) {
                     )}
                     {pinCard}
                   </section>
-                  {!wide && editor !== null && !full && phone.tab !== "checklist" && pinCard === null && <AddPlaceButton onClick={focusSearch} />}
+                  {fabShown && <AddPlaceButton onClick={focusSearch} />}
                 </div>
               </div>
               {/* Over the map's left edge (wide screens), or a full-height modal sheet (phones). */}

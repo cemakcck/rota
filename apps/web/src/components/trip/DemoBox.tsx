@@ -5,24 +5,11 @@ import { useLocale, useTranslations } from "next-intl";
 import { friendSession, isFriendWindow } from "@/client/authClient";
 import { btn, btnSm } from "../ui";
 import { FriendButton, fetchFriendWindow, type FriendWindow } from "../demo/FriendButton";
+import { useMedia } from "./useWide";
 
-const WIDE = "(min-width: 1280px)";
+/** Screens of 1280 px or more, where the friend's window fits beside the trip (not on the server). */
+const SIDE_BY_SIDE = "(min-width: 1280px)";
 const never = () => () => undefined;
-
-function subscribeWide(onChange: () => void) {
-  const query = window.matchMedia?.(WIDE);
-  query?.addEventListener("change", onChange);
-  return () => query?.removeEventListener("change", onChange);
-}
-
-/** Screens of 1280 px or more, where the friend's window fits beside the trip. */
-function useWide(): boolean {
-  return useSyncExternalStore(
-    subscribeWide,
-    () => window.matchMedia?.(WIDE).matches ?? false,
-    () => false,
-  );
-}
 
 type Props = {
   tripId: string;
@@ -46,7 +33,7 @@ export function DemoBox({ tripId, offline, simulateOffline, onSideBySide }: Prop
     () => (isFriendWindow() ? (friendSession()?.user.name ?? "") : null),
     () => null,
   );
-  const wide = useWide();
+  const wide = useMedia(SIDE_BY_SIDE, false);
   const [failed, setFailed] = useState(false);
 
   if (friendName !== null)

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { addPlace, placeUrl, setPlaceTime, setTripMeta } from "@rota/trip";
 import { MapLoaderContext } from "@/components/map/engine";
+import { placeFocusId } from "@/components/trip/StopRow";
+import { DAY_COLOURS, dayColour } from "@/components/map/mapFeatures";
 import { renderIntl, stubFetch } from "./helpers";
 import { TIPS_SEEN_U1, fake, newTrip, useFakeTrip } from "./tripHarness";
 import { fakeMap } from "../map/fakeMap";
@@ -238,8 +240,11 @@ describe("phone trip layout", () => {
     expect(screen.getByRole("region", { name: "Details for Galata Tower" })).toBeTruthy();
     resize(390);
     expect(screen.getByRole("dialog", { name: "Details for Galata Tower" })).toBeTruthy();
+    expect(document.querySelector("[inert]")).not.toBeNull();
     resize(1280);
     expect(screen.getByRole("region", { name: "Details for Galata Tower" })).toBeTruthy();
+    // The sheet became the panel: nothing is inert any more.
+    expect(document.querySelector("[inert]")).toBeNull();
   });
 
   it("resizing keeps the add step open with what was typed", () => {
@@ -267,5 +272,108 @@ describe("phone trip layout", () => {
     resize(1280);
     expect(screen.getByRole("dialog", { name: "Add a place — pick a time before it goes in" }).textContent).toContain("Step 2 of 3");
     expect(document.querySelector('[data-tour="days"]')).toBe(screen.getByRole("navigation", { name: "Trip", hidden: true }));
+  });
+
+  it("focus on a day chip, All, a tab or a pin card button moves to its counterpart across a resize", async () => {
+    const { tower } = openTrip();
+    const railButton = (name: string | RegExp) => within(screen.getByRole("navigation", { name: "Trip" })).getByRole("button", { name });
+    chip(/^Day 2 · /).focus();
+    resize(1280);
+    expect(document.activeElement).toBe(railButton(/^Day 2 · /));
+    resize(390);
+    expect(document.activeElement).toBe(chip(/^Day 2 · /));
+
+    chip("All").focus();
+    resize(1280);
+    expect(document.activeElement).toBe(railButton("Whole trip on map"));
+    resize(390);
+    expect(document.activeElement).toBe(chip("All"));
+
+    fireEvent.click(tab("Ideas"));
+    tab("Ideas").focus();
+    resize(1280);
+    expect(document.activeElement).toBe(railButton(/^Ideas & votes/));
+    resize(390);
+    expect(document.activeElement).toBe(tab("Ideas"));
+
+    fireEvent.click(tab("Checklist"));
+    tab("Checklist").focus();
+    resize(1280);
+    expect(document.activeElement).toBe(railButton(/^Checklist/));
+    resize(390);
+    expect(document.activeElement).toBe(tab("Checklist"));
+
+    // No counterpart (the Plan tab): the plan, never the page.
+    fireEvent.click(tab("Plan"));
+    tab("Plan").focus();
+    resize(1280);
+    expect(document.activeElement).toBe(main());
+
+    // A pin card button: the place's row.
+    resize(390);
+    fireEvent.click(tab("Map"));
+    await waitFor(() => expect(pin(tower)).toBeTruthy());
+    fireEvent.click(pin(tower));
+    within(screen.getByRole("region", { name: "Galata Tower" })).getByRole("button", { name: "Details" }).focus();
+    resize(1280);
+    expect(document.activeElement).toBe(document.getElementById(placeFocusId(tower)));
+  });
+
+  it("the pin card follows the chips: a place no longer on the map has no card, and the ＋ comes back", async () => {
+    const { tower } = openTrip();
+    fireEvent.click(tab("Map"));
+    await waitFor(() => expect(pin(tower)).toBeTruthy());
+    fireEvent.click(pin(tower));
+    expect(screen.getByRole("region", { name: "Galata Tower" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add place" })).toBeNull();
+    fireEvent.click(chip(/^Day 2 · /));
+    expect(screen.queryByRole("region", { name: "Galata Tower" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add place" })).toBeTruthy();
+    // The whole trip shows it again.
+    fireEvent.click(chip("All"));
+    expect(screen.getByRole("region", { name: "Galata Tower" })).toBeTruthy();
+  });
+
+  it("the toast sits above the tab bar, the ＋ and the pin card, and is held under the details sheet", async () => {
+    const { tower } = openTrip();
+    // A delete from the details sheet: the sheet closes, the toast shows.
+    fireEvent.click(within(main()).getByRole("button", { name: "Karaköy Güllüoğlu" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete Karaköy Güllüoğlu" }));
+    const toastEl = document.querySelector<HTMLElement>("[data-action-toast]")!;
+    expect(toastEl.textContent).toContain("Karaköy Güllüoğlu deleted");
+    expect(toastEl.className).toContain("env(safe-area-inset-bottom)");
+    // Above the ＋ (16 px over the 56 px tab bar, 48 px tall).
+    expect(toastEl.style.getPropertyValue("--toast-lift")).toBe("132px");
+    expect(toastEl.closest("[inert]")).toBeNull();
+
+    // Over the details sheet it is held: not operable, not shown.
+    fireEvent.click(within(main()).getByRole("button", { name: "Galata Tower" }));
+    expect(screen.getByRole("dialog", { name: "Details for Galata Tower" })).toBeTruthy();
+    expect(toastEl.closest("[inert]")).not.toBeNull();
+    expect(toastEl.className).toContain("invisible");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(toastEl.closest("[inert]")).toBeNull();
+    expect(toastEl.className).not.toContain("invisible");
+
+    // Above the pin card on the Map tab.
+    fireEvent.click(tab("Map"));
+    await waitFor(() => expect(pin(tower)).toBeTruthy());
+    fireEvent.click(pin(tower));
+    expect(toastEl.style.getPropertyValue("--toast-lift")).toBe("208px");
+  });
+
+  it("the chosen chip is in its day's colour, with white text at AA contrast", () => {
+    openTrip();
+    const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    const luminance = (c: string) => {
+      const [r, g, b] = hex(c);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    for (const colour of DAY_COLOURS) expect(1.05 / (luminance(colour) + 0.05)).toBeGreaterThanOrEqual(4.5);
+    const toRgb = (c: string) => `rgb(${[1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).join(", ")})`;
+    expect(chip(/^Day 1 · /).style.backgroundColor).toBe(toRgb(dayColour(0)));
+    expect(chip(/^Day 1 · /).className).toContain("aria-[current=true]:text-white");
+    // Not chosen: no fill.
+    expect(chip(/^Day 2 · /).style.backgroundColor).toBe("");
   });
 });

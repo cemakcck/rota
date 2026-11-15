@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { btn, btnSm } from "../ui";
 
@@ -26,7 +26,15 @@ type ToastApi = {
   show(toast: ActionToastInput): void;
   dismiss(): void;
   current: Shown | null;
+  /**
+   * Where the screen wants the toast: `lift` is how far above the bottom it sits on phones (px, plus the
+   * safe-area inset), clear of the tabs and floating controls; `held` keeps it out of reach and out of
+   * sight (inert, its timer paused) while a modal sheet covers the screen.
+   */
+  place(placement: Placement): void;
 };
+type Placement = { lift: number; held: boolean };
+const DEFAULT_PLACEMENT: Placement = { lift: 16, held: false };
 
 const ToastContext = createContext<ToastApi | null>(null);
 
@@ -48,17 +56,29 @@ export function ActionToastProvider({ children, fallbackFocus }: { children: Rea
   const counter = useRef(0);
   const show = useCallback((toast: ActionToastInput) => setCurrent({ ...toast, key: ++counter.current }), []);
   const dismiss = useCallback(() => setCurrent(null), []);
-  const api = useMemo(() => ({ show, dismiss, current }), [show, dismiss, current]);
+  const [placement, setPlacement] = useState(DEFAULT_PLACEMENT);
+  const place = useCallback((next: Placement) => setPlacement((was) => (was.lift === next.lift && was.held === next.held ? was : next)), []);
+  const api = useMemo(() => ({ show, dismiss, current, place }), [show, dismiss, current, place]);
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <ToastView toast={current} onClose={dismiss} fallbackFocus={fallbackFocus} />
+      <ToastView toast={current} onClose={dismiss} fallbackFocus={fallbackFocus} placement={placement} />
     </ToastContext.Provider>
   );
 }
 
 /** The live region stays mounted across toasts, so each new message is announced. */
-function ToastView({ toast, onClose, fallbackFocus }: { toast: Shown | null; onClose: () => void; fallbackFocus?: () => HTMLElement | null }) {
+function ToastView({
+  toast,
+  onClose,
+  fallbackFocus,
+  placement,
+}: {
+  toast: Shown | null;
+  onClose: () => void;
+  fallbackFocus?: () => HTMLElement | null;
+  placement: Placement;
+}) {
   const t = useTranslations("trip");
   const button = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -73,7 +93,8 @@ function ToastView({ toast, onClose, fallbackFocus }: { toast: Shown | null; onC
     setSeen(toast?.key);
     setFocused(false);
   }
-  const paused = hovered || focused;
+  const { held, lift } = placement;
+  const paused = hovered || focused || held;
 
   // The toast holding focus went (closed or replaced): focus goes somewhere useful, unless the next one takes it.
   useLayoutEffect(() => {
@@ -87,7 +108,8 @@ function ToastView({ toast, onClose, fallbackFocus }: { toast: Shown | null; onC
     (was?.returnFocus?.() ?? fallbackFocus?.())?.focus();
   }, [toast, fallbackFocus]);
   useEffect(() => {
-    if (toast?.focus) button.current?.focus();
+    if (toast?.focus && !held) button.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- focus moves when a toast arrives, not when it is released
   }, [toast]);
   useEffect(() => {
     if (!toast || paused) return;
@@ -102,9 +124,11 @@ function ToastView({ toast, onClose, fallbackFocus }: { toast: Shown | null; onC
   return (
     <div
       data-action-toast={toast ? "" : undefined}
+      inert={held}
+      style={{ "--toast-lift": `${lift}px` } as CSSProperties}
       className={
         toast
-          ? "fixed bottom-4 left-1/2 z-30 max-lg:bottom-[76px] flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-3"
+          ? `fixed bottom-4 left-1/2 z-30 max-lg:bottom-[calc(var(--toast-lift)+env(safe-area-inset-bottom))] ${held ? "invisible" : ""} flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-3`
           : "sr-only"
       }
       onMouseEnter={() => setHovered(true)}

@@ -10,6 +10,8 @@ import { Approximate, useDuration, useStay } from "./TravelLeg";
 
 /** The id of the pin card's Details button (focus goes back to it when the details close). */
 export const PIN_CARD_DETAILS_ID = "pin-card-details";
+/** The ids of the card's controls: on a resize to the desktop layout, focus on one goes to the place's row. */
+export const PIN_CARD_IDS = [PIN_CARD_DETAILS_ID, "pin-card-maps", "pin-card-close"];
 /** About how much of the map's bottom the card covers (px): fits and selections keep the pins above it. */
 export const PIN_CARD_PX = 140;
 
@@ -69,12 +71,12 @@ export function PinCard({ place, where, onDetails, onClose }: { place: PlaceView
             ))}
           </p>
         </div>
-        <button type="button" aria-label={t("close")} onClick={onClose} className="-mr-2 -mt-1.5 grid size-11 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover hover:text-ink">
+        <button id="pin-card-close" type="button" aria-label={t("close")} onClick={onClose} className="-mr-2 -mt-1.5 grid size-11 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-hover hover:text-ink">
           <Icon name="close" />
         </button>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <a href={placeUrl(place)} target="_blank" rel="noopener noreferrer" className={`${btn} !h-11`}>
+        <a id="pin-card-maps" href={placeUrl(place)} target="_blank" rel="noopener noreferrer" className={`${btn} !h-11`}>
           <GoogleMapsPin />
           {t("googleMaps")}
           <span className="sr-only">

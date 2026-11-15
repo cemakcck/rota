@@ -8,6 +8,8 @@ import { defaultView, sameView, type TripViewState } from "./view";
 
 /** The phone's bottom tabs (spec §6). */
 export type PhoneTab = "plan" | "map" | "ideas" | "checklist";
+/** A tab's id (focus moves to and from the rail's Ideas and Checklist across a resize). */
+export const phoneTabId = (tab: PhoneTab) => `phone-tab-${tab}`;
 const TABS: { tab: PhoneTab; icon: IconName }[] = [
   { tab: "plan", icon: "plan" },
   { tab: "map", icon: "map" },
@@ -56,6 +58,7 @@ export function PhoneTabs({ tab, onChoose }: { tab: PhoneTab; onChoose(tab: Phon
       {TABS.map(({ tab: id, icon }) => (
         <button
           key={id}
+          id={phoneTabId(id)}
           type="button"
           aria-current={tab === id ? "true" : undefined}
           onClick={() => onChoose(id)}

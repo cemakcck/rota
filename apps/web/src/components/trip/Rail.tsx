@@ -16,7 +16,7 @@ export const railDayDropId = (dayId: string) => `rail:day:${dayId}`;
 export const RAIL_IDEAS_DROP_ID = "rail:ideas";
 
 const entry =
-  "w-full rounded-xl border border-transparent px-3 text-left hover:bg-hover aria-[current=true]:border-line aria-[current=true]:bg-surface aria-[current=true]:shadow-1 max-lg:w-auto max-lg:shrink-0";
+  "w-full rounded-xl border border-transparent px-3 text-left hover:bg-hover aria-[current=true]:border-line aria-[current=true]:bg-surface aria-[current=true]:shadow-1";
 const overLook = "outline-2 outline-dashed outline-ink-2 -outline-offset-2";
 /** A day chip on phones (and the strip's other chips). */
 const chip =
@@ -33,6 +33,10 @@ export type DayActions = {
 
 /** The id of a rail day's select button and ⋯ button (focus goes back to them). */
 export const railDayButtonId = (dayId: string) => `rail-day-${dayId}`;
+/** The rail's other entries (the phone's "All" chip shares the whole trip's id), for focus across a resize. */
+export const RAIL_ALL_ID = "rail-all";
+export const RAIL_IDEAS_ID = "rail-ideas";
+export const RAIL_CHECKLIST_ID = "rail-checklist";
 export const railDayMenuId = (dayId: string) => `rail-day-menu-${dayId}`;
 
 const menuItem =
@@ -273,8 +277,18 @@ function RailDay({
   if (compact)
     return (
       <>
-        <button ref={dropRef} id={railDayButtonId(day.id)} type="button" data-drop={railDayDropId(day.id)} aria-current={selected ? "true" : undefined} onClick={onSelect} className={`${chip} ${isOver ? overLook : ""}`}>
-          <span data-day-colour aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: dayColour(day.index) }} />
+        <button
+          ref={dropRef}
+          id={railDayButtonId(day.id)}
+          type="button"
+          data-drop={railDayDropId(day.id)}
+          aria-current={selected ? "true" : undefined}
+          onClick={onSelect}
+          // Chosen: filled with the day's colour (all of them take white text at AA contrast).
+          style={selected ? { backgroundColor: dayColour(day.index), borderColor: dayColour(day.index) } : undefined}
+          className={`${chip} ${isOver ? overLook : ""}`}
+        >
+          {!selected && <span data-day-colour aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: dayColour(day.index) }} />}
           {label}
         </button>
         {/* The chosen day's ⋯ only, to keep the strip short. */}
@@ -282,7 +296,7 @@ function RailDay({
       </>
     );
   return (
-    <div className={`flex items-start gap-0.5 max-lg:shrink-0 ${isDragging ? "opacity-50" : ""}`}>
+    <div className={`flex items-start gap-0.5 ${isDragging ? "opacity-50" : ""}`}>
       <button
         ref={(el) => {
           dropRef(el);
@@ -313,13 +327,14 @@ function RailDay({
   );
 }
 
-type TabProps = { label: string; name?: string; count?: string; selected: boolean; onSelect(): void };
+type TabProps = { id?: string; label: string; name?: string; count?: string; selected: boolean; onSelect(): void };
 
 /** A rail entry that is not a day: Ideas & votes, the checklist, the whole trip. */
-function RailTab({ label, name, count, selected, onSelect, drop }: TabProps & { drop?: { id: string; ref(el: HTMLElement | null): void; over: boolean } }) {
+function RailTab({ id, label, name, count, selected, onSelect, drop }: TabProps & { drop?: { id: string; ref(el: HTMLElement | null): void; over: boolean } }) {
   return (
     <button
       ref={drop?.ref}
+      id={id}
       type="button"
       data-drop={drop?.id}
       aria-label={name}
@@ -334,9 +349,9 @@ function RailTab({ label, name, count, selected, onSelect, drop }: TabProps & { 
 }
 
 /** A rail entry rows can be dropped on (Ideas). */
-function RailDropTab({ id, ...props }: TabProps & { id: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return <RailTab {...props} drop={{ id, ref: setNodeRef, over: isOver }} />;
+function RailDropTab({ dropId, ...props }: TabProps & { dropId: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: dropId });
+  return <RailTab {...props} drop={{ id: dropId, ref: setNodeRef, over: isOver }} />;
 }
 
 /**
@@ -422,7 +437,7 @@ export function Rail({
       className={
         compact
           ? "relative z-20 flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-line bg-surface px-3 py-1.5 [scrollbar-width:none]"
-          : "flex gap-1.5 border-line bg-paper px-3 py-4 max-lg:relative max-lg:z-20 max-lg:items-center max-lg:overflow-x-auto max-lg:border-b max-lg:py-2 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
+          : "flex gap-1.5 border-line bg-paper px-3 py-4 lg:min-h-0 lg:flex-col lg:overflow-y-auto lg:border-r"
       }
     >
       {trip.days.map((day) => (
@@ -449,31 +464,33 @@ export function Rail({
         </p>
       )}
       {compact ? (
-        <button type="button" aria-current={selected.kind === "all" ? "true" : undefined} onClick={() => onSelect({ kind: "all" })} className={chip}>
+        <button id={RAIL_ALL_ID} type="button" aria-current={selected.kind === "all" ? "true" : undefined} onClick={() => onSelect({ kind: "all" })} className={chip}>
           {t("allShort")}
         </button>
       ) : (
         <>
-          <hr className="mx-1 my-2 border-line max-lg:hidden" />
+          <hr className="mx-1 my-2 border-line" />
           <RailDropTab
             label={t("ideas")}
             name={t("ideasCount", { count: ideas })}
             count={String(ideas)}
-            id={RAIL_IDEAS_DROP_ID}
+            id={RAIL_IDEAS_ID}
+            dropId={RAIL_IDEAS_DROP_ID}
             selected={selected.kind === "ideas"}
             onSelect={() => onSelect({ kind: "ideas" })}
           />
           <RailTab
+            id={RAIL_CHECKLIST_ID}
             label={tt("checklist")}
             name={trip.checklist.length > 0 ? `${tt("checklist")}, ${tt("checklistDone", { done, total: trip.checklist.length })}` : undefined}
             count={trip.checklist.length > 0 ? `${done}/${trip.checklist.length}` : undefined}
             selected={selected.kind === "checklist"}
             onSelect={() => onSelect({ kind: "checklist" })}
           />
-          <RailTab label={t("all")} selected={selected.kind === "all"} onSelect={() => onSelect({ kind: "all" })} />
+          <RailTab id={RAIL_ALL_ID} label={t("all")} selected={selected.kind === "all"} onSelect={() => onSelect({ kind: "all" })} />
         </>
       )}
-      {demo && !compact && <div className="max-lg:shrink-0 lg:mt-auto lg:pt-3">{demo}</div>}
+      {demo && !compact && <div className="lg:mt-auto lg:pt-3">{demo}</div>}
     </nav>
   );
 }
