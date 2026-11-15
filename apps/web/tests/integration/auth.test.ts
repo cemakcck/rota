@@ -100,8 +100,8 @@ describe("accounts", () => {
 
 describe("password reset email", () => {
   it.each([
-    ["en", "Reset your Rota password", "Reset your password: "],
-    ["tr", "Rota şifrenizi sıfırlayın", "Şifrenizi sıfırlayın: "],
+    ["en", "Reset your Tripify password", "Reset your password: "],
+    ["tr", "Tripify şifrenizi sıfırlayın", "Şifrenizi sıfırlayın: "],
   ])("is written in the language of the page that asked for it (%s)", async (locale, subject, text) => {
     const sent: email.EmailMessage[] = [];
     const spy = vi.spyOn(email, "sendEmail").mockImplementation(async (m) => {

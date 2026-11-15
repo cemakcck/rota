@@ -171,7 +171,7 @@ function TripScreenFor({ tripId }: Props) {
 
   // The tab's title names the trip (WCAG 2.4.2).
   useEffect(() => {
-    if (view.name) document.title = `${view.name} · Rota`;
+    if (view.name) document.title = `${view.name} · Tripify`;
   }, [view.name]);
 
   // Presence publishes who this connection is: for avatars, outlines and carets, and so others can

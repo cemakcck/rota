@@ -1,6 +1,6 @@
 {
-  "name": "Rota",
-  "short_name": "Rota",
+  "name": "Tripify",
+  "short_name": "Tripify",
   "description": "Plan group trips together, in real time.",
   "start_url": "/en/trips",
   "scope": "/",

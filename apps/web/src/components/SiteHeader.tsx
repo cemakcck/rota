@@ -9,9 +9,9 @@ export function SiteHeader() {
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4 sm:px-8">
         <Link href="/trips" className="text-[17px] font-semibold tracking-tight">
-          Rota
+          Tripify
         </Link>
-        <nav aria-label="Rota" className="flex items-center gap-3">
+        <nav aria-label="Tripify" className="flex items-center gap-3">
           <Link href="/trips" className="font-medium hover:underline">
             {t("myTrips")}
           </Link>

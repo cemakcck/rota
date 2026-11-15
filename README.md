@@ -1,4 +1,4 @@
-# Rota: plan a trip together, live and offline
+# Tripify: plan a trip together, live and offline
 
 A group trip planner. Everyone in a trip adds places from the map, sorts them into days and sees the same plan update live, on a good connection, a bad one or none at all. Edits made offline merge when the device reconnects, and **two people moving the same place at the same moment never end up with two copies of it or none**.
 

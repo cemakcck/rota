@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "Rota",
+    "title": "Tripify",
     "description": "Plan group trips together, in real time."
   },
   "common": {
@@ -14,7 +14,7 @@
     "you": "you",
     "owner": "Owner",
     "member": "Member",
-    "github": "Rota on GitHub",
+    "github": "Tripify on GitHub",
     "backToTrips": "Back to my trips",
     "skip": "Skip to content",
     "signOut": "Sign out",
@@ -34,7 +34,7 @@
   },
   "landing": {
     "headline": "Plan the trip together, on one map.",
-    "pitch": "Rota is a group trip planner. Everyone adds places, orders the days and sees the same plan update live, even with a patchy connection.",
+    "pitch": "Tripify is a group trip planner. Everyone adds places, orders the days and sees the same plan update live, even with a patchy connection.",
     "tryDemo": "Try the demo",
     "tryDemoBusy": "Starting the demo…",
     "signUp": "Sign up",
@@ -77,7 +77,7 @@
     "newPasswordSubmit": "Save new password",
     "working": "Working…",
     "haveAccount": "Already have an account?",
-    "noAccount": "New to Rota?",
+    "noAccount": "New to Tripify?",
     "forgot": "Forgot your password?",
     "backToSignIn": "Back to sign in",
     "nameInvalid": "Enter a name of 1 to 30 characters.",
@@ -199,7 +199,7 @@
   },
   "trip": {
     "loading": "Opening the trip…",
-    "home": "Rota, my trips",
+    "home": "Tripify, my trips",
     "plan": "Plan",
     "map": "Map",
     "ideas": "Ideas",

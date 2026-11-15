@@ -52,7 +52,7 @@ describe("startServer (production build)", () => {
     const manifest = await fetch(`${server.url}/manifest.webmanifest`);
     expect(manifest.status).toBe(200);
     expect(manifest.headers.get("content-type")).toMatch(/^application\/manifest\+json/);
-    expect(await manifest.json()).toMatchObject({ name: "Rota", start_url: "/en/trips", display: "standalone" });
+    expect(await manifest.json()).toMatchObject({ name: "Tripify", start_url: "/en/trips", display: "standalone" });
 
     const offline = await fetch(`${server.url}/offline.html`);
     expect(offline.status).toBe(200);

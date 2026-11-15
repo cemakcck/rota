@@ -286,7 +286,7 @@ export function TripHeader({
           <rect width="26" height="26" rx="8" fill="#1c1917" />
           <path d="M13 7a4.5 4.5 0 0 0-4.5 4.5c0 3.4 4.5 7.5 4.5 7.5s4.5-4.1 4.5-7.5A4.5 4.5 0 0 0 13 7z" stroke="#fff" strokeWidth="2.2" fill="none" />
         </svg>
-        <span className="hidden sm:inline">rota</span>
+        <span className="hidden sm:inline">tripify</span>
       </Link>
       <div className="grid min-w-0 flex-1 basis-40 gap-px">
         <TripName name={view.name} onRename={onRename} />

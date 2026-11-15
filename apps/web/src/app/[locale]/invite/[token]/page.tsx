@@ -6,7 +6,7 @@ export default async function InvitePage({ params }: { params: Promise<{ locale:
   const { locale, token } = await params;
   setRequestLocale(locale);
   return (
-    <AuthPage title="Rota">
+    <AuthPage title="Tripify">
       <InviteGate token={token} />
     </AuthPage>
   );
